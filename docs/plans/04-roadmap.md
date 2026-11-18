@@ -16,6 +16,10 @@ Built from [01-features.md](01-features.md), [02-architecture.md](02-architectur
 
 Sizes are relative (S, M, L). There are no dates.
 
+**[local]** marks a step that needs the owner's Windows machine: the units, the pedals, Steam
+or a game. Everything else can run in a cloud session. A cloud PR that reaches a [local] step
+ends with it as a checklist for the owner.
+
 ## Milestones
 
 ### M0 · Foundations and spikes (M)
@@ -28,12 +32,12 @@ The repo can build, test and ship an empty window, and the three risks from phas
   rules enforce the package boundaries: `core` imports nothing, and only `app/main` does I/O.
 - The design tokens from phase 3 as CSS variables. A blank main window and a blank Play view
   window open, and the tray icon shows.
-- **Spike 1, per-device input.** A throwaway native addon (or helper) uses Raw Input to report
+- **[local] Spike 1, per-device input.** A throwaway native addon (or helper) uses Raw Input to report
   which device sent a key: the left unit, the right unit or the keyboard. If it can't, Play view
   falls back to showing the scheme without per-unit lighting, and phase 3 is amended.
-- **Spike 2, Steam covers.** Read `libraryfolders.vdf` and the local library cache on this
+- **[local] Spike 2, Steam covers.** Read `libraryfolders.vdf` and the local library cache on this
   machine and one clean install, and list the path and format of each game's cover art.
-- **Spike 3, harvest survey.** For every installed game, record what defaults can be read: a
+- **[local] Spike 3, harvest survey.** For every installed game, record what defaults can be read: a
   file, a Steam Input template, or nothing. That decides which games get a pad preset in v1.
 
 **Done when** `pnpm check` is green in CI, the windows open, and each spike has a one-page answer
@@ -69,6 +73,11 @@ given is never re-dealt across edits, and every check has a passing and a failin
 - A fake unit that misbehaves as the real ones do: `REQUEST_PROFILE` answers with the running
   slot, and `CHECK_PROFILE` only answers for the lowest free number.
 
+Open from the legacy work (`reference/legacy/handoff-2026-11-15.md`): how a unit stores scroll is
+not captured (read it back as undecoded, never misread), nor is the stick as the Xbox **right**
+stick, nor a chord. Each needs a **[local]** capture before it is built
+(`reference/captures/RECON-STEPS.md`).
+
 **Done when** a write reproduces `onboard-112.json` byte for byte, every reference capture
 parses, and the session's write → verify → switch → clean-up passes against the fake.
 
@@ -82,7 +91,7 @@ The first build that touches hardware.
   never inferred.
 - `processes` service: is the Azeron app running (writes blocked, with the reason in one sentence).
 - A rolling log of every exchange, opened from Settings.
-- Hardware checklist v1 in `docs/hardware-checklist.md`, run by hand on the real units.
+- Hardware checklist v1 in `docs/hardware-checklist.md`. **[local]** Run by hand on the real units.
 
 **Done when** both units plugged in on a fresh install show as Left and Right with no click,
 and unplugging one turns its chip off within a second.
@@ -100,8 +109,13 @@ The first time the app replaces the Azeron app for a real game.
 - Pad output end to end: pick a game, pick *Xbox controller*, Apply, play. Helldivers 2 is the
   test game.
 
+Owner requests carried from the legacy app (`reference/legacy/handoff-2026-11-17.md`), each
+answered here: a straight controller setup (keypad buttons send Xbox buttons, no actions) is
+the *Xbox controller* preset; editable defaults are copies of presets; more mouse
+responsiveness is the stick's mouse speed in the side panel.
+
 **Done when** J1 takes 2 clicks and J2 is a drag plus Apply on Helldivers 2, verified with the
-hardware checklist.
+hardware checklist **[local]**.
 
 ### M5 · Game files, modes and pedals (L)
 
@@ -117,10 +131,10 @@ Key mode, and the two games you fly. **This is the cutover point.**
 - Pedals: per-mode axis assignments, invert, dead zone, scale, a toe on one direction of an
   axis, and the calibration check. Written into the game file only; the pedals are never sent a
   `GET_REPORT`.
-- Rebuild your current Everspace 2, Elite and Helldivers 2 layouts in the new app, by hand, from
+- **[local]** Rebuild your current Everspace 2, Elite and Helldivers 2 layouts in the new app, by hand, from
   the legacy repo's boards.
 
-**Done when** you fly an Everspace 2 session and an Elite session (ship and on foot) on schemes
+**Done when** **[local]** you fly an Everspace 2 session and an Elite session (ship and on foot) on schemes
 the new app applied. Then archive `relayMatrix-legacy`.
 
 ### M6 · J5: Play view (M)
@@ -132,7 +146,7 @@ the new app applied. Then archive `relayMatrix-legacy`.
   pressed, with the last few presses along the bottom. Switch modes with a click.
 - Tray: active game, open Play view, quit.
 
-**Done when** J5 takes 1 click and a press lights its key within a frame on both units.
+**Done when** **[local]** J5 takes 1 click and a press lights its key within a frame on both units.
 
 ### M7 · Trust and release (M)
 
@@ -143,7 +157,7 @@ the new app applied. Then archive `relayMatrix-legacy`.
 - Playwright on Electron, with fake devices and a temp data folder, covering J0–J5.
 - A signed Windows installer and auto-update from GitHub Releases.
 
-**Done when** v1.0.0 installs on a clean machine, and J0–J5 pass both the e2e suite and the hardware
+**Done when** **[local]** v1.0.0 installs on a clean machine, and J0–J5 pass both the e2e suite and the hardware
 checklist.
 
 ## After v1

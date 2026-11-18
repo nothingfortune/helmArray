@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Library</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0A0C0F}
+a{color:inherit;text-decoration:none}a:hover{color:inherit}
+.nav{height:40px;padding:0 14px;border-radius:8px;display:inline-flex;align-items:center;font:600 14px Inter,sans-serif;color:#8E98A8}
+.pill{display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 12px;border-radius:15px;font:600 12.5px Inter,sans-serif}
+.dot{width:7px;height:7px;border-radius:4px;display:inline-block}
+.cover{position:relative;aspect-ratio:2/3;border-radius:12px;overflow:hidden;border:1px solid #20252E;background:repeating-linear-gradient(135deg,#161A22 0 12px,#13171E 12px 24px);display:flex;flex-direction:column;justify-content:flex-end;padding:14px;box-sizing:border-box;transition:transform .12s,border-color .12s}
+.tile:hover .cover{border-color:#3A4352;transform:translateY(-2px)}
+.ca{position:absolute;top:10px;right:10px;font:500 10.5px 'JetBrains Mono',monospace;color:#8E98A8}
+input::placeholder{color:#8E98A8;opacity:1}
+.fld:focus-within{border-color:#FFB224;box-shadow:0 0 0 2px rgba(255,178,36,.35)}
+.gn{font:700 19px/1.1 'Space Grotesk',sans-serif;color:#EDF0F4}
+.st{display:flex;align-items:center;gap:7px;font:500 12.5px Inter,sans-serif;color:#8E98A8;margin-top:10px}
+.btn{height:40px;padding:0 16px;border-radius:10px;font:600 14px Inter,sans-serif;border:1px solid transparent;cursor:pointer;display:inline-flex;align-items:center;gap:8px}
+</style>
+</helmet>
+<div style="min-height:900px;background:#0A0C0F;color:#EDF0F4;font-family:Inter,sans-serif">
+
+<header style="height:60px;display:flex;align-items:center;gap:24px;padding:0 24px;border-bottom:1px solid #1A1F27;background:#0D0F13;flex-wrap:wrap">
+<div style="display:flex;align-items:center;gap:10px">
+<svg width="22" height="22" viewBox="0 0 28 28" aria-hidden="true"><rect x="2" y="2" width="10" height="10" rx="3" fill="#FFB224"></rect><rect x="16" y="2" width="10" height="10" rx="3" fill="none" stroke="#EDF0F4" stroke-width="2"></rect><rect x="2" y="16" width="10" height="10" rx="3" fill="none" stroke="#EDF0F4" stroke-width="2"></rect><rect x="16" y="16" width="10" height="10" rx="3" fill="none" stroke="#EDF0F4" stroke-width="2"></rect></svg>
+<span style="font:700 17px 'Space Grotesk',sans-serif">relayMatrix</span>
+</div>
+<nav style="display:flex;gap:4px">
+<a class="nav" href="#" aria-current="page" style="color:#EDF0F4;background:#1A1F27;box-shadow:inset 0 -2px 0 #FFB224">Library</a>
+<a class="nav" href="Devices.dc.html">Devices</a>
+<a class="nav" href="Settings.dc.html">Settings</a>
+</nav>
+<div style="flex:1"></div>
+<span class="pill" style="border:1px solid #262C36;color:#C3CAD5">Left <span class="dot" style="background:#4ADE80"></span> Right <span class="dot" style="background:#4ADE80"></span> Pedals <span class="dot" style="background:#4ADE80"></span></span>
+<span class="pill" style="background:#122019;color:#4ADE80"><span class="dot" style="background:#4ADE80"></span>In sync</span>
+</header>
+
+<main style="max-width:1360px;margin:0 auto;padding:32px 32px 48px;box-sizing:border-box;display:flex;flex-direction:column;gap:36px">
+
+<section style="display:flex;flex-wrap:wrap;gap:28px;align-items:stretch;padding:20px;border-radius:16px;background:#111419;border:1px solid #1E232C">
+<div style="width:340px;max-width:100%;aspect-ratio:46/21;border-radius:12px;border:1px solid #20252E;background:repeating-linear-gradient(135deg,#161A22 0 12px,#13171E 12px 24px);position:relative;display:flex;align-items:flex-end;padding:16px;box-sizing:border-box">
+<span class="ca">steam header art</span>
+<span style="font:700 26px/1 'Space Grotesk',sans-serif">Elite Dangerous</span>
+</div>
+<div style="flex:1 1 320px;display:flex;flex-direction:column;justify-content:space-between;gap:16px;min-width:0">
+<div style="display:flex;flex-direction:column;gap:8px">
+<span style="font:600 11px Inter,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#FFB224">On your Azerons now</span>
+<span style="font:700 28px 'Space Grotesk',sans-serif">Elite Dangerous · Main</span>
+<span style="font-size:14px;color:#8E98A8">Keys · Ship, SRV, On foot · 61 actions on 58 buttons · pedals on yaw and vertical thrust</span>
+</div>
+<div style="display:flex;gap:10px;flex-wrap:wrap">
+<a class="btn" href="Editor.dc.html" style="background:#FFB224;color:#1A1200">Edit scheme</a>
+<a class="btn" href="Play.dc.html" style="background:#1A1F27;color:#EDF0F4;border-color:#2A313C">Play view</a>
+</div>
+</div>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:20px">
+<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+<h2 style="margin:0;font:600 22px 'Space Grotesk',sans-serif">Games</h2>
+<span style="font-size:13px;color:#8E98A8">From Steam · 6 with a scheme</span>
+<div style="flex:1"></div>
+<label class="fld" style="display:flex;align-items:center;gap:8px;height:38px;padding:0 12px;border-radius:10px;background:#111419;border:1px solid #6B7687;width:260px;max-width:100%">
+<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#8E98A8" stroke-width="1.7" aria-hidden="true"><circle cx="7" cy="7" r="5"></circle><path d="M11 11l3.5 3.5"></path></svg>
+<input type="search" placeholder="Find a game" aria-label="Find a game" style="border:0;background:transparent;color:#EDF0F4;font:500 14px Inter,sans-serif;outline:none;flex:1;min-width:0">
+</label>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:28px 22px">
+<a class="tile" href="Editor.dc.html">
+<div class="cover" style="border-color:#5A4316"><span class="ca">cover</span><span class="gn">Elite Dangerous</span></div>
+<div class="st"><span class="dot" style="background:#FFB224"></span><span style="color:#EDF0F4">On the units</span> · Keys</div>
+</a>
+<a class="tile" href="Play.dc.html">
+<div class="cover"><span class="ca">cover</span><span class="gn">Helldivers 2</span></div>
+<div class="st"><span class="dot" style="background:#4ADE80"></span>Ready · Controller</div>
+</a>
+<a class="tile" href="#">
+<div class="cover"><span class="ca">cover</span><span class="gn">Everspace 2</span></div>
+<div class="st"><span class="dot" style="background:#FFD866"></span>2 changes · Keys</div>
+</a>
+<a class="tile" href="#">
+<div class="cover"><span class="ca">cover</span><span class="gn">Ace Combat 7</span></div>
+<div class="st"><span class="dot" style="background:#4ADE80"></span>Ready · Controller</div>
+</a>
+<a class="tile" href="#">
+<div class="cover"><span class="ca">cover</span><span class="gn">Armored Core VI</span></div>
+<div class="st"><span class="dot" style="background:#4ADE80"></span>Ready · Controller</div>
+</a>
+<a class="tile" href="#">
+<div class="cover"><span class="ca">cover</span><span class="gn">World of Warships</span></div>
+<div class="st"><span class="dot" style="background:#8E98A8"></span>Defaults found · not set up</div>
+</a>
+<a class="tile" href="#">
+<div class="cover" style="background:#0D0F13;border:1.5px dashed #6B7687;align-items:center;justify-content:center;gap:10px">
+<svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="#8E98A8" stroke-width="2" aria-hidden="true"><path d="M14 6v16M6 14h16"></path></svg>
+<span style="font:600 14px Inter,sans-serif;color:#8E98A8">Add a game</span>
+</div>
+<div class="st">Not on Steam? Add it by hand</div>
+</a>
+</div>
+</section>
+
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

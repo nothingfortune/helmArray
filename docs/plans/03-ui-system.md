@@ -69,5 +69,8 @@ fields), 10 (keys, buttons), 16 (panels, unit plates). Motion 120 ms hover and s
 
 ## Not drawn yet
 
-Light theme, first run (J0), the bind sheet, the history list, Devices and Settings, the Play
-view keyboard tab, and narrow windows below 1280 px.
+The canvas has since drawn Devices, Settings, the keyboard component, the Play view keyboard
+and controller tabs, a contrast audit and editor states (picker, macro drawer, keyboard). Its
+sources are copied in [docs/design/](../design/README.md), which also lists where the drawing
+goes past phase 1. Still not drawn: light theme, first run (J0), the bind sheet, the history
+list and windows narrower than 1280 px.

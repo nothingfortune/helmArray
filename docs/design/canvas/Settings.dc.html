@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0A0C0F}
+a{color:inherit;text-decoration:none}
+button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid #EDF0F4;outline-offset:2px}
+.nav{height:40px;padding:0 14px;border-radius:8px;display:inline-flex;align-items:center;font:600 14px Inter,sans-serif;color:#8E98A8}
+.pill{display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 12px;border-radius:15px;font:600 12.5px Inter,sans-serif}
+.dot{width:7px;height:7px;border-radius:4px;display:inline-block;flex:none}
+.btn{height:34px;padding:0 13px;border-radius:9px;font:600 13.5px Inter,sans-serif;border:1px solid #2A313C;background:#1A1F27;color:#EDF0F4;cursor:pointer;display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.lbl{font:600 11px Inter,sans-serif;color:#8E98A8;text-transform:uppercase;letter-spacing:.07em}
+.sec{display:flex;flex-direction:column;gap:4px;padding:28px 0;border-top:1px solid #1A1F27}
+.h2{margin:0 0 10px;font:600 22px 'Space Grotesk',sans-serif}
+.fr{display:flex;align-items:center;justify-content:space-between;gap:24px;min-height:52px;padding:6px 0;border-bottom:1px solid #15191F}
+.ft{display:flex;flex-direction:column;gap:3px;font:500 14.5px Inter,sans-serif}
+.fh{font:400 12.5px Inter,sans-serif;color:#8E98A8}
+.sel{height:34px;border-radius:8px;background:#111419;border:1px solid #6B7687;color:#EDF0F4;font:500 13px Inter,sans-serif;padding:0 8px}
+.tg{width:38px;height:22px;accent-color:#FFB224;margin:0}
+.rng{width:200px;accent-color:#FFB224}
+.mono{font:500 12.5px 'JetBrains Mono',monospace;color:#C3CAD5}
+.side a{display:block;padding:8px 12px;border-radius:8px;font:600 13.5px Inter,sans-serif;color:#8E98A8}
+.side a:hover{background:#161A21;color:#EDF0F4}
+.kbd{display:inline-flex;align-items:center;height:28px;padding:0 10px;border-radius:7px;background:#111419;border:1px solid #6B7687;font:500 12.5px 'JetBrains Mono',monospace;color:#EDF0F4}
+</style>
+</helmet>
+<div style="min-height:900px;background:#0A0C0F;color:#EDF0F4;font-family:Inter,sans-serif;display:flex;flex-direction:column">
+
+<header style="height:60px;display:flex;align-items:center;gap:24px;padding:0 24px;border-bottom:1px solid #1A1F27;background:#0D0F13;flex-wrap:wrap">
+<div style="display:flex;align-items:center;gap:10px">
+<svg width="22" height="22" viewBox="0 0 28 28" aria-hidden="true"><rect x="2" y="2" width="10" height="10" rx="3" fill="#FFB224"></rect><rect x="16" y="2" width="10" height="10" rx="3" fill="none" stroke="#EDF0F4" stroke-width="2"></rect><rect x="2" y="16" width="10" height="10" rx="3" fill="none" stroke="#EDF0F4" stroke-width="2"></rect><rect x="16" y="16" width="10" height="10" rx="3" fill="none" stroke="#EDF0F4" stroke-width="2"></rect></svg>
+<span style="font:700 17px 'Space Grotesk',sans-serif">relayMatrix</span>
+</div>
+<nav style="display:flex;gap:4px">
+<a class="nav" href="Library.dc.html">Library</a>
+<a class="nav" href="Devices.dc.html">Devices</a>
+<a class="nav" href="Settings.dc.html" aria-current="page" style="color:#EDF0F4;background:#1A1F27;box-shadow:inset 0 -2px 0 #FFB224">Settings</a>
+</nav>
+<div style="flex:1"></div>
+<span class="pill" style="background:#122019;color:#4ADE80"><span class="dot" style="background:#4ADE80"></span>In sync</span>
+</header>
+
+<div style="flex:1;display:flex;flex-wrap:wrap;max-width:1200px;width:100%;margin:0 auto;padding:0 24px;box-sizing:border-box;gap:40px">
+<nav class="side" aria-label="Settings sections" style="flex:1 1 200px;max-width:220px;padding-top:28px;display:flex;flex-direction:column;gap:2px">
+<a href="#general">General</a>
+<a href="#games">Games</a>
+<a href="#play">Play view</a>
+<a href="#input">Input and highlights</a>
+<a href="#apply">Apply and backups</a>
+<a href="#access">Accessibility</a>
+<a href="#about">About</a>
+</nav>
+
+<main style="flex:999 1 600px;min-width:0;padding-bottom:60px">
+<h1 style="margin:28px 0 0;font:700 32px 'Space Grotesk',sans-serif">Settings</h1>
+
+<section id="general" class="sec">
+<h2 class="h2">General</h2>
+<label class="fr"><span class="ft">Start with Windows<span class="fh">Needed for keyboard remaps and macros to work outside the app.</span></span><input class="tg" type="checkbox" checked="checked"></label>
+<label class="fr"><span class="ft">Close to the tray<span class="fh">Closing the window keeps relayMatrix running.</span></span><input class="tg" type="checkbox" checked="checked"></label>
+<label class="fr"><span class="ft">Check for updates</span><select class="sel"><option>Automatically</option><option>Ask first</option><option>Never</option></select></label>
+</section>
+
+<section id="games" class="sec">
+<h2 class="h2">Games</h2>
+<div class="fr"><span class="ft">Steam libraries<span class="fh">Games are found here. Their binding files are read on launch.</span></span><button type="button" class="btn">Add folder</button></div>
+<div style="display:flex;flex-direction:column;gap:6px;padding:10px 0">
+<div style="display:flex;align-items:center;gap:10px"><span class="dot" style="background:#4ADE80"></span><span class="mono" style="flex:1">C:\Program Files (x86)\Steam\steamapps</span><button type="button" class="btn" style="height:28px;background:transparent;border-color:transparent;color:#C3CAD5">Remove</button></div>
+<div style="display:flex;align-items:center;gap:10px"><span class="dot" style="background:#4ADE80"></span><span class="mono" style="flex:1">D:\SteamLibrary\steamapps</span><button type="button" class="btn" style="height:28px;background:transparent;border-color:transparent;color:#C3CAD5">Remove</button></div>
+</div>
+<label class="fr"><span class="ft">Show games without a scheme</span><input class="tg" type="checkbox" checked="checked"></label>
+<label class="fr"><span class="ft">Switch scheme when a game starts<span class="fh">Writes that game's scheme to the units as it launches.</span></span><input class="tg" type="checkbox" checked="checked"></label>
+</section>
+
+<section id="play" class="sec">
+<h2 class="h2">Play view</h2>
+<label class="fr"><span class="ft">Open when a game starts</span><input class="tg" type="checkbox" checked="checked"></label>
+<label class="fr"><span class="ft">Show</span><select class="sel"><option>The device I touched last</option><option>Azerons</option><option>Keyboard and mouse</option><option>Controller</option></select></label>
+<label class="fr"><span class="ft">Pedals<span class="fh">Pedals are optional. Shown under any device view.</span></span><select class="sel"><option>When connected</option><option>Always</option><option>Never</option></select></label>
+<label class="fr"><span class="ft">Label size<span class="fh">Larger labels make the view bigger; nothing is cut off.</span></span><select class="sel"><option>Standard</option><option>Large</option><option>Extra large</option></select></label>
+<label class="fr"><span class="ft">Keep on top of the game</span><input class="tg" type="checkbox" checked="checked"></label>
+<label class="fr"><span class="ft">Opacity</span><input class="rng" type="range" min="40" max="100" value="92" aria-label="Play view opacity"></label>
+<div class="fr"><span class="ft">Show or hide shortcut</span><span style="display:flex;gap:8px;align-items:center"><span class="kbd">Ctrl + Alt + P</span><button type="button" class="btn">Change</button></span></div>
+</section>
+
+<section id="input" class="sec">
+<h2 class="h2">Input and highlights</h2>
+<label class="fr"><span class="ft">Light up keys as they are pressed<span class="fh">On every device view: Azerons, keyboard, mouse, controller, pedals.</span></span><input class="tg" type="checkbox" checked="checked"></label>
+<label class="fr"><span class="ft">How long a press stays lit</span><select class="sel"><option>180 ms</option><option>400 ms</option><option>Until the next press</option></select></label>
+<label class="fr"><span class="ft">In the editor, pressing a button selects it<span class="fh">Find a button by pressing it instead of hunting for it on screen.</span></span><input class="tg" type="checkbox" checked="checked"></label>
+<label class="fr"><span class="ft">Warn when another app also remaps<span class="fh">For example the Azeron app running at the same time.</span></span><input class="tg" type="checkbox" checked="checked"></label>
+</section>
+
+<section id="apply" class="sec">
+<h2 class="h2">Apply and backups</h2>
+<label class="fr"><span class="ft">Before Apply<span class="fh">Games rewrite their binding files on exit, so they must be closed first.</span></span><select class="sel"><option>Ask me to close the game</option><option>Wait until it closes</option></select></label>
+<label class="fr"><span class="ft">Copies of each game file to keep</span><select class="sel"><option>5</option><option>10</option><option>All</option></select></label>
+<div class="fr"><span class="ft">Backups folder</span><span style="display:flex;gap:8px;align-items:center"><span class="mono">%APPDATA%\relayMatrix\backups</span><button type="button" class="btn">Open</button></span></div>
+<div class="fr"><span class="ft">Schemes</span><span style="display:flex;gap:8px"><button type="button" class="btn">Export all</button><button type="button" class="btn">Import</button></span></div>
+</section>
+
+<section id="access" class="sec">
+<h2 class="h2">Accessibility</h2>
+<label class="fr"><span class="ft">Reduce motion<span class="fh">No flashes, slides or glows. Presses show as a steady outline.</span></span><select class="sel"><option>Follow Windows</option><option>On</option><option>Off</option></select></label>
+<label class="fr"><span class="ft">Stronger key edges<span class="fh">Draws every key with the 3:1 outline, not only empty slots.</span></span><input class="tg" type="checkbox"></label>
+<label class="fr"><span class="ft">Show role as a shape as well as a color</span><input class="tg" type="checkbox"></label>
+</section>
+
+<section id="about" class="sec">
+<h2 class="h2">About</h2>
+<div class="fr"><span class="ft">Version</span><span class="mono">[VERSION]</span></div>
+<div class="fr"><span class="ft">Logs</span><button type="button" class="btn">Open logs folder</button></div>
+<div class="fr"><span class="ft">Reset</span><button type="button" class="btn" style="background:transparent;color:#FF5D5D;border-color:#4A2328">Reset all settings</button></div>
+</section>
+</main>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":2800}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

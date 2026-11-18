@@ -1,0 +1,565 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Scheme editor</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0A0C0F}
+a{color:inherit;text-decoration:none}a:hover{color:inherit}
+button{font-family:Inter,sans-serif}
+button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid #EDF0F4;outline-offset:2px}
+.pill{display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 12px;border-radius:15px;font:600 12.5px Inter,sans-serif;white-space:nowrap}
+.dot{width:7px;height:7px;border-radius:4px;display:inline-block;flex:none}
+.btn{height:38px;padding:0 15px;border-radius:10px;font:600 14px Inter,sans-serif;border:1px solid transparent;cursor:pointer;display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.sm{height:30px;padding:0 11px;font-size:13px;border-radius:8px}
+.lbl{font:600 11px Inter,sans-serif;color:#8E98A8;text-transform:uppercase;letter-spacing:.07em}
+.row{display:flex;align-items:center;gap:10px}
+.act{display:flex;align-items:center;gap:10px;width:100%;min-height:36px;padding:6px 10px;border-radius:8px;border:0;background:transparent;color:#EDF0F4;font:500 13.5px Inter,sans-serif;cursor:pointer;text-align:left;box-sizing:border-box}
+.act:hover{background:#1A1F27}
+.slot{display:flex;align-items:center;gap:10px;min-height:42px;padding:0 6px 0 12px;border-radius:9px;background:#161A21;border:1px solid #232933;box-sizing:border-box;width:100%;cursor:pointer;color:#EDF0F4;text-align:left}
+.mode{height:34px;padding:0 12px;border-radius:8px;border:0;cursor:pointer;font:600 13.5px Inter,sans-serif}
+.seg{display:inline-flex;padding:3px;background:#111419;border:1px solid #262C36;border-radius:10px}
+.fld{display:flex;align-items:center;gap:8px;height:36px;padding:0 10px;border-radius:9px;background:#111419;border:1px solid #6B7687;box-sizing:border-box}
+.fld input,.fld select{border:0;background:transparent;color:#EDF0F4;font:500 13.5px Inter,sans-serif;outline:none;flex:1;min-width:0}
+.fld:focus-within{border-color:#FFB224;box-shadow:0 0 0 2px rgba(255,178,36,.35)}
+.sel{height:34px;border-radius:8px;background:#111419;border:1px solid #6B7687;color:#EDF0F4;font:500 13px Inter,sans-serif;padding:0 8px}
+.num{width:64px;height:30px;border-radius:7px;background:#111419;border:1px solid #6B7687;color:#EDF0F4;font:500 12.5px 'JetBrains Mono',monospace;padding:0 8px;box-sizing:border-box}
+.chk{display:inline-flex;align-items:center;gap:8px;font:500 13.5px Inter,sans-serif}
+.chk input{width:16px;height:16px;accent-color:#FFB224;margin:0}
+.ib{width:34px;height:34px;border-radius:8px;border:1px solid #2A313C;background:#1A1F27;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+.chipf{height:28px;padding:0 10px;border-radius:14px;border:1px solid #2A313C;font:600 12px Inter,sans-serif;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+input::placeholder{color:#8E98A8;opacity:1}
+.units{container-type:inline-size;width:100%}
+.pair{display:flex;justify-content:center;gap:20px;flex-wrap:wrap}
+.u{width:640px;height:380px}.u>div{transform:scale(1);transform-origin:top left}
+@container (max-width:655px){.u{width:512px;height:304px}.u>div{transform:scale(.8)}}
+@container (min-width:916px){.pair{flex-wrap:nowrap}.u{width:448px;height:266px}.u>div{transform:scale(.70)}}
+@container (min-width:1018px){.u{width:499px;height:297px}.u>div{transform:scale(.78)}}
+@container (min-width:1134px){.u{width:557px;height:331px}.u>div{transform:scale(.87)}}
+@container (min-width:1249px){.u{width:614px;height:365px}.u>div{transform:scale(.96)}}
+@container (min-width:1300px){.u{width:640px;height:380px}.u>div{transform:scale(1)}}
+.kbw{width:956px;height:392px;margin:0 auto}.kbw>div{transform-origin:top left}
+@container (max-width:955px){.kbw{width:765px;height:314px}.kbw>div{transform:scale(.8)}}
+</style>
+</helmet>
+<div style="position:relative;min-height:900px;background:#0A0C0F;color:#EDF0F4;font-family:Inter,sans-serif;display:flex;flex-direction:column;overflow:hidden">
+
+<header style="height:56px;display:flex;align-items:center;gap:20px;padding:0 20px;border-bottom:1px solid #1A1F27;background:#0D0F13;flex-wrap:wrap">
+<a href="Library.dc.html" style="display:flex;align-items:center;gap:10px">
+<svg width="20" height="20" viewBox="0 0 28 28" aria-hidden="true"><rect x="2" y="2" width="10" height="10" rx="3" fill="#FFB224"></rect><rect x="16" y="2" width="10" height="10" rx="3" fill="none" stroke="#EDF0F4" stroke-width="2"></rect><rect x="2" y="16" width="10" height="10" rx="3" fill="none" stroke="#EDF0F4" stroke-width="2"></rect><rect x="16" y="16" width="10" height="10" rx="3" fill="none" stroke="#EDF0F4" stroke-width="2"></rect></svg>
+<span style="font:700 16px 'Space Grotesk',sans-serif">relayMatrix</span>
+</a>
+<a href="Library.dc.html" style="display:flex;align-items:center;gap:6px;font:600 13.5px Inter,sans-serif;color:#8E98A8">
+<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#8E98A8" stroke-width="1.8" aria-hidden="true"><path d="M10 3L5 8l5 5"></path></svg>Library</a>
+<div style="flex:1"></div>
+<a href="Devices.dc.html" class="pill" style="border:1px solid #262C36;color:#C3CAD5">Left <span class="dot" style="background:#4ADE80"></span> Right <span class="dot" style="background:#4ADE80"></span> Pedals <span class="dot" style="background:#4ADE80"></span> Keyboard <span class="dot" style="background:#4ADE80"></span></a>
+<span class="pill" style="{{syncStyle}}"><span class="dot" style="{{syncDot}}"></span>{{syncText}}</span>
+</header>
+
+<div style="display:flex;align-items:center;gap:14px;padding:12px 20px;border-bottom:1px solid #1A1F27;flex-wrap:wrap">
+<div style="display:flex;flex-direction:column;gap:2px">
+<span style="font:700 24px/1.1 'Space Grotesk',sans-serif">Elite Dangerous</span>
+<button type="button" style="display:flex;align-items:center;gap:6px;padding:0;border:0;background:none;color:#8E98A8;font:600 13px Inter,sans-serif;cursor:pointer">Scheme: Main <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#8E98A8" stroke-width="2" aria-hidden="true"><path d="M4 6l4 4 4-4"></path></svg></button>
+</div>
+<div style="width:1px;height:36px;background:#262C36"></div>
+<div class="seg" role="group" aria-label="Device">
+<button type="button" class="mode" aria-pressed="{{devAzPressed}}" onClick="{{setAz}}" style="{{devAzStyle}}">Azerons</button>
+<button type="button" class="mode" aria-pressed="{{devKbPressed}}" onClick="{{setKb}}" style="{{devKbStyle}}">Keyboard</button>
+</div>
+<sc-if value="{{isAz}}" hint-placeholder-val="{{true}}">
+<div class="seg" role="group" aria-label="Azerons send">
+<button type="button" class="mode" aria-pressed="{{outKeysPressed}}" onClick="{{setKeys}}" style="{{outKeysStyle}}">Keys</button>
+<button type="button" class="mode" aria-pressed="{{outPadPressed}}" onClick="{{setPad}}" style="{{outPadStyle}}">Controller</button>
+</div>
+</sc-if>
+<div style="display:flex;gap:4px">
+<sc-for list="{{modes}}" as="m" hint-placeholder-count="3">
+<button type="button" class="mode" onClick="{{m.pick}}" style="{{m.style}}">{{m.name}}</button>
+</sc-for>
+</div>
+<div style="flex:1"></div>
+<button type="button" class="chipf" aria-pressed="{{livePressed}}" onClick="{{toggleLive}}" style="{{liveStyle}}"><span style="{{liveDot}}"></span>Live input</button>
+<button type="button" class="ib" aria-label="Inspector" aria-pressed="{{inspPressed}}" onClick="{{toggleInsp}}" style="{{inspBtnStyle}}"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#EDF0F4" stroke-width="1.5" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="2"></rect><path d="M10 2.5v11"></path></svg></button>
+<button type="button" class="ib" aria-label="Undo"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#C3CAD5" stroke-width="1.7" aria-hidden="true"><path d="M5 4L2 7l3 3"></path><path d="M2 7h7.5a4 4 0 010 8H7"></path></svg></button>
+<a class="btn" href="Play.dc.html" style="background:#1A1F27;color:#EDF0F4;border-color:#2A313C">Play view</a>
+<button type="button" class="btn" onClick="{{openApply}}" style="{{applyStyle}}">{{applyText}}</button>
+</div>
+
+<div style="flex:1;display:flex;flex-wrap:wrap;min-height:0">
+
+<section style="flex:999 1 760px;min-width:0;display:flex;flex-direction:column;gap:16px;padding:22px 24px 20px">
+<sc-if value="{{isAz}}" hint-placeholder-val="{{true}}">
+<div class="units"><div class="pair">
+<div class="u"><div><dc-import name="Unit" hand="left" keys="{{keysL}}" stick="{{stickL}}" selected="{{selL}}" lit="{{litL}}" on-pick="{{pickL}}" hint-size="640px,380px"></dc-import></div></div>
+<div class="u"><div><dc-import name="Unit" hand="right" keys="{{keysR}}" stick="{{stickR}}" selected="{{selR}}" lit="{{litR}}" on-pick="{{pickR}}" hint-size="640px,380px"></dc-import></div></div>
+</div></div>
+</sc-if>
+<sc-if value="{{isKb}}" hint-placeholder-val="{{false}}">
+<div class="units"><div class="kbw"><div><dc-import name="Keyboard" assign="{{kbAssign}}" selected="{{selK}}" lit="{{litK}}" on-pick="{{pickK}}" hint-size="956px,392px"></dc-import></div></div></div>
+</sc-if>
+
+<sc-if value="{{pedalsOn}}" hint-placeholder-val="{{true}}">
+<div style="display:flex;flex-direction:column;align-items:center;gap:8px">
+<div class="row" style="width:600px;justify-content:space-between"><span class="lbl">Pedals · {{modeName}}</span><button type="button" class="btn sm" onClick="{{togglePedals}}" style="background:transparent;color:#C3CAD5">Hide pedals</button></div>
+<dc-import name="Pedals" axes="{{axes}}" lit="{{litP}}" selected="{{selP}}" on-pick="{{pickP}}" hint-size="600px,112px"></dc-import>
+</div>
+</sc-if>
+<sc-if value="{{pedalsOff}}" hint-placeholder-val="{{false}}">
+<div style="display:flex;justify-content:center"><button type="button" class="btn sm" onClick="{{togglePedals}}" style="background:transparent;color:#C3CAD5;border:1.5px dashed #6B7687">Pedals hidden · Show</button></div>
+</sc-if>
+
+<div style="display:flex;justify-content:center">
+<div style="display:flex;align-items:center;gap:12px;width:100%;max-width:1080px;padding:10px 12px 10px 14px;border-radius:10px;background:#1E1B12;border:1px solid #3A3218;box-sizing:border-box;flex-wrap:wrap">
+<span class="dot" style="background:#FFD866"></span>
+<span style="flex:1;font-size:13.5px;min-width:240px"><b>Long press on Fire secondary</b> <span style="color:#C3CAD5">delays every shot by 250 ms.</span></span>
+<button type="button" class="btn sm" style="background:#2A2412;color:#FFD866;border-color:#3A3218">Move it</button>
+<button type="button" class="btn sm" style="background:transparent;color:#C3CAD5">Keep, I know</button>
+</div>
+</div>
+</section>
+
+<sc-if value="{{inspOpen}}" hint-placeholder-val="{{true}}">
+<aside aria-label="Inspector" style="position:relative;flex:1 1 340px;max-width:100%;border-left:1px solid #1A1F27;background:#0D0F13;padding:20px;box-sizing:border-box;display:flex;flex-direction:column;gap:18px">
+
+<sc-if value="{{hasSel}}" hint-placeholder-val="{{true}}">
+<div class="row" style="align-items:flex-start;justify-content:space-between">
+<div style="display:flex;flex-direction:column;gap:4px;min-width:0">
+<span class="lbl">{{selWhere}}</span>
+<span style="font:700 22px/1.15 'Space Grotesk',sans-serif">{{selTitle}}</span>
+</div>
+<button type="button" class="ib" aria-label="Close inspector" onClick="{{toggleInsp}}"><svg width="12" height="12" viewBox="0 0 12 12" stroke="#C3CAD5" stroke-width="1.8" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8"></path></svg></button>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:6px">
+<span class="lbl">In each mode</span>
+<sc-for list="{{across}}" as="a" hint-placeholder-count="3">
+<button type="button" onClick="{{a.pick}}" style="{{a.style}}"><span style="width:62px;color:#8E98A8;font-weight:600">{{a.mode}}</span><span style="flex:1">{{a.label}}</span></button>
+</sc-for>
+</div>
+
+<sc-if value="{{isPedalSel}}" hint-placeholder-val="{{false}}">
+<div style="display:flex;flex-direction:column;gap:10px">
+<span class="lbl">Pedal</span>
+<button type="button" class="slot" onClick="{{openPicker}}"><span style="width:60px;font:600 12.5px Inter,sans-serif;color:#8E98A8">Drives</span><span style="flex:1;font:600 14px Inter,sans-serif">{{tapLabel}}</span><span style="font:600 12px Inter,sans-serif;color:#8E98A8;padding-right:8px">Change</span></button>
+<label class="row" style="justify-content:space-between;font-size:13.5px">Use as<select class="sel" aria-label="Use pedal as"><option>Axis (analog)</option><option>Button past a point</option><option>Two buttons, each half</option></select></label>
+<label class="row" style="justify-content:space-between;font-size:13.5px">Response curve<select class="sel" aria-label="Response curve"><option>Linear</option><option>Smooth</option><option>Aggressive</option></select></label>
+<label class="row" style="justify-content:space-between;font-size:13.5px">Deadzone<span class="row" style="gap:6px"><input class="num" type="number" value="4" aria-label="Deadzone percent"><span style="color:#8E98A8;font-size:12.5px">%</span></span></label>
+<label class="chk"><input type="checkbox">Invert</label>
+<a href="Devices.dc.html" style="font:600 13px Inter,sans-serif;color:#FFB224">Calibrate pedals in Devices</a>
+</div>
+</sc-if>
+
+<sc-if value="{{isKeySel}}" hint-placeholder-val="{{true}}">
+<div style="display:flex;flex-direction:column;gap:8px">
+<span class="lbl">Press</span>
+<button type="button" class="slot" onClick="{{openPicker}}" aria-label="Tap action, change"><span style="width:52px;font:600 12.5px Inter,sans-serif;color:#8E98A8">Tap</span><span style="flex:1;font:600 14px Inter,sans-serif;color:{{tapColor}}">{{tapLabel}}</span><span style="font:600 12px Inter,sans-serif;color:#8E98A8;padding-right:8px">Change</span></button>
+<button type="button" class="slot" onClick="{{openPicker}}" aria-label="Long press action"><span style="width:52px;font:600 12.5px Inter,sans-serif;color:#8E98A8">Long</span><span style="flex:1;font:600 14px Inter,sans-serif;color:{{longColor}}">{{longLabel}}</span></button>
+<button type="button" class="slot" onClick="{{openPicker}}" style="background:transparent;border:1.5px dashed #6B7687" aria-label="Double tap action, add"><span style="width:52px;font:600 12.5px Inter,sans-serif;color:#8E98A8">Double</span><span style="flex:1;font:500 13.5px Inter,sans-serif;color:#8E98A8">Add</span></button>
+</div>
+
+<sc-if value="{{hasAction}}" hint-placeholder-val="{{true}}">
+<label style="display:flex;flex-direction:column;gap:6px">
+<span class="lbl">Key label</span>
+<span class="fld"><input type="text" value="{{shortLabel}}" placeholder="{{tapLabel}}" aria-label="Key label"></span>
+<span style="font-size:12px;color:#8E98A8">Shown on the key only when the game's word will not fit at a readable size.</span>
+</label>
+</sc-if>
+
+<div style="display:flex;flex-direction:column;gap:10px">
+<span class="lbl">Advanced</span>
+<button type="button" class="slot" onClick="{{openMacro}}"><span style="width:52px;font:600 12.5px Inter,sans-serif;color:#8E98A8">Macro</span><span style="flex:1;font:600 14px Inter,sans-serif;color:{{macroColor}}">{{macroLabel}}</span><span style="font:600 12px Inter,sans-serif;color:#FFB224;padding-right:8px">{{macroCta}}</span></button>
+<label class="row" style="justify-content:space-between;font-size:13.5px">Layer<select class="sel" aria-label="Layer behaviour"><option>Same on every layer</option><option>Hold for layer 2</option><option>Toggle layer 2</option><option>Different on layer 2</option></select></label>
+<div class="row" style="gap:18px"><label class="chk"><input type="checkbox">Turbo</label><label class="chk"><input type="checkbox">Hold to latch</label></div>
+<div class="row" style="justify-content:space-between;font-size:13.5px"><span>Long press after</span><span class="row" style="gap:6px"><input class="num" type="number" value="300" aria-label="Long press after, milliseconds"><span style="color:#8E98A8;font-size:12.5px">ms</span></span></div>
+<div class="row" style="justify-content:space-between;font-size:13.5px"><span>Double tap within</span><span class="row" style="gap:6px"><input class="num" type="number" value="250" aria-label="Double tap within, milliseconds"><span style="color:#8E98A8;font-size:12.5px">ms</span></span></div>
+</div>
+</sc-if>
+
+<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:9px;background:#111419;border:1px solid #1E232C">
+<span style="font:500 12px Inter,sans-serif;color:#8E98A8">Sends</span>
+<span style="font:500 12.5px 'JetBrains Mono',monospace;color:#EDF0F4">{{signal}}</span>
+<span style="flex:1;text-align:right;font:500 12px Inter,sans-serif;color:#8E98A8">{{signalNote}}</span>
+</div>
+</sc-if>
+
+<sc-if value="{{noSel}}" hint-placeholder-val="{{false}}">
+<div style="display:flex;flex-direction:column;gap:6px">
+<span style="font:700 20px 'Space Grotesk',sans-serif">Pick a button</span>
+<span style="font-size:13.5px;color:#8E98A8;line-height:1.45">Click one here, or press it on the device. Then choose an action, or drag one from the list below onto a button.</span>
+</div>
+</sc-if>
+
+<div style="display:flex;flex-direction:column;gap:8px;min-height:0">
+<div class="row" style="justify-content:space-between"><span class="lbl">Not on a button · {{modeName}}</span><span style="font:600 12px Inter,sans-serif;color:#8E98A8">{{unplacedCount}}</span></div>
+<div style="display:flex;flex-direction:column">
+<sc-for list="{{unplaced}}" as="u" hint-placeholder-count="6">
+<button type="button" class="act" draggable="true" onClick="{{u.pick}}"><span class="dot" style="{{u.dot}}"></span><span style="flex:1">{{u.label}}</span></button>
+</sc-for>
+</div>
+</div>
+
+<sc-if value="{{picker}}" hint-placeholder-val="{{false}}">
+<div role="dialog" aria-label="Choose an action" style="position:absolute;inset:0;background:#0D0F13;padding:20px;box-sizing:border-box;display:flex;flex-direction:column;gap:12px;box-shadow:-12px 0 32px rgba(0,0,0,.4)">
+<div class="row" style="justify-content:space-between;align-items:flex-start">
+<div style="display:flex;flex-direction:column;gap:4px"><span class="lbl">{{selWhere}} · Tap</span><span style="font:700 20px 'Space Grotesk',sans-serif">Choose an action</span></div>
+<button type="button" class="ib" aria-label="Close" onClick="{{closePicker}}"><svg width="12" height="12" viewBox="0 0 12 12" stroke="#C3CAD5" stroke-width="1.8" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8"></path></svg></button>
+</div>
+<label class="fld"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#8E98A8" stroke-width="1.7" aria-hidden="true"><circle cx="7" cy="7" r="5"></circle><path d="M11 11l3.5 3.5"></path></svg><input type="search" placeholder="Search {{modeName}} actions" aria-label="Search actions" onInput="{{onSearch}}"></label>
+<div class="row" style="flex-wrap:wrap;gap:6px">
+<sc-for list="{{filters}}" as="f" hint-placeholder-count="6">
+<button type="button" class="chipf" aria-pressed="{{f.pressed}}" onClick="{{f.pick}}" style="{{f.style}}"><span class="dot" style="{{f.dot}}"></span>{{f.name}}</button>
+</sc-for>
+</div>
+<div style="flex:1;overflow:auto;display:flex;flex-direction:column;gap:10px;min-height:0">
+<span class="lbl">Not on a button</span>
+<div style="display:flex;flex-direction:column">
+<sc-for list="{{pickFree}}" as="u" hint-placeholder-count="4">
+<button type="button" class="act" onClick="{{u.pick}}"><span class="dot" style="{{u.dot}}"></span><span style="flex:1">{{u.label}}</span></button>
+</sc-for>
+</div>
+<span class="lbl">Already on a button · picking moves it here</span>
+<div style="display:flex;flex-direction:column">
+<sc-for list="{{pickPlaced}}" as="u" hint-placeholder-count="6">
+<button type="button" class="act" onClick="{{u.pick}}"><span class="dot" style="{{u.dot}}"></span><span style="flex:1">{{u.label}}</span><span style="font:500 12px Inter,sans-serif;color:#8E98A8">{{u.where}}</span></button>
+</sc-for>
+</div>
+</div>
+<div class="row" style="justify-content:space-between;font-size:12px;color:#8E98A8"><span>{{pickCount}}</span><span>Raw key or mouse: use a macro</span></div>
+</div>
+</sc-if>
+</aside>
+</sc-if>
+</div>
+
+<sc-if value="{{macroOpen}}" hint-placeholder-val="{{false}}">
+<div style="position:absolute;inset:0;background:rgba(5,6,8,.62)" onClick="{{closeDrawer}}"></div>
+<div role="dialog" aria-label="Macro" style="position:absolute;top:0;right:0;bottom:0;width:560px;max-width:100%;background:#111419;border-left:1px solid #262C36;box-shadow:-24px 0 48px rgba(0,0,0,.45);display:flex;flex-direction:column">
+<div style="padding:22px 24px 16px;display:flex;flex-direction:column;gap:6px;border-bottom:1px solid #1E232C">
+<span class="lbl">Macro · {{selWhere}}</span>
+<span style="font:700 22px 'Space Grotesk',sans-serif">{{macroName}}</span>
+</div>
+<div style="flex:1;overflow:auto;padding:18px 24px;display:flex;flex-direction:column;gap:20px">
+<label style="display:flex;flex-direction:column;gap:6px"><span class="lbl">Name</span><span class="fld"><input type="text" value="{{macroName}}" aria-label="Macro name"></span></label>
+<div style="display:flex;flex-direction:column;gap:8px">
+<span class="lbl">When pressed</span>
+<div class="seg" role="group" aria-label="When pressed">
+<sc-for list="{{runModes}}" as="r" hint-placeholder-count="3">
+<button type="button" class="mode" aria-pressed="{{r.pressed}}" onClick="{{r.pick}}" style="{{r.style}}">{{r.name}}</button>
+</sc-for>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px">
+<div class="row" style="justify-content:space-between"><span class="lbl">Steps</span><button type="button" class="chipf" onClick="{{toggleRec}}" style="{{recStyle}}"><span style="{{recDot}}"></span>{{recText}}</button></div>
+<ol style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px">
+<sc-for list="{{steps}}" as="st" hint-placeholder-count="4">
+<li style="display:flex;align-items:center;gap:10px;min-height:42px;padding:0 6px 0 10px;border-radius:9px;background:#161A21;border:1px solid #232933">
+<svg width="10" height="14" viewBox="0 0 10 14" fill="#8E98A8" aria-hidden="true"><circle cx="2.5" cy="3" r="1.3"></circle><circle cx="7.5" cy="3" r="1.3"></circle><circle cx="2.5" cy="7" r="1.3"></circle><circle cx="7.5" cy="7" r="1.3"></circle><circle cx="2.5" cy="11" r="1.3"></circle><circle cx="7.5" cy="11" r="1.3"></circle></svg>
+<span style="width:18px;font:500 12px 'JetBrains Mono',monospace;color:#8E98A8">{{st.n}}</span>
+<span style="{{st.kindStyle}}">{{st.kind}}</span>
+<span style="flex:1;font:600 13.5px Inter,sans-serif">{{st.value}}</span>
+<span style="font:500 12px 'JetBrains Mono',monospace;color:#8E98A8">{{st.sends}}</span>
+<input class="num" type="number" value="{{st.delay}}" aria-label="{{st.delayAria}}"><span style="font-size:12px;color:#8E98A8">ms</span>
+<button type="button" class="ib" style="width:30px;height:30px;border:0;background:transparent" aria-label="{{st.removeAria}}" onClick="{{st.remove}}"><svg width="11" height="11" viewBox="0 0 12 12" stroke="#8E98A8" stroke-width="1.8" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8"></path></svg></button>
+</li>
+</sc-for>
+</ol>
+<div class="row" style="flex-wrap:wrap;gap:6px">
+<sc-for list="{{addSteps}}" as="a" hint-placeholder-count="5">
+<button type="button" class="chipf" onClick="{{a.pick}}" style="background:transparent;color:#C3CAD5;border:1.5px dashed #6B7687">+ {{a.name}}</button>
+</sc-for>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px">
+<span class="lbl">Runs</span>
+<label class="chk"><input type="radio" name="runs" checked="checked">{{runsHere}}</label>
+<label class="chk"><input type="radio" name="runs">In relayMatrix (needed for text and long sequences)</label>
+</div>
+<div style="display:flex;flex-direction:column;gap:6px;padding:10px 12px;border-radius:9px;background:#0D0F13;border:1px solid #1E232C">
+<span style="font:500 12px Inter,sans-serif;color:#8E98A8">Sends, in order</span>
+<span style="font:500 12.5px 'JetBrains Mono',monospace;color:#EDF0F4">{{macroPreview}}</span>
+</div>
+</div>
+<div style="padding:16px 24px;border-top:1px solid #1E232C;display:flex;gap:10px;align-items:center">
+<button type="button" class="btn" style="background:transparent;color:#FF5D5D;border-color:#4A2328">Delete macro</button>
+<div style="flex:1"></div>
+<button type="button" class="btn" onClick="{{closeDrawer}}" style="background:transparent;color:#C3CAD5">Cancel</button>
+<button type="button" class="btn" onClick="{{saveMacro}}" style="background:#FFB224;color:#1A1200">Save macro</button>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{applyOpen}}" hint-placeholder-val="{{false}}">
+<div style="position:absolute;inset:0;background:rgba(5,6,8,.62)" onClick="{{closeDrawer}}"></div>
+<div role="dialog" aria-label="Apply" style="position:absolute;top:0;right:0;bottom:0;width:440px;max-width:100%;background:#111419;border-left:1px solid #262C36;box-shadow:-24px 0 48px rgba(0,0,0,.45);display:flex;flex-direction:column">
+<div style="padding:24px 24px 16px;display:flex;flex-direction:column;gap:6px;border-bottom:1px solid #1E232C">
+<span style="font:700 22px 'Space Grotesk',sans-serif">Apply Main</span>
+<span style="font-size:13.5px;color:#8E98A8">Elite Dangerous · what changes</span>
+</div>
+<div style="flex:1;overflow:auto;padding:20px 24px;display:flex;flex-direction:column;gap:22px">
+<div style="display:flex;flex-direction:column;gap:8px">
+<div class="row" style="font-size:13.5px"><span class="dot" style="background:#4ADE80"></span>Azeron app is closed</div>
+<div class="row" style="font-size:13.5px"><span class="dot" style="background:#4ADE80"></span>Elite Dangerous is closed</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:10px">
+<div class="row" style="justify-content:space-between"><span class="lbl">Left Azeron</span><span style="font-size:12.5px;color:#8E98A8">3 buttons</span></div>
+<div style="display:flex;flex-direction:column;gap:6px;font-size:13.5px">
+<div class="row"><span style="width:84px;color:#8E98A8">Middle 1</span><span>Frame shift drive</span></div>
+<div class="row"><span style="width:84px;color:#8E98A8">Index 5</span><span>Silent running</span><span style="color:#8E98A8">new</span></div>
+<div class="row"><span style="width:84px;color:#8E98A8">Ring 4</span><span>Macro: Pips: shields max</span></div>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:10px">
+<div class="row" style="justify-content:space-between"><span class="lbl">Right Azeron</span><span style="font-size:12.5px;color:#8E98A8">1 button</span></div>
+<div class="row" style="font-size:13.5px"><span style="width:84px;color:#8E98A8">Index 2</span><span>Long press: Next fire group</span></div>
+</div>
+<div style="display:flex;flex-direction:column;gap:10px">
+<div class="row" style="justify-content:space-between"><span class="lbl">Game file</span><span style="font-size:12.5px;color:#8E98A8">5 bindings</span></div>
+<span style="font:500 12.5px 'JetBrains Mono',monospace;color:#C3CAD5">Custom.4.1.binds</span>
+<span style="font-size:13px;color:#8E98A8">Ship 4 · SRV 1 · a copy of the old file is kept</span>
+</div>
+<div style="display:flex;flex-direction:column;gap:10px">
+<div class="row" style="justify-content:space-between"><span class="lbl">Pedals</span><span style="font-size:12.5px;color:#8E98A8">no change</span></div>
+</div>
+</div>
+<div style="padding:16px 24px;border-top:1px solid #1E232C;display:flex;gap:10px;justify-content:flex-end">
+<button type="button" class="btn" onClick="{{closeDrawer}}" style="background:transparent;color:#C3CAD5">Cancel</button>
+<button type="button" class="btn" onClick="{{doApply}}" style="background:#FFB224;color:#1A1200">Apply</button>
+</div>
+</div>
+</sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"start":{"editor":"enum","options":["","macro","picker","keyboard","collapsed"],"default":""},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+constructor(p) {
+super(p);
+const start = (p && p.start) || '';
+this.state = {
+mode: 'ship', device: start === 'keyboard' ? 'kb' : 'az',
+sel: start === 'macro' ? 'L:ring_4' : (start === 'picker' ? 'L:index_5' : (start === 'keyboard' ? 'K:J' : 'L:index_1')),
+drawer: start === 'macro' ? 'macro' : '', picker: start === 'picker', insp: start !== 'collapsed',
+applied: false, out: 'keys', over: {}, live: true, lit: '', step: 0, pedals: true, q: '', filt: 'all',
+run: 'once', rec: false,
+steps: [['Action', 'Reset pips', 30], ['Action', 'Pips: SYS', 30], ['Action', 'Pips: SYS', 30], ['Action', 'Pips: WEP', 0]]
+};
+}
+componentDidMount() { this.i = setInterval(() => this.tick(), 1600); }
+componentWillUnmount() { clearInterval(this.i); clearTimeout(this.t); }
+tick() {
+const st = this.state;
+if (!st.live || st.drawer) return;
+const seq = st.device === 'kb' ? ['K:W', 'K:Tab', 'P:rudder', 'K:J', 'K:Space'] : ['L:index_1', 'R:index_1', 'P:rudder', 'L:middle_1', 'R:dpad_up', 'L:stick', 'P:rtoe'];
+const n = (st.step + 1) % seq.length;
+this.setState({ lit: seq[n], step: n });
+clearTimeout(this.t);
+this.t = setTimeout(() => this.setState({ lit: '' }), 450);
+}
+renderVals() {
+const s = this.state;
+const D = {
+ship: {
+L: { index_1: ['Boost', 'move'], index_2: ['Landing gear', 'travel'], index_3: ['Thrust up', 'move'], index_4: ['Thrust down', 'move'],
+middle_1: ['Frame shift drive', 'travel'], middle_2: ['Supercruise', 'travel'], middle_3: ['Target ahead', 'combat'], middle_4: ['Next target', 'combat'], middle_5: ['Highest threat', 'combat'],
+ring_1: ['Pips: SYS', 'ability'], ring_2: ['Pips: ENG', 'ability'], ring_3: ['Pips: WEP', 'ability'], ring_4: ['Pips: shields max', 'ability', 'Shields max', 'M'], ring_5: ['Heat sink', 'ability'],
+pinky_1: ['Galaxy map', 'menu'], pinky_2: ['System map', 'menu'], pinky_3: ['Cargo scoop', 'travel'], pinky_4: ['Ship lights', 'ability'], pinky_5: ['Night vision', 'ability'],
+pinky_side: ['Shield cell', 'ability'], index_side: ['Hardpoints', 'combat', 'Hard­points'],
+dpad_up: ['Left panel', 'menu'], dpad_down: ['Right panel', 'menu'], dpad_left: ['Comms', 'menu'], dpad_right: ['Role panel', 'menu'], dpad_press: ['UI select', 'menu'],
+thumb_aux_upper: ['Chaff', 'combat'], thumb_aux_lower: ['Hyperspace jump', 'travel', 'Hyper jump'] },
+Ls: { up: 'Forward', down: 'Back', left: 'Thrust left', right: 'Thrust right', press: 'FA off', role: 'move' },
+R: { index_1: ['Fire primary', 'combat'], index_2: ['Fire secondary', 'combat'], index_3: ['Next fire group', 'combat'], index_4: ['Next subsystem', 'combat'],
+middle_1: ['Throttle 100%', 'move'], middle_2: ['Throttle 50%', 'move'], middle_3: ['Throttle 0%', 'move'], middle_4: ['Reverse', 'move'],
+ring_1: ['Discovery scan', 'ability'], ring_2: ['Full spectrum scan', 'ability'], ring_3: ['Surface scan', 'ability'], ring_4: ['Analysis mode', 'ability'], ring_5: ['Orbit lines', 'travel'],
+pinky_1: ['Main menu', 'menu'], index_side: ['Request docking', 'travel', 'Docking'],
+dpad_up: ['Throttle +', 'move'], dpad_down: ['Throttle −', 'move'], dpad_left: ['Prev fire group', 'combat', 'Prev group'], dpad_right: ['Wingman target', 'combat'], dpad_press: ['Select target', 'combat'],
+thumb_aux_upper: ['Comms panel', 'menu'], thumb_aux_lower: ['Photo mode', 'menu'] },
+Rs: { up: 'Pitch down', down: 'Pitch up', left: 'Roll left', right: 'Roll right', press: 'Look', role: 'move' },
+P: [['ltoe', 'Left toe', 'Thrust down', 'end'], ['rudder', 'Rudder', 'Yaw', 'centre'], ['rtoe', 'Right toe', 'Thrust up', 'end']],
+unplaced: [['Silent running', 'ability'], ['Wing nav-lock', 'ability'], ['Next system in route', 'travel'], ['Quick comms', 'menu'], ['Deploy heat sink (alt)', 'ability'], ['Cycle fire group back', 'combat']]
+},
+srv: {
+L: { index_1: ['Turbo boost', 'move'], index_2: ['Jump', 'move'], index_4: ['Turret mode', 'combat'],
+middle_1: ['Recall ship', 'travel'], middle_2: ['Wave scanner', 'ability'], middle_3: ['Target ahead', 'combat'],
+ring_1: ['Pips: SYS', 'ability'], ring_2: ['Pips: ENG', 'ability'], ring_3: ['Pips: WEP', 'ability'], ring_4: ['Pips: shields max', 'ability', 'Shields max', 'M'],
+pinky_1: ['Galaxy map', 'menu'], pinky_2: ['System map', 'menu'], pinky_3: ['Cargo scoop', 'travel'], pinky_4: ['SRV lights', 'ability'],
+dpad_up: ['Left panel', 'menu'], dpad_down: ['Right panel', 'menu'], dpad_left: ['Comms', 'menu'], dpad_right: ['Role panel', 'menu'], dpad_press: ['UI select', 'menu'],
+thumb_aux_lower: ['Board ship', 'travel'] },
+Ls: { up: 'Accelerate', down: 'Reverse', left: 'Steer left', right: 'Steer right', press: 'Handbrake', role: 'move' },
+R: { index_1: ['Fire primary', 'combat'], index_2: ['Fire secondary', 'combat'], middle_1: ['Speed limiter', 'move'], pinky_1: ['Main menu', 'menu'] },
+Rs: { up: 'Turret up', down: 'Turret down', left: 'Turret left', right: 'Turret right', press: 'Look', role: 'combat' },
+P: [['ltoe', 'Left toe', '', 'end'], ['rudder', 'Rudder', 'Steer', 'centre'], ['rtoe', 'Right toe', '', 'end']],
+unplaced: [['Drive assist', 'move'], ['Dismiss ship', 'travel'], ['Auto-break', 'move'], ['Cargo eject', 'ability']]
+},
+foot: {
+L: { index_1: ['Sprint', 'move'], index_2: ['Jump', 'move'], index_3: ['Crouch', 'move'],
+middle_1: ['Interact', 'ability'], middle_2: ['Melee', 'combat'], middle_3: ['Reload', 'combat'],
+ring_1: ['Energy link', 'ability'], ring_2: ['Medkit', 'ability'], ring_3: ['Battery', 'ability'], ring_4: ['Shield', 'ability'],
+pinky_1: ['Galaxy map', 'menu'], pinky_2: ['Inventory', 'menu'], pinky_side: ['Grenade', 'combat'], index_side: ['Throw item', 'combat'],
+dpad_up: ['Primary weapon', 'combat'], dpad_down: ['Holster', 'combat'], dpad_left: ['Secondary weapon', 'combat', 'Weapon 2'], dpad_right: ['Tool', 'ability'],
+thumb_aux_upper: ['Emote wheel', 'menu'] },
+Ls: { up: 'Forward', down: 'Back', left: 'Strafe left', right: 'Strafe right', press: 'Sprint', role: 'move' },
+R: { index_1: ['Fire', 'combat'], index_2: ['Aim', 'combat'], index_3: ['Fire mode', 'combat'], pinky_1: ['Main menu', 'menu'] },
+Rs: { up: 'Look up', down: 'Look down', left: 'Look left', right: 'Look right', press: 'Ping', role: 'move' },
+P: [['ltoe', 'Left toe', '', 'end'], ['rudder', 'Rudder', '', 'centre'], ['rtoe', 'Right toe', '', 'end']],
+unplaced: [['Night vision', 'ability'], ['Flashlight', 'ability'], ['Show carto', 'menu'], ['Holster weapon', 'combat']]
+}
+};
+const KB = {
+Esc: ['Main menu', 'menu', 'Menu'], '1': ['Left panel', 'menu', 'Left'], '2': ['Comms', 'menu'], '3': ['Role panel', 'menu', 'Role'], '4': ['Right panel', 'menu', 'Right'],
+Tab: ['Boost', 'move'], Q: ['Thrust left', 'move'], W: ['Throttle up', 'move'], E: ['Thrust right', 'move'], R: ['Thrust up', 'move'], T: ['Target ahead', 'combat', 'Target'], U: ['Hardpoints', 'combat'],
+A: ['Yaw left', 'move'], S: ['Throttle down', 'move'], D: ['Yaw right', 'move'], F: ['Thrust down', 'move'], G: ['Next target', 'combat'], H: ['Highest threat', 'combat', 'Threat'], J: ['Frame shift drive', 'travel', 'FSD'], L: ['Landing gear', 'travel', 'Gear'],
+X: ['Throttle 0%', 'move'], C: ['Chaff', 'combat'], V: ['Heat sink', 'ability', 'Heat'], M: ['Galaxy map', 'menu', 'Galaxy'], ',': ['System map', 'menu', 'System'],
+Backspace: ['Cargo scoop', 'travel', 'Scoop'], Del: ['Shield cell', 'ability', 'Shield'], Enter: ['Chat', 'menu'],
+LShift: ['Pips: shields max', 'ability', 'Shields max', 'M'], LCtrl: ['Silent running', 'ability', 'Silent'], Space: ['Vertical thrust', 'move', 'Vertical']
+};
+const MODES = [['ship', 'Ship'], ['srv', 'SRV'], ['foot', 'On foot']];
+const ROLE = { combat: '#FF7A90', move: '#3BD6B0', ability: '#6EA8FF', travel: '#B5E361', menu: '#B99BFF' };
+const keysFor = (mode, hand) => {
+const base = Object.assign({}, hand === 'K' ? KB : D[mode][hand]);
+Object.keys(s.over).forEach((k) => {
+const [m, h, pos] = k.split('|');
+if (m === mode && h === hand) { if (s.over[k]) base[pos] = s.over[k]; else delete base[pos]; }
+});
+return base;
+};
+const d = D[s.mode];
+const isKb = s.device === 'kb';
+const keysL = keysFor(s.mode, 'L'), keysR = keysFor(s.mode, 'R'), kbAssign = keysFor(s.mode, 'K');
+let [selHand, selPos] = s.sel ? s.sel.split(':') : [null, null];
+if (isKb && selHand !== 'K' && selHand !== 'P') { selHand = null; selPos = null; }
+if (!isKb && selHand === 'K') { selHand = null; selPos = null; }
+const hasSel = !!selHand && (selHand !== 'P' || s.pedals);
+const isPedalSel = selHand === 'P';
+const isKeySel = hasSel && !isPedalSel;
+const [litH, litP0] = (s.lit || ':').split(':');
+const PNAME = { ltoe: 'Left toe', rudder: 'Rudder', rtoe: 'Right toe' };
+const POS = (h, p) => h === 'P' ? 'Pedals · ' + PNAME[p] : (h === 'K' ? 'Keyboard · ' + p : (h === 'L' ? 'Left' : 'Right') + ' · ' + (p === 'stick' ? 'Stick' : p.replace('thumb_aux_', 'Thumb ').replace('dpad_', 'D-pad ').replace('_side', ' side').replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase())));
+const mapFor = (h) => h === 'L' ? keysL : (h === 'R' ? keysR : kbAssign);
+let selAction = null;
+if (isKeySel && selPos !== 'stick') selAction = mapFor(selHand)[selPos] || null;
+const pedalAxis = isPedalSel ? d.P.find((x) => x[0] === selPos) : null;
+const order = ['pinky', 'ring', 'middle', 'index'];
+const POOL = ['F13', 'F14', 'F15', 'F16', 'F17', 'F18', 'F19', 'F20', 'F21', 'F22', 'F23', 'F24', 'Num /', 'Num *', 'Num −', 'Num +', 'Insert', 'Home', 'End', 'Page Up', 'Page Down', '[', ']', ';', '=', ','];
+const PAD = { index_1: 'RB', index_2: 'RT', index_3: 'A', index_4: 'B', middle_1: 'X', middle_2: 'Y', middle_3: 'LB', middle_4: 'LT', dpad_up: 'D-pad ↑', dpad_down: 'D-pad ↓', dpad_left: 'D-pad ←', dpad_right: 'D-pad →', stick: 'Left stick' };
+const idx = selPos ? (selPos.length * 7 + (selHand === 'R' ? 5 : 0) + Math.max(order.indexOf(selPos.split('_')[0]), 0) * 3 + 3) % POOL.length : 0;
+const across = MODES.map(([id, name]) => {
+let label = 'Empty', has = false;
+if (isPedalSel) { const ax = D[id].P.find((x) => x[0] === selPos); has = !!(ax && ax[2]); label = has ? ax[2] : 'Not used'; }
+else if (selPos === 'stick') { const st = selHand === 'L' ? D[id].Ls : D[id].Rs; label = st.up + ' / ' + st.down + ' …'; has = true; }
+else if (selHand) { const k = keysFor(id, selHand)[selPos]; has = !!k; label = k ? k[0] : 'Empty'; }
+const on = id === s.mode;
+return { mode: name, label, pick: () => this.setState({ mode: id }),
+style: 'display:flex;align-items:center;gap:8px;min-height:36px;padding:0 12px;border-radius:9px;cursor:pointer;text-align:left;font:500 13.5px Inter,sans-serif;color:' + (has ? '#EDF0F4' : '#8E98A8') + ';background:' + (on ? '#1A1F27' : 'transparent') + ';border:1px solid ' + (on ? '#2A313C' : 'transparent') };
+});
+const assignHere = (u) => {
+if (!hasSel || selPos === 'stick' || isPedalSel) { this.setState({ picker: false }); return; }
+const o = Object.assign({}, s.over); o[s.mode + '|' + selHand + '|' + selPos] = u; this.setState({ over: o, applied: false, picker: false });
+};
+const placedNames = new Set();
+Object.keys(s.over).forEach((k) => { if (s.over[k] && k.startsWith(s.mode + '|')) placedNames.add(s.over[k][0]); });
+const freeList = d.unplaced.filter((u) => !placedNames.has(u[0]));
+const unplaced = freeList.map((u) => ({ label: u[0], dot: 'background:' + ROLE[u[1]], pick: () => assignHere(u) }));
+const q = (s.q || '').toLowerCase();
+const okF = (u) => (s.filt === 'all' || u[1] === s.filt) && (!q || u[0].toLowerCase().indexOf(q) >= 0);
+const pickFree = freeList.filter(okF).map((u) => ({ label: u[0], dot: 'background:' + ROLE[u[1]], pick: () => assignHere(u) }));
+const placedAll = [];
+[['L', isKb ? {} : keysL], ['R', isKb ? {} : keysR], ['K', isKb ? kbAssign : {}]].forEach(([h, m]) => Object.keys(m).forEach((p) => placedAll.push([m[p][0], m[p][1], POS(h, p)])));
+const pickPlaced = placedAll.filter(okF).slice(0, 8).map((u) => ({ label: u[0], where: u[2].replace('Keyboard · ', 'Key '), dot: 'background:' + ROLE[u[1]], pick: () => assignHere([u[0], u[1]]) }));
+const FILT = [['all', 'All'], ['combat', 'Combat'], ['move', 'Movement'], ['ability', 'Ability'], ['travel', 'Travel'], ['menu', 'Menu']];
+const filters = FILT.map(([id, name]) => ({ name, pressed: s.filt === id ? 'true' : 'false', pick: () => this.setState({ filt: id }),
+dot: id === 'all' ? 'display:none' : 'background:' + ROLE[id],
+style: s.filt === id ? 'background:#262C36;color:#EDF0F4;box-shadow:inset 0 -2px 0 #FFB224' : 'background:transparent;color:#C3CAD5' }));
+const changes = 3 + Object.keys(s.over).length;
+const axes = d.P.map(([id, name, drives, rest]) => ({ id, name, drives, rest, value: litH === 'P' && litP0 === id ? (rest === 'centre' ? 22 : 70) : (rest === 'centre' ? 50 : 0) }));
+const pad = s.out === 'pad';
+const seg = (on) => 'background:' + (on ? '#262C36' : 'transparent') + ';color:' + (on ? '#EDF0F4' : '#8E98A8') + ';box-shadow:' + (on ? 'inset 0 -2px 0 #FFB224' : 'none');
+const longIsSet = s.mode === 'ship' && s.sel === 'R:index_2';
+const hasMacro = !!(selAction && selAction[3] === 'M');
+const pick = (h) => (p) => this.setState({ sel: s.sel === h + ':' + p ? null : h + ':' + p, insp: true, picker: false });
+const KEYOF = { 'Reset pips': '↓', 'Pips: SYS': '←', 'Pips: ENG': '↑', 'Pips: WEP': '→' };
+const KINDC = { Action: '#6EA8FF', Key: '#C3CAD5', Mouse: '#C3CAD5', Wait: '#8E98A8', Text: '#B99BFF' };
+const steps = s.steps.map(([kind, value, delay], i) => ({
+n: i + 1, kind, value, delay,
+sends: kind === 'Action' ? (KEYOF[value] || 'F15') : (kind === 'Wait' ? '' : (kind === 'Text' ? 'types' : value)),
+kindStyle: 'width:58px;flex:none;font:600 11px Inter,sans-serif;letter-spacing:.04em;text-transform:uppercase;color:' + KINDC[kind],
+delayAria: 'Pause after step ' + (i + 1) + ', milliseconds',
+removeAria: 'Remove step ' + (i + 1),
+remove: () => this.setState({ steps: s.steps.filter((x, j) => j !== i) })
+}));
+const ADD = [['Game action', ['Action', 'Pips: ENG', 30]], ['Key', ['Key', 'F14', 30]], ['Mouse', ['Mouse', 'Left click', 30]], ['Wait', ['Wait', 'Pause', 100]], ['Text', ['Text', 'o7', 0]]];
+const RUNM = [['once', 'Once'], ['repeat', 'Repeat while held'], ['toggle', 'Toggle on and off']];
+return {
+isAz: !isKb, isKb,
+devAzPressed: isKb ? 'false' : 'true', devKbPressed: isKb ? 'true' : 'false',
+devAzStyle: seg(!isKb), devKbStyle: seg(isKb),
+setAz: () => this.setState({ device: 'az', sel: 'L:index_1', picker: false }),
+setKb: () => this.setState({ device: 'kb', sel: 'K:J', picker: false }),
+modes: MODES.map(([id, name]) => ({ name, pick: () => this.setState({ mode: id }), style: 'background:' + (s.mode === id ? '#1A1F27' : 'transparent') + ';color:' + (s.mode === id ? '#EDF0F4' : '#8E98A8') + ';box-shadow:' + (s.mode === id ? 'inset 0 -2px 0 #FFB224' : 'none') })),
+modeName: MODES.find((m) => m[0] === s.mode)[1],
+keysL, keysR, kbAssign, stickL: d.Ls, stickR: d.Rs,
+selL: selHand === 'L' ? selPos : '', selR: selHand === 'R' ? selPos : '', selK: selHand === 'K' ? selPos : '', selP: selHand === 'P' ? selPos : '',
+litL: litH === 'L' ? litP0 : '', litR: litH === 'R' ? litP0 : '', litK: litH === 'K' ? litP0 : '', litP: litH === 'P' ? litP0 : '',
+pickL: pick('L'), pickR: pick('R'), pickK: pick('K'), pickP: pick('P'),
+axes, pedalsOn: s.pedals, pedalsOff: !s.pedals, togglePedals: () => this.setState({ pedals: !s.pedals }),
+inspOpen: s.insp, inspPressed: s.insp ? 'true' : 'false', toggleInsp: () => this.setState({ insp: !s.insp, picker: false }),
+inspBtnStyle: s.insp ? 'box-shadow:inset 0 -2px 0 #FFB224;background:#262C36' : '',
+livePressed: s.live ? 'true' : 'false', toggleLive: () => this.setState({ live: !s.live, lit: '' }),
+liveStyle: s.live ? 'background:#122019;color:#4ADE80;border-color:#1E3A2A' : 'background:transparent;color:#8E98A8;border:1px dashed #6B7687',
+liveDot: 'width:7px;height:7px;border-radius:4px;background:' + (s.live ? '#4ADE80' : 'transparent') + ';border:1.5px solid ' + (s.live ? '#4ADE80' : '#8E98A8') + ';box-sizing:border-box',
+hasSel, noSel: !hasSel, isPedalSel, isKeySel,
+selWhere: hasSel ? POS(selHand, selPos) : '',
+selTitle: isPedalSel ? PNAME[selPos] : (selPos === 'stick' ? 'Stick' : (selAction ? selAction[0] : 'Empty')),
+across,
+hasAction: !!selAction,
+tapLabel: isPedalSel ? (pedalAxis && pedalAxis[2] ? pedalAxis[2] : 'Not used') : (selPos === 'stick' ? 'Four directions' : (selAction ? selAction[0] : 'Choose an action')),
+tapColor: selAction || selPos === 'stick' ? '#EDF0F4' : '#8E98A8',
+shortLabel: selAction && selAction[2] ? selAction[2] : '',
+longLabel: longIsSet ? 'Next fire group' : 'Add',
+longColor: longIsSet ? '#FFD866' : '#8E98A8',
+macroLabel: hasMacro ? s.steps.length + ' steps' : 'None',
+macroColor: hasMacro ? '#EDF0F4' : '#8E98A8',
+macroCta: hasMacro ? 'Edit' : 'Add',
+openMacro: () => this.setState({ drawer: 'macro', picker: false }),
+macroOpen: s.drawer === 'macro', applyOpen: s.drawer === 'apply',
+macroName: hasMacro ? selAction[0] : 'New macro',
+runModes: RUNM.map(([id, name]) => ({ name, pressed: s.run === id ? 'true' : 'false', pick: () => this.setState({ run: id }), style: seg(s.run === id) })),
+steps, addSteps: ADD.map(([name, st]) => ({ name, pick: () => this.setState({ steps: s.steps.concat([st]) }) })),
+toggleRec: () => this.setState({ rec: !s.rec }),
+recText: s.rec ? 'Recording · press keys, then Stop' : 'Record from devices',
+recStyle: s.rec ? 'background:#2A1719;color:#FF8A8A;border-color:#4A2328' : 'background:transparent;color:#C3CAD5',
+recDot: 'width:8px;height:8px;border-radius:4px;background:' + (s.rec ? '#FF5D5D' : 'transparent') + ';border:1.5px solid ' + (s.rec ? '#FF5D5D' : '#C3CAD5') + ';box-sizing:border-box',
+runsHere: isKb ? 'On this computer, through relayMatrix' : 'On the unit (works without relayMatrix running)',
+macroPreview: steps.map((x) => x.kind === 'Wait' ? x.delay + ' ms' : (x.kind === 'Text' ? '"' + x.value + '"' : x.sends)).join('  ·  ') || 'Nothing yet',
+saveMacro: () => this.setState({ drawer: '', applied: false }),
+picker: s.picker && hasSel,
+openPicker: () => this.setState({ picker: true, q: '' }),
+closePicker: () => this.setState({ picker: false }),
+onSearch: (e) => this.setState({ q: e && e.target ? e.target.value : '' }),
+filters, pickFree, pickPlaced,
+pickCount: (pickFree.length + pickPlaced.length) + ' shown · all ' + MODES.find((m) => m[0] === s.mode)[1] + ' actions are searchable',
+clearTap: () => { if (!isKeySel || selPos === 'stick') return; const o = Object.assign({}, s.over); o[s.mode + '|' + selHand + '|' + selPos] = null; this.setState({ over: o, applied: false }); },
+signal: isPedalSel ? 'Joystick Z axis' : (selHand === 'K' ? selPos : (pad ? (PAD[selPos] || 'View') : (selPos === 'stick' ? 'W A S D' : POOL[idx]))),
+signalNote: isPedalSel ? 'pedal axis' : (selHand === 'K' ? 'the key itself' : (pad ? 'your pad bindings' : 'chosen for you')),
+unplaced, unplacedCount: unplaced.length,
+setKeys: () => this.setState({ out: 'keys' }), setPad: () => this.setState({ out: 'pad' }),
+outKeysStyle: seg(!pad), outPadStyle: seg(pad), outKeysPressed: pad ? 'false' : 'true', outPadPressed: pad ? 'true' : 'false',
+openApply: () => { if (!s.applied) this.setState({ drawer: 'apply' }); },
+closeDrawer: () => this.setState({ drawer: '' }),
+doApply: () => this.setState({ drawer: '', applied: true, over: {} }),
+applyText: s.applied ? 'Applied' : 'Apply ' + changes,
+applyStyle: s.applied ? 'background:#1A1F27;color:#8E98A8;border-color:#262C36' : 'background:#FFB224;color:#1A1200',
+syncText: s.applied ? 'In sync' : changes + ' changes not applied',
+syncStyle: s.applied ? 'background:#122019;color:#4ADE80' : 'background:#2A2412;color:#FFD866',
+syncDot: s.applied ? 'background:#4ADE80' : 'background:#FFD866'
+};
+}
+}
+</script>
+</body>
+</html>

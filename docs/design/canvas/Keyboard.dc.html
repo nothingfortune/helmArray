@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Keyboard</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.kb-k{position:absolute;box-sizing:border-box;border-radius:8px;padding:5px 7px;display:flex;flex-direction:column;justify-content:space-between;text-align:left;cursor:pointer;font-family:Inter,sans-serif;color:#EDF0F4;transition:background .12s,border-color .12s,box-shadow .12s}
+.kb-k:hover{filter:brightness(1.15)}
+.kb-k:focus-visible{outline:2px solid #EDF0F4;outline-offset:2px}
+.kb-l{font:500 10.5px/1 'JetBrains Mono',monospace}
+.kb-a{font-weight:600;line-height:1.1;overflow-wrap:normal}
+.kb-d{position:absolute;top:6px;right:6px;width:6px;height:6px;border-radius:3px}
+.kb-b{position:absolute;right:4px;bottom:3px;font:700 9px/1 'JetBrains Mono',monospace;color:#C3CAD5;background:#0A0C0F;border-radius:3px;padding:2px 3px}
+</style>
+</helmet>
+<div role="group" aria-label="Keyboard" style="position:relative;width:956px;height:392px;font-family:Inter,sans-serif;color:#EDF0F4">
+<sc-for list="{{keys}}" as="k" hint-placeholder-count="80">
+<button type="button" class="kb-k" style="{{k.style}}" aria-label="{{k.aria}}" onClick="{{k.pick}}"><span class="kb-l" style="{{k.legStyle}}">{{k.legend}}</span><sc-if value="{{k.hasAction}}" hint-placeholder-val="{{false}}"><span class="kb-a" style="{{k.actStyle}}">{{k.action}}</span><span class="kb-d" style="{{k.dot}}"></span></sc-if><sc-if value="{{k.hasBadge}}" hint-placeholder-val="{{false}}"><span class="kb-b">{{k.badge}}</span></sc-if></button>
+</sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"assign":{"editor":null},"lit":{"editor":"text","default":""},"selected":{"editor":"text","default":""},"onPick":{"editor":null},"$preview":{"width":956,"height":392}}'>
+class Component extends DCLogic {
+renderVals() {
+const U = 64, G = 4, H = 60;
+const ROLE = {
+combat: ['#FF7A90', '#22202A'], move: ['#3BD6B0', '#1B2427'], ability: ['#6EA8FF', '#1B2130'],
+travel: ['#B5E361', '#1F2523'], menu: ['#B99BFF', '#201F2E']
+};
+// key id -> [game word, role, short label, badge]. Keys not listed are drawn plain: they still type normally.
+const assign = this.props.assign || {
+Esc: ['Menu', 'menu'], '1': ['Primary', 'combat'], '2': ['Sidearm', 'combat'], '3': ['Support weapon', 'combat', 'Support'], '4': ['Grenade', 'combat'],
+Tab: ['Map', 'menu'], Q: ['Equip', 'menu'], W: ['Forward', 'move'], E: ['Interact', 'ability'], R: ['Reload', 'combat'], T: ['Flashlight', 'ability', 'Light'],
+A: ['Left', 'move'], S: ['Back', 'move'], D: ['Right', 'move'], F: ['Use stim', 'ability'], G: ['Throw grenade', 'combat', 'Throw'], H: ['Emote', 'menu'],
+Z: ['Drop item', 'ability', 'Drop'], X: ['Prone', 'move'], C: ['Crouch', 'move'], V: ['Melee', 'combat'], B: ['Ping', 'ability'],
+Enter: ['Chat', 'menu'], LShift: ['Sprint', 'move'], LCtrl: ['Stratagems', 'ability', '', 'M'], LAlt: ['Free look', 'ability'], Space: ['Jump', 'move']
+};
+const lit = this.props.lit || '';
+const selected = this.props.selected || '';
+const onPick = this.props.onPick;
+const cw = (ch) => /[A-Z0-9%]/.test(ch) ? 0.68 : (/[iljtfrI.,:'!| ]/.test(ch) ? 0.34 : 0.6);
+const tw = (str, fs) => { let t = 0; for (const ch of str) t += cw(ch); return t * fs; };
+const lineCount = (text, fs, avail) => {
+let n = 1, cur = 0;
+for (const w of text.split(' ')) {
+const ww = tw(w, fs);
+if (ww > avail) return 99;
+const add = cur ? tw(' ', fs) + ww : ww;
+if (cur + add > avail) { n++; cur = ww; } else cur += add;
+}
+return n;
+};
+const fit = (full, short, w) => {
+const avail = w - 16;
+for (const [t, sizes] of [[full, [13, 12, 11]], [short, [13, 12, 11]], [full, [10]], [short, [10]]]) {
+if (!t) continue;
+for (const fs of sizes) { if (lineCount(t, fs, avail) <= 2) return { text: t, css: 'font-size:' + fs + 'px' }; }
+}
+return { text: short || full, css: 'font-size:10px;overflow-wrap:anywhere' };
+};
+const L = (s) => s.split('').map((c) => [c, c, 1]);
+const fkeys = (a, b) => { const o = []; for (let i = a; i <= b; i++) o.push(['F' + i, 'F' + i, 1]); return o; };
+const rows = [
+[['Esc', 'Esc', 1]].concat(fkeys(1, 4), [[null, '', 0.5]], fkeys(5, 8), [[null, '', 0.5]], fkeys(9, 12), [['Del', 'Del', 1]]),
+L('`1234567890-=').concat([['Backspace', 'Backspace', 2]]),
+[['Tab', 'Tab', 1.5]].concat(L('QWERTYUIOP[]'), [['\\', '\\', 1.5]]),
+[['Caps', 'Caps', 1.75]].concat(L("ASDFGHJKL;'"), [['Enter', 'Enter', 2.25]]),
+[['LShift', 'Shift', 2.25]].concat(L('ZXCVBNM,./'), [['RShift', 'Shift', 2.75]]),
+[['LCtrl', 'Ctrl', 1.25], ['LWin', 'Win', 1.25], ['LAlt', 'Alt', 1.25], ['Space', 'Space', 6.25], ['RAlt', 'Alt', 1.25], ['RWin', 'Win', 1.25], ['Menu', 'Menu', 1.25], ['RCtrl', 'Ctrl', 1.25]]
+];
+const rowY = [0, 76, 140, 204, 268, 332];
+const keys = [];
+rows.forEach((row, r) => {
+let x = 0;
+row.forEach(([id, legend, u]) => {
+const w = u * U;
+if (id !== null) {
+const a = assign[id];
+const rc = a ? (ROLE[a[1]] || ROLE.ability) : null;
+const on = lit === id, sel = selected === id;
+const f = a ? fit(a[0], a[2], w - G) : null;
+let bg = rc ? rc[1] : '#111419', border = '1px solid #2A313C', shadow = rc ? 'inset 0 -2px 0 rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.04)' : 'none';
+if (on) { bg = '#3A2E14'; border = '1px solid #FFB224'; shadow = '0 0 0 3px rgba(255,178,36,.22),0 0 22px rgba(255,178,36,.35)'; }
+keys.push({
+legend,
+legStyle: 'color:' + (on ? '#FFB224' : '#8E98A8'),
+hasAction: !!a,
+action: f ? f.text : '',
+actStyle: f ? f.css : '',
+dot: 'background:' + (on ? '#FFB224' : (rc ? rc[0] : 'transparent')),
+hasBadge: !!(a && a[3]),
+badge: a && a[3] ? a[3] : '',
+aria: legend + (a ? ', ' + a[0] : ', not used') + (a && a[3] === 'M' ? ', macro' : '') + (on ? ', pressed' : ''),
+pick: () => { if (onPick) onPick(id); },
+style: 'left:' + x + 'px;top:' + rowY[r] + 'px;width:' + (w - G) + 'px;height:' + H + 'px;background:' + bg + ';border:' + border + ';box-shadow:' + shadow + ';'
++ (sel ? 'outline:2px solid #FFB224;outline-offset:2px;' : '')
+});
+}
+x += w;
+});
+});
+return { keys };
+}
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>relayMatrix UI system</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0A0C0F}
+a{color:#FFB224}a:hover{color:#FFC861}
+.sec{display:flex;flex-direction:column;gap:20px;padding:40px 0;border-top:1px solid #262C36}
+.h2{margin:0;font-family:'Space Grotesk',sans-serif;font-size:24px;font-weight:600;color:#EDF0F4;letter-spacing:-0.01em}
+.cap{font-size:12px;color:#8E98A8;margin:0}
+.sw{display:flex;flex-direction:column;gap:8px;width:132px}
+.chip{width:132px;height:72px;border-radius:10px;border:1px solid #262C36}
+.swn{font-size:13px;font-weight:600;color:#EDF0F4}
+.swv{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#8E98A8}
+.row{display:flex;flex-wrap:wrap;gap:16px;align-items:center}
+.btn{height:40px;padding:0 16px;border-radius:10px;font:600 14px Inter,sans-serif;border:1px solid transparent;cursor:pointer;display:inline-flex;align-items:center;gap:8px}
+.k{width:96px;height:52px;border-radius:9px;box-sizing:border-box;padding:7px 9px;font:600 12px/1.15 Inter,sans-serif;color:#EDF0F4;text-align:left;display:flex;flex-direction:column;justify-content:space-between;border:1px solid #2A313C;background:#1A1F27;box-shadow:inset 0 -2px 0 rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.04)}
+.dot{width:6px;height:6px;border-radius:3px}
+.lbl{font-size:11px;font-weight:600;color:#8E98A8;text-transform:uppercase;letter-spacing:.06em}
+</style>
+</helmet>
+<div style="background:#0A0C0F;color:#EDF0F4;font-family:Inter,sans-serif;min-height:100vh">
+<div style="max-width:1280px;margin:0 auto;padding:64px 48px 96px;box-sizing:border-box;display:flex;flex-direction:column">
+
+<div style="display:flex;flex-wrap:wrap;gap:48px;align-items:flex-end;justify-content:space-between;padding-bottom:40px">
+<div style="display:flex;flex-direction:column;gap:12px;max-width:640px">
+<div style="display:flex;align-items:center;gap:10px">
+<svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><rect x="2" y="2" width="10" height="10" rx="3" fill="#FFB224"></rect><rect x="16" y="2" width="10" height="10" rx="3" fill="none" stroke="#EDF0F4" stroke-width="2"></rect><rect x="2" y="16" width="10" height="10" rx="3" fill="none" stroke="#EDF0F4" stroke-width="2"></rect><rect x="16" y="16" width="10" height="10" rx="3" fill="none" stroke="#EDF0F4" stroke-width="2"></rect></svg>
+<span style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:20px">relayMatrix</span>
+</div>
+<h1 style="margin:0;font-family:'Space Grotesk',sans-serif;font-size:48px;line-height:1.05;font-weight:700;letter-spacing:-0.02em">Your hands, drawn big. The game's words. One button to make it true.</h1>
+</div>
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 32px;max-width:520px;font-size:14px;color:#C3CAD5">
+<div><b style="color:#EDF0F4">Devices first.</b> The hardware is the interface; panels serve it.</div>
+<div><b style="color:#EDF0F4">Game's words.</b> "Frame shift drive", never "F13".</div>
+<div><b style="color:#EDF0F4">One accent.</b> Amber means: this, now, or do it.</div>
+<div><b style="color:#EDF0F4">Always true.</b> Sync state is read from the units.</div>
+<div><b style="color:#EDF0F4">No essays.</b> Labels are nouns. Help is a hover.</div>
+<div><b style="color:#EDF0F4">One click deep.</b> No dialogs to reach a setting.</div>
+</div>
+</div>
+
+<div class="sec">
+<h2 class="h2">Colour</h2>
+<p class="cap">Dark is the product. Five greys carry the depth; amber is the only accent; roles tint keys so a hand reads at a glance. Edge is the one lighter grey, for anything found by its outline: empty slots, inputs, the controller. Contrast audit is beside this page.</p>
+<div class="lbl">Ground and surfaces</div>
+<div class="row">
+<div class="sw"><div class="chip" style="background:#0A0C0F"></div><span class="swn">bg</span><span class="swv">#0A0C0F</span></div>
+<div class="sw"><div class="chip" style="background:#111419"></div><span class="swn">panel</span><span class="swv">#111419</span></div>
+<div class="sw"><div class="chip" style="background:#1A1F27"></div><span class="swn">key / raised</span><span class="swv">#1A1F27</span></div>
+<div class="sw"><div class="chip" style="background:#222833"></div><span class="swn">hover</span><span class="swv">#222833</span></div>
+<div class="sw"><div class="chip" style="background:#262C36"></div><span class="swn">line</span><span class="swv">#262C36</span></div>
+<div class="sw"><div class="chip" style="background:#6B7687"></div><span class="swn">edge</span><span class="swv">#6B7687</span></div>
+<div class="sw"><div class="chip" style="background:#EDF0F4"></div><span class="swn">text</span><span class="swv">#EDF0F4</span></div>
+<div class="sw"><div class="chip" style="background:#8E98A8"></div><span class="swn">muted</span><span class="swv">#8E98A8</span></div>
+<div class="sw"><div class="chip" style="background:#FFB224"></div><span class="swn">accent</span><span class="swv">#FFB224</span></div>
+</div>
+<div class="lbl" style="margin-top:8px">Roles (what an action is for)</div>
+<div class="row">
+<div class="sw"><div class="chip" style="background:#FF7A90"></div><span class="swn">combat</span><span class="swv">#FF7A90</span></div>
+<div class="sw"><div class="chip" style="background:#3BD6B0"></div><span class="swn">movement</span><span class="swv">#3BD6B0</span></div>
+<div class="sw"><div class="chip" style="background:#6EA8FF"></div><span class="swn">ability</span><span class="swv">#6EA8FF</span></div>
+<div class="sw"><div class="chip" style="background:#B5E361"></div><span class="swn">travel</span><span class="swv">#B5E361</span></div>
+<div class="sw"><div class="chip" style="background:#B99BFF"></div><span class="swn">menu</span><span class="swv">#B99BFF</span></div>
+</div>
+<div class="lbl" style="margin-top:8px">State</div>
+<div class="row">
+<div class="sw"><div class="chip" style="background:#4ADE80"></div><span class="swn">in sync</span><span class="swv">#4ADE80</span></div>
+<div class="sw"><div class="chip" style="background:#FFD866"></div><span class="swn">warning</span><span class="swv">#FFD866</span></div>
+<div class="sw"><div class="chip" style="background:#FF5D5D"></div><span class="swn">error</span><span class="swv">#FF5D5D</span></div>
+</div>
+</div>
+
+<div class="sec">
+<h2 class="h2">Type</h2>
+<p class="cap">Space Grotesk for names of things (games, screens). Inter for everything you read. JetBrains Mono only for what a device literally sends.</p>
+<div style="display:grid;grid-template-columns:160px minmax(0,1fr);gap:18px 24px;align-items:baseline">
+<span class="swv">Display 40 / 700</span><span style="font-family:'Space Grotesk',sans-serif;font-size:40px;font-weight:700;letter-spacing:-0.02em">Elite Dangerous</span>
+<span class="swv">Title 24 / 600</span><span style="font-family:'Space Grotesk',sans-serif;font-size:24px;font-weight:600">Ship · SRV · On foot</span>
+<span class="swv">Body 15 / 500</span><span style="font-size:15px;font-weight:500">Boost in the ship, turbo in the SRV, sprint on foot.</span>
+<span class="swv">Label 13 / 600</span><span style="font-size:13px;font-weight:600">Frame shift drive</span>
+<span class="swv">Key 12 / 600</span><span style="font-size:12px;font-weight:600">Target ahead</span>
+<span class="swv">Caption 12 / 400</span><span style="font-size:12px;color:#8E98A8">Left unit · Middle 3</span>
+<span class="swv">Signal 12 mono</span><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:#C3CAD5">F13 · RT · Mouse 4</span>
+</div>
+</div>
+
+<div class="sec">
+<h2 class="h2">Space and shape</h2>
+<div class="row" style="align-items:flex-end;gap:24px">
+<div style="display:flex;flex-direction:column;gap:6px;align-items:center"><div style="width:4px;height:4px;background:#FFB224"></div><span class="swv">4</span></div>
+<div style="display:flex;flex-direction:column;gap:6px;align-items:center"><div style="width:8px;height:8px;background:#FFB224"></div><span class="swv">8</span></div>
+<div style="display:flex;flex-direction:column;gap:6px;align-items:center"><div style="width:12px;height:12px;background:#FFB224"></div><span class="swv">12</span></div>
+<div style="display:flex;flex-direction:column;gap:6px;align-items:center"><div style="width:16px;height:16px;background:#FFB224"></div><span class="swv">16</span></div>
+<div style="display:flex;flex-direction:column;gap:6px;align-items:center"><div style="width:24px;height:24px;background:#FFB224"></div><span class="swv">24</span></div>
+<div style="display:flex;flex-direction:column;gap:6px;align-items:center"><div style="width:32px;height:32px;background:#FFB224"></div><span class="swv">32</span></div>
+<div style="display:flex;flex-direction:column;gap:6px;align-items:center"><div style="width:48px;height:48px;background:#FFB224"></div><span class="swv">48</span></div>
+<div style="width:40px"></div>
+<div style="display:flex;flex-direction:column;gap:6px;align-items:center"><div style="width:64px;height:48px;border:2px solid #8E98A8;border-radius:6px"></div><span class="swv">6 chips, fields</span></div>
+<div style="display:flex;flex-direction:column;gap:6px;align-items:center"><div style="width:64px;height:48px;border:2px solid #8E98A8;border-radius:10px"></div><span class="swv">10 keys, buttons</span></div>
+<div style="display:flex;flex-direction:column;gap:6px;align-items:center"><div style="width:64px;height:48px;border:2px solid #8E98A8;border-radius:16px"></div><span class="swv">16 panels, units</span></div>
+</div>
+<p class="cap">Motion: 120 ms on hover and selection, 200 ms for drawers sliding in over the page (never pushing it). A pressed key flashes for 180 ms. Nothing moves under reduced motion.</p>
+</div>
+
+<div class="sec">
+<h2 class="h2">The key</h2>
+<p class="cap">A keycap on a plate. Role is a dot and a faint tint, never a stripe. The label is the game's word for the action. Every slot is always drawn at its fixed place: an empty one keeps a dashed edge and its position name, so nothing shifts and every button can be told apart.</p>
+<div class="row" style="gap:20px">
+<div style="display:flex;flex-direction:column;gap:8px"><div class="k" style="background:transparent;border:1.5px dashed #6B7687;box-shadow:none;color:#8E98A8;font-weight:500">Index 3</div><span class="cap">empty slot</span></div>
+<div style="display:flex;flex-direction:column;gap:8px"><div class="k" style="background:#22202A"><span class="dot" style="background:#FF7A90"></span>Fire primary</div><span class="cap">combat</span></div>
+<div style="display:flex;flex-direction:column;gap:8px"><div class="k" style="background:#1B2427"><span class="dot" style="background:#3BD6B0"></span>Boost</div><span class="cap">movement</span></div>
+<div style="display:flex;flex-direction:column;gap:8px"><div class="k" style="background:#1B2130"><span class="dot" style="background:#6EA8FF"></span>Heat sink</div><span class="cap">ability</span></div>
+<div style="display:flex;flex-direction:column;gap:8px"><div class="k" style="background:#1F2523"><span class="dot" style="background:#B5E361"></span>Frame shift drive</div><span class="cap">travel</span></div>
+<div style="display:flex;flex-direction:column;gap:8px"><div class="k" style="background:#201F2E"><span class="dot" style="background:#B99BFF"></span>Galaxy map</div><span class="cap">menu</span></div>
+<div style="display:flex;flex-direction:column;gap:8px"><div class="k" style="background:#1B2427;outline:2px solid #FFB224;outline-offset:2px"><span class="dot" style="background:#3BD6B0"></span>Boost</div><span class="cap">selected</span></div>
+<div style="display:flex;flex-direction:column;gap:8px"><div class="k" style="background:#3A2E14;border-color:#FFB224;box-shadow:0 0 0 3px rgba(255,178,36,.22),0 0 22px rgba(255,178,36,.35)"><span class="dot" style="background:#FFB224"></span>Use stim</div><span class="cap">pressed (Play view)</span></div>
+<div style="display:flex;flex-direction:column;gap:8px"><div class="k" style="background:#2A1A1D;border-color:#FF5D5D"><span class="dot" style="background:#FF5D5D"></span>Menu + Heal</div><span class="cap">conflict</span></div>
+<div style="display:flex;flex-direction:column;gap:8px"><div class="k" style="background:#1B2130;position:relative"><span class="dot" style="background:#6EA8FF"></span>Shields max<span style="position:absolute;right:5px;bottom:4px;font:700 9px/1 'JetBrains Mono',monospace;color:#C3CAD5;background:#0A0C0F;border-radius:3px;padding:2px 3px">M</span></div><span class="cap">has a macro</span></div>
+</div>
+<div class="lbl" style="margin-top:8px">Labels: readable at a glance, never cut off</div>
+<div class="row" style="gap:20px;align-items:flex-start">
+<div style="display:flex;flex-direction:column;gap:8px"><div class="k" style="width:73px;height:48px;padding:5px 9px 5px 8px;justify-content:center;background:#1B2427;font-size:13px">Boost</div><span class="cap">fits: 13 px</span></div>
+<div style="display:flex;flex-direction:column;gap:8px"><div class="k" style="width:73px;height:48px;padding:5px 9px 5px 8px;justify-content:center;background:#1F2523;font-size:13px">Landing gear</div><span class="cap">wraps: 13 px</span></div>
+<div style="display:flex;flex-direction:column;gap:8px"><div class="k" style="width:73px;height:48px;padding:5px 9px 5px 8px;justify-content:center;background:#1F2523;font-size:11px;line-height:1.12">Frame shift drive</div><span class="cap">steps down: 11 px</span></div>
+<div style="display:flex;flex-direction:column;gap:8px"><div class="k" style="width:73px;height:48px;padding:5px 9px 5px 8px;justify-content:center;background:#201F2E;font-size:13px">Comms</div><span class="cap">short label for "Communication"</span></div>
+</div>
+<p class="cap" style="max-width:820px;line-height:1.5">Every label tries the game's word at 13, 12, then 11 px, wrapping on spaces. If it still does not fit, the key shows its short label (set per key in the editor, prefilled for long names). 10 px is the floor and only a last resort. Labels are never truncated with an ellipsis. Play view can scale everything up with Label size in Settings.</p>
+<div class="lbl" style="margin-top:8px">Pressed, on every device</div>
+<div class="row" style="gap:20px;align-items:flex-end">
+<div style="display:flex;flex-direction:column;gap:8px"><div class="k" style="background:#3A2E14;border-color:#FFB224;box-shadow:0 0 0 3px rgba(255,178,36,.22),0 0 22px rgba(255,178,36,.35)"><span class="dot" style="background:#FFB224"></span>Use stim</div><span class="cap">Azeron key</span></div>
+<div style="display:flex;flex-direction:column;gap:8px"><div class="k" style="width:60px;height:60px;padding:5px 7px;background:#3A2E14;border-color:#FFB224;box-shadow:0 0 0 3px rgba(255,178,36,.22),0 0 22px rgba(255,178,36,.35)"><span style="font:500 10.5px/1 'JetBrains Mono',monospace;color:#FFB224">R</span>Reload</div><span class="cap">keyboard key</span></div>
+<div style="display:flex;flex-direction:column;gap:8px"><svg width="52" height="52" viewBox="0 0 52 52" aria-hidden="true"><circle cx="26" cy="26" r="20" fill="none" stroke="#8E98A8" stroke-width="1.5"></circle><circle cx="26" cy="26" r="24" fill="rgba(255,178,36,.22)" stroke="#FFB224" stroke-width="2"></circle><text x="26" y="31" text-anchor="middle" font-family="Inter,sans-serif" font-size="14" font-weight="700" fill="#EDF0F4">A</text></svg><span class="cap">controller button</span></div>
+<div style="display:flex;flex-direction:column;gap:8px"><div style="width:158px;height:52px;box-sizing:border-box;padding:8px 10px;border-radius:10px;background:#3A2E14;border:1px solid #FFB224;display:flex;flex-direction:column;justify-content:space-between"><span style="font:600 11px Inter,sans-serif;color:#FFB224;letter-spacing:.07em;text-transform:uppercase">Right toe</span><span style="height:6px;border-radius:3px;background:#1A1F27;position:relative;overflow:hidden"><span style="position:absolute;left:0;top:0;bottom:0;width:70%;background:#FFB224"></span></span></div><span class="cap">pedal moving</span></div>
+</div>
+<p class="cap" style="max-width:820px;line-height:1.5">One pressed treatment everywhere: amber fill, amber edge, a soft glow for 180 ms. It shows in Play view, in the editor (Live input), and in the device tests. Under reduced motion it is a steady amber outline with no glow.</p>
+</div>
+
+<div class="sec">
+<h2 class="h2">Controls</h2>
+<div class="lbl">Buttons</div>
+<div class="row">
+<button class="btn" type="button" style="background:#FFB224;color:#1A1200">Apply 3 changes</button>
+<button class="btn" type="button" style="background:#1A1F27;color:#EDF0F4;border-color:#2A313C">Play view</button>
+<button class="btn" type="button" style="background:transparent;color:#C3CAD5">Cancel</button>
+<button class="btn" type="button" style="background:transparent;color:#FF5D5D;border-color:#4A2328">Delete scheme</button>
+<button class="btn" type="button" aria-label="Pin on top" style="background:#1A1F27;border-color:#2A313C;width:40px;padding:0;justify-content:center"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#EDF0F4" stroke-width="1.6" aria-hidden="true"><path d="M6 2h4l-.5 4 2.5 2.5H4L6.5 6z"></path><path d="M8 8.5V14"></path></svg></button>
+</div>
+<div class="lbl" style="margin-top:8px">Segmented, tabs, toggle</div>
+<div class="row" style="gap:32px">
+<div style="display:inline-flex;padding:3px;background:#111419;border:1px solid #262C36;border-radius:10px">
+<button type="button" style="height:32px;padding:0 14px;border-radius:7px;border:0;background:#262C36;color:#EDF0F4;font:600 13px Inter,sans-serif;box-shadow:inset 0 -2px 0 #FFB224">Keys</button>
+<button type="button" style="height:32px;padding:0 14px;border-radius:7px;border:0;background:transparent;color:#8E98A8;font:600 13px Inter,sans-serif">Controller</button>
+</div>
+<div style="display:flex;gap:24px;border-bottom:1px solid #262C36">
+<button type="button" style="height:40px;padding:0;border:0;background:none;color:#EDF0F4;font:600 14px Inter,sans-serif;box-shadow:inset 0 -2px 0 #FFB224">Ship</button>
+<button type="button" style="height:40px;padding:0;border:0;background:none;color:#8E98A8;font:600 14px Inter,sans-serif">SRV</button>
+<button type="button" style="height:40px;padding:0;border:0;background:none;color:#8E98A8;font:600 14px Inter,sans-serif">On foot</button>
+</div>
+<label style="display:inline-flex;align-items:center;gap:10px;font-size:14px;color:#EDF0F4"><input type="checkbox" checked="checked" style="width:36px;height:20px;accent-color:#FFB224;margin:0">Turbo</label>
+</div>
+<div class="lbl" style="margin-top:8px">Status (top right, always)</div>
+<div class="row">
+<span style="display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 12px;border-radius:15px;background:#122019;color:#4ADE80;font:600 13px Inter,sans-serif"><span class="dot" style="background:#4ADE80"></span>In sync</span>
+<span style="display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 12px;border-radius:15px;background:#2A2412;color:#FFD866;font:600 13px Inter,sans-serif"><span class="dot" style="background:#FFD866"></span>3 changes not applied</span>
+<span style="display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 12px;border-radius:15px;background:#2A1719;color:#FF8A8A;font:600 13px Inter,sans-serif"><span class="dot" style="background:#FF5D5D"></span>Right unit differs</span>
+<span style="display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 10px;border-radius:15px;border:1px solid #262C36;color:#C3CAD5;font:600 12px Inter,sans-serif">L <span class="dot" style="background:#4ADE80"></span> R <span class="dot" style="background:#4ADE80"></span> Pedals <span class="dot" style="background:#4ADE80"></span></span>
+</div>
+<div class="lbl" style="margin-top:8px">A check</div>
+<div style="display:flex;align-items:center;gap:14px;max-width:760px;padding:12px 14px;border-radius:10px;background:#1E1B12;border:1px solid #3A3218">
+<span class="dot" style="background:#FFD866"></span>
+<span style="flex:1;font-size:14px"><b>Long press on Fire primary</b> <span style="color:#C3CAD5">delays every shot by 250 ms.</span></span>
+<button class="btn" type="button" style="height:32px;background:#2A2412;color:#FFD866;border-color:#3A3218">Move it</button>
+<button class="btn" type="button" style="height:32px;background:transparent;color:#C3CAD5">Keep, I know</button>
+</div>
+</div>
+
+<div class="sec">
+<h2 class="h2">Editing</h2>
+<p class="cap" style="max-width:820px;line-height:1.5">How any control is changed, on any device. The device stays in view; panels come to it. Nothing opens a modal.</p>
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px">
+<div style="background:#111419;border:1px solid #1E232C;border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:8px"><span class="lbl">1 · Inspector</span><span style="font:600 16px 'Space Grotesk',sans-serif">A side panel for the picked button</span><span style="font-size:13.5px;color:#C3CAD5;line-height:1.5">Opens when you click a button or press it on the device. Collapses with one click to give the devices the full width. Holds tap, long, double, key label, and the advanced settings.</span></div>
+<div style="background:#111419;border:1px solid #1E232C;border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:8px"><span class="lbl">2 · Action picker</span><span style="font:600 16px 'Space Grotesk',sans-serif">Search, not a long dropdown</span><span style="font-size:13.5px;color:#C3CAD5;line-height:1.5">Covers the inspector in place. Type to search the game's actions, filter by role, see which are free and which are already on a button. Picking one that is used moves it.</span></div>
+<div style="background:#111419;border:1px solid #1E232C;border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:8px"><span class="lbl">3 · Drawer</span><span style="font:600 16px 'Space Grotesk',sans-serif">For anything with steps</span><span style="font-size:13.5px;color:#C3CAD5;line-height:1.5">Macros and Apply slide in over the page from the right. The board stays visible behind them. Cancel or click outside to close.</span></div>
+</div>
+<p class="cap" style="max-width:820px;line-height:1.5">Native dropdowns only for short fixed lists (layer behaviour, response curve, layout). Numbers that matter (timings, deadzones) are typed or slid, with the unit beside them.</p>
+</div>
+
+<div class="sec">
+<h2 class="h2">Words</h2>
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 32px;max-width:900px;font-size:14px">
+<span style="color:#4ADE80;font-weight:600">Say</span><span style="color:#FF8A8A;font-weight:600">Not</span>
+<span>Apply</span><span style="color:#8E98A8">Write layout to units and update the game's binding file</span>
+<span>Close Elite to apply</span><span style="color:#8E98A8">The game rewrites Custom.4.1.binds on exit, so it must be closed before…</span>
+<span>Right unit differs · Fix</span><span style="color:#8E98A8">The unit's stored profile does not match the compiled layout fingerprint</span>
+<span>Boost</span><span style="color:#8E98A8">engine_boost (F13)</span>
+</div>
+</div>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":3960}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

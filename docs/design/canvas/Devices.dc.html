@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Devices</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0A0C0F}
+a{color:inherit;text-decoration:none}
+button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid #EDF0F4;outline-offset:2px}
+.nav{height:40px;padding:0 14px;border-radius:8px;display:inline-flex;align-items:center;font:600 14px Inter,sans-serif;color:#8E98A8}
+.pill{display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 12px;border-radius:15px;font:600 12.5px Inter,sans-serif}
+.dot{width:7px;height:7px;border-radius:4px;display:inline-block;flex:none}
+.btn{height:36px;padding:0 14px;border-radius:9px;font:600 13.5px Inter,sans-serif;border:1px solid #2A313C;background:#1A1F27;color:#EDF0F4;cursor:pointer;display:inline-flex;align-items:center;gap:8px;white-space:nowrap}
+.lbl{font:600 11px Inter,sans-serif;color:#8E98A8;text-transform:uppercase;letter-spacing:.07em}
+.card{background:#111419;border:1px solid #1E232C;border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:14px;box-sizing:border-box}
+.fr{display:flex;align-items:center;justify-content:space-between;gap:16px;font:500 14px Inter,sans-serif;min-height:36px}
+.sel{height:34px;border-radius:8px;background:#0D0F13;border:1px solid #6B7687;color:#EDF0F4;font:500 13px Inter,sans-serif;padding:0 8px}
+.rng{width:180px;accent-color:#FFB224}
+.chk{display:inline-flex;align-items:center;gap:8px;font:500 14px Inter,sans-serif}
+.chk input{width:16px;height:16px;accent-color:#FFB224;margin:0}
+.dv{display:flex;align-items:center;gap:12px;width:100%;padding:12px;border-radius:10px;border:1px solid transparent;background:transparent;color:#EDF0F4;cursor:pointer;text-align:left;box-sizing:border-box}
+.dv:hover{background:#161A21}
+.mono{font:500 12.5px 'JetBrains Mono',monospace}
+</style>
+</helmet>
+<div style="min-height:900px;background:#0A0C0F;color:#EDF0F4;font-family:Inter,sans-serif;display:flex;flex-direction:column">
+
+<header style="height:60px;display:flex;align-items:center;gap:24px;padding:0 24px;border-bottom:1px solid #1A1F27;background:#0D0F13;flex-wrap:wrap">
+<div style="display:flex;align-items:center;gap:10px">
+<svg width="22" height="22" viewBox="0 0 28 28" aria-hidden="true"><rect x="2" y="2" width="10" height="10" rx="3" fill="#FFB224"></rect><rect x="16" y="2" width="10" height="10" rx="3" fill="none" stroke="#EDF0F4" stroke-width="2"></rect><rect x="2" y="16" width="10" height="10" rx="3" fill="none" stroke="#EDF0F4" stroke-width="2"></rect><rect x="16" y="16" width="10" height="10" rx="3" fill="none" stroke="#EDF0F4" stroke-width="2"></rect></svg>
+<span style="font:700 17px 'Space Grotesk',sans-serif">relayMatrix</span>
+</div>
+<nav style="display:flex;gap:4px">
+<a class="nav" href="Library.dc.html">Library</a>
+<a class="nav" href="Devices.dc.html" aria-current="page" style="color:#EDF0F4;background:#1A1F27;box-shadow:inset 0 -2px 0 #FFB224">Devices</a>
+<a class="nav" href="Settings.dc.html">Settings</a>
+</nav>
+<div style="flex:1"></div>
+<span class="pill" style="background:#122019;color:#4ADE80"><span class="dot" style="background:#4ADE80"></span>In sync</span>
+</header>
+
+<div style="flex:1;display:flex;flex-wrap:wrap;min-height:0">
+<aside style="flex:1 1 300px;max-width:340px;border-right:1px solid #1A1F27;padding:20px 14px;box-sizing:border-box;display:flex;flex-direction:column;gap:6px">
+<span class="lbl" style="padding:0 10px 6px">Connected</span>
+<sc-for list="{{devices}}" as="d" hint-placeholder-count="6">
+<button type="button" class="dv" aria-current="{{d.current}}" onClick="{{d.pick}}" style="{{d.style}}">
+<span style="width:36px;height:36px;border-radius:9px;background:#1A1F27;border:1px solid #2A313C;display:flex;align-items:center;justify-content:center;font:700 12px Inter,sans-serif;color:#C3CAD5;flex:none">{{d.glyph}}</span>
+<span style="flex:1;display:flex;flex-direction:column;gap:2px;min-width:0"><span style="font:600 14px Inter,sans-serif">{{d.name}}</span><span style="font:500 12.5px Inter,sans-serif;color:#8E98A8">{{d.sub}}</span></span>
+<span class="dot" style="{{d.dot}}"></span>
+</button>
+</sc-for>
+<div style="height:1px;background:#1A1F27;margin:10px 0"></div>
+<button type="button" class="btn" style="background:transparent;border:1.5px dashed #6B7687;color:#C3CAD5;justify-content:center">Find devices</button>
+</aside>
+
+<main style="flex:999 1 640px;min-width:0;padding:24px 28px 40px;box-sizing:border-box;display:flex;flex-direction:column;gap:18px">
+<div style="display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap">
+<div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:240px">
+<span class="lbl">{{kind}}</span>
+<h1 style="margin:0;font:700 28px/1.1 'Space Grotesk',sans-serif">{{title}}</h1>
+<span style="font-size:13.5px;color:#8E98A8">{{status}}</span>
+</div>
+<button type="button" class="btn">{{identify}}</button>
+</div>
+
+<sc-if value="{{isAz}}" hint-placeholder-val="{{true}}">
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px">
+<section class="card" aria-label="Stored on the unit">
+<span class="lbl">Stored on the unit</span>
+<div class="fr"><span>Scheme</span><span style="font-weight:600">Elite Dangerous · Main</span></div>
+<div class="fr"><span>Matches relayMatrix</span><span class="pill" style="background:#122019;color:#4ADE80;height:26px"><span class="dot" style="background:#4ADE80"></span>Yes</span></div>
+<div class="fr"><span>Firmware</span><span style="color:#C3CAD5">Up to date</span></div>
+<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn">Read from unit</button><button type="button" class="btn">Check firmware</button></div>
+</section>
+<section class="card" aria-label="Stick">
+<span class="lbl">Stick</span>
+<div style="display:flex;gap:18px;align-items:center">
+<svg width="120" height="120" viewBox="0 0 120 120" role="img" aria-label="Stick position, near centre"><circle cx="60" cy="60" r="56" fill="#0D0F13" stroke="#6B7687" stroke-width="1.5"></circle><circle cx="60" cy="60" r="9" fill="none" stroke="#8E98A8" stroke-width="1.5" stroke-dasharray="3 3"></circle><path d="M60 6V114M6 60H114" stroke="#262C36" stroke-width="1"></path><circle cx="{{stickX}}" cy="{{stickY}}" r="6" fill="#FFB224"></circle></svg>
+<div style="flex:1;display:flex;flex-direction:column;gap:6px">
+<label class="fr">Sends<select class="sel" aria-label="Stick sends"><option>W A S D keys</option><option>Analog joystick</option><option>Mouse</option></select></label>
+<label class="fr">Deadzone<input class="rng" type="range" min="0" max="30" value="8" aria-label="Stick deadzone"></label>
+<label class="fr">Outer edge<input class="rng" type="range" min="70" max="100" value="94" aria-label="Stick outer edge"></label>
+</div>
+</div>
+<div style="display:flex;gap:8px"><button type="button" class="btn">Calibrate stick</button><label class="chk" style="margin-left:auto"><input type="checkbox">Invert up and down</label></div>
+</section>
+</div>
+<section class="card" aria-label="Button test">
+<div class="fr"><span class="lbl">Button test</span><span style="font-size:13px;color:#8E98A8">Press any button on the unit. It lights up here.</span></div>
+<div style="display:flex;justify-content:center"><div style="width:512px;height:304px"><div style="transform:scale(.8);transform-origin:top left"><dc-import name="Unit" hand="{{hand}}" lit="{{litU}}" selected="" hint-size="640px,380px"></dc-import></div></div></div>
+</section>
+</sc-if>
+
+<sc-if value="{{isPedals}}" hint-placeholder-val="{{false}}">
+<section class="card" aria-label="Calibration">
+<div class="fr"><span class="lbl">Calibration</span><button type="button" class="btn">Calibrate: push each pedal through its full travel</button></div>
+<sc-for list="{{cal}}" as="c" hint-placeholder-count="3">
+<div style="display:grid;grid-template-columns:120px minmax(0,1fr) 70px;gap:16px;align-items:center">
+<span style="font:600 14px Inter,sans-serif">{{c.name}}</span>
+<span style="position:relative;height:14px;border-radius:7px;background:#1A1F27;border:1px solid #2A313C"><span style="{{c.fill}}"></span><span style="{{c.min}}"></span><span style="{{c.max}}"></span></span>
+<span class="mono" style="text-align:right;color:{{c.vcol}}">{{c.val}}</span>
+</div>
+</sc-for>
+<span style="font-size:12.5px;color:#8E98A8">Grey marks are the recorded ends of travel. The bar is the live reading.</span>
+</section>
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px">
+<section class="card" aria-label="Response">
+<span class="lbl">Response</span>
+<label class="fr">Curve<select class="sel" aria-label="Response curve"><option>Linear</option><option>Smooth</option><option>Aggressive</option></select></label>
+<label class="fr">Rudder deadzone<input class="rng" type="range" min="0" max="20" value="4" aria-label="Rudder deadzone"></label>
+<label class="fr">Toe deadzone<input class="rng" type="range" min="0" max="20" value="6" aria-label="Toe deadzone"></label>
+<label class="fr">Toe brakes<select class="sel" aria-label="Toe brakes"><option>Two separate axes</option><option>Combined into one axis</option></select></label>
+<div style="display:flex;gap:18px"><label class="chk"><input type="checkbox">Invert rudder</label><label class="chk"><input type="checkbox">Invert toes</label></div>
+</section>
+<section class="card" aria-label="Where pedals show">
+<span class="lbl">Where pedals show</span>
+<label class="fr">Play view<select class="sel" aria-label="Show pedals in Play view"><option>When connected</option><option>Always</option><option>Never</option></select></label>
+<label class="fr">Scheme editor<select class="sel" aria-label="Show pedals in the editor"><option>When connected</option><option>Always</option><option>Never</option></select></label>
+<span style="font-size:12.5px;color:#8E98A8;line-height:1.45">Pedals are optional. With none connected, every view drops the pedal strip and nothing else moves.</span>
+</section>
+</div>
+</sc-if>
+
+<sc-if value="{{isKb}}" hint-placeholder-val="{{false}}">
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px">
+<section class="card" aria-label="Layout">
+<span class="lbl">Layout</span>
+<label class="fr">Physical layout<select class="sel" aria-label="Physical layout"><option>ANSI (US)</option><option>ISO (UK, EU)</option><option>JIS</option></select></label>
+<label class="fr">Size<select class="sel" aria-label="Keyboard size"><option>60% with function row</option><option>Tenkeyless</option><option>Full size</option></select></label>
+</section>
+<section class="card" aria-label="Remaps and macros">
+<span class="lbl">Remaps and macros</span>
+<span style="font-size:13.5px;color:#C3CAD5;line-height:1.5">Keyboards have no memory of their own, so remaps and macros on this keyboard run through relayMatrix while it is open.</span>
+<label class="chk"><input type="checkbox" checked="checked">Start relayMatrix with Windows so they always work</label>
+</section>
+</div>
+<section class="card" aria-label="Key test">
+<div class="fr"><span class="lbl">Key test</span><span style="font-size:13px;color:#8E98A8">Press any key. It lights up here.</span></div>
+<div style="display:flex;justify-content:center"><div style="width:765px;height:314px"><div style="transform:scale(.8);transform-origin:top left"><dc-import name="Keyboard" lit="{{litK}}" selected="" hint-size="956px,392px"></dc-import></div></div></div>
+</section>
+</sc-if>
+
+<sc-if value="{{isOther}}" hint-placeholder-val="{{false}}">
+<section class="card">
+<span class="lbl">{{otherHead}}</span>
+<span style="font-size:14px;color:#C3CAD5;line-height:1.55;max-width:640px">{{otherBody}}</span>
+<div style="display:flex;gap:8px"><button type="button" class="btn">{{otherCta}}</button></div>
+</section>
+</sc-if>
+</main>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+constructor(p) { super(p); this.state = { dev: 'P', step: 0 }; }
+componentDidMount() { this.i = setInterval(() => this.setState({ step: (this.state.step + 1) % 6 }), 1200); }
+componentWillUnmount() { clearInterval(this.i); }
+renderVals() {
+const s = this.state;
+const DEV = [
+['L', 'L', 'Left Azeron', 'USB · in sync', 'Azeron', '#4ADE80'],
+['R', 'R', 'Right Azeron', 'USB · in sync', 'Azeron', '#4ADE80'],
+['P', 'P', 'Pedals', '3 axes · calibrated', 'Pedals', '#4ADE80'],
+['K', 'K', 'Keyboard', 'USB · ANSI', 'Keyboard', '#4ADE80'],
+['M', 'M', 'Mouse', '5 buttons', 'Mouse', '#4ADE80'],
+['X', 'X', 'Virtual controller', 'Ready', 'Output', '#4ADE80']
+];
+const cur = DEV.find((d) => d[0] === s.dev);
+const lit = ['index_1', 'middle_3', 'stick', 'ring_2', 'dpad_up', 'thumb_aux_upper'][s.step];
+const keyLit = ['W', 'J', 'Space', 'Tab', 'LShift', 'R'][s.step];
+const pv = [[0, 50, 0], [40, 50, 0], [80, 34, 0], [20, 50, 60], [0, 72, 95], [0, 50, 10]][s.step];
+const CAL = [['Left toe', 'end', pv[0], 2, 97], ['Rudder', 'centre', pv[1], 3, 98], ['Right toe', 'end', pv[2], 1, 96]];
+const OTHER = {
+M: ['Buttons', 'Five buttons found: left, right, wheel click, and two side buttons. Side buttons can carry game actions and macros like any key.', 'Test buttons'],
+X: ['What this is', 'A virtual Xbox controller that Windows sees as a real one. It is used when an Azeron scheme is set to send Controller instead of keys, so games with pad-only actions still work.', 'Send a test input']
+};
+return {
+devices: DEV.map(([id, glyph, name, sub, kind, col]) => ({
+glyph, name, sub, current: id === s.dev ? 'true' : 'false',
+pick: () => this.setState({ dev: id }),
+dot: 'background:' + col,
+style: id === s.dev ? 'background:#161A21;border-color:#2A313C;box-shadow:inset 3px 0 0 #FFB224' : ''
+})),
+kind: cur[4], title: cur[2], status: cur[3],
+identify: s.dev === 'L' || s.dev === 'R' ? 'Identify (flash lights)' : (s.dev === 'P' ? 'Reset calibration' : 'Refresh'),
+isAz: s.dev === 'L' || s.dev === 'R', isPedals: s.dev === 'P', isKb: s.dev === 'K', isOther: s.dev === 'M' || s.dev === 'X',
+hand: s.dev === 'R' ? 'right' : 'left', litU: lit, litK: keyLit,
+stickX: lit === 'stick' ? 92 : 62, stickY: lit === 'stick' ? 40 : 58,
+cal: CAL.map(([name, rest, v, mn, mx]) => ({
+name, val: rest === 'centre' ? (v === 50 ? 'centre' : (v < 50 ? 'L ' : 'R ') + Math.abs(v - 50) * 2 + '%') : v + '%',
+vcol: (rest === 'centre' ? v !== 50 : v > 0) ? '#FFB224' : '#8E98A8',
+fill: rest === 'centre'
+? 'position:absolute;top:2px;bottom:2px;left:' + Math.min(v, 50) + '%;width:' + Math.max(Math.abs(v - 50), 0.8) + '%;background:#FFB224;border-radius:5px'
+: 'position:absolute;top:2px;bottom:2px;left:0;width:' + Math.max(v, 0.8) + '%;background:#FFB224;border-radius:5px',
+min: 'position:absolute;top:-4px;bottom:-4px;width:2px;background:#8E98A8;left:' + mn + '%',
+max: 'position:absolute;top:-4px;bottom:-4px;width:2px;background:#8E98A8;left:' + mx + '%'
+})),
+otherHead: OTHER[s.dev] ? OTHER[s.dev][0] : '', otherBody: OTHER[s.dev] ? OTHER[s.dev][1] : '', otherCta: OTHER[s.dev] ? OTHER[s.dev][2] : ''
+};
+}
+}
+</script>
+</body>
+</html>
