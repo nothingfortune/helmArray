@@ -44,7 +44,13 @@ export interface Finding {
   rule: string;
   severity: Severity;
   control?: ControlId;
+  /** For a finding about an action rather than a control: a required action on no button. */
+  action?: ActionId;
+  /** The mode it happens in, when it happens in one. */
+  mode?: ModeId;
   message: string;
+  /** The player's reason for keeping it, from the scheme's accepted list. */
+  accepted?: string;
 }
 
 export type Ledger = Record<ControlId, Partial<Record<Press, Signal>>>;

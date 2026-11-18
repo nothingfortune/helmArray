@@ -5,6 +5,7 @@ import type { Plan } from './plan';
 import { KEY_POOL, formatCanName } from './pool';
 import { copyScheme, gameKeysPreset } from './presets/keys';
 import { resolve } from './resolve';
+import { CHECK_RULES } from './checks';
 
 // A made-up game with a writable file and two modes, like Elite's ship and on foot.
 const game: Game = {
@@ -73,6 +74,9 @@ function scheme(over: Partial<Scheme> = {}): Scheme {
 }
 
 const key = (code: string): Signal => ({ kind: 'key', code }) as Signal;
+// The resolver's own findings, without the checks' (checks.test.ts covers those).
+const resolverFindings = (plan: Plan) =>
+  plan.findings.filter((f) => !(CHECK_RULES as readonly string[]).includes(f.rule));
 const sent = (plan: Plan, control: string) =>
   [...plan.units.left.pins, ...plan.units.right.pins].find((p) => p.control === control)?.presses;
 
@@ -220,7 +224,7 @@ describe('the pool', () => {
       BUILT_IN_DEVICES,
     );
     expect(sent(plan, 'L.index_1')).toEqual({});
-    expect(plan.findings).toEqual([
+    expect(resolverFindings(plan)).toEqual([
       expect.objectContaining({ rule: 'pool-spent', severity: 'error', control: 'L.index_1' }),
     ]);
   });
@@ -236,7 +240,7 @@ describe('the pool', () => {
       game,
       BUILT_IN_DEVICES,
     );
-    expect(stuck.findings.map((f) => f.rule)).toEqual(['pool-spent']);
+    expect(resolverFindings(stuck).map((f) => f.rule)).toEqual(['pool-spent']);
 
     const moved = resolve(
       scheme({ map: { ship: { 'L.index_2': { tap: 'boost' } } }, ledger }),
@@ -244,7 +248,7 @@ describe('the pool', () => {
       BUILT_IN_DEVICES,
     );
     expect(sent(moved, 'L.index_2')).toEqual({ tap: key('Insert') });
-    expect(moved.findings).toEqual([]);
+    expect(resolverFindings(moved)).toEqual([]);
   });
 
   it("reports a ledger key the game's file can't name, once the file is written", () => {
@@ -255,7 +259,7 @@ describe('the pool', () => {
       BUILT_IN_DEVICES,
     );
     expect(sent(own, 'L.index_1')).toEqual({ tap: key('F13') });
-    expect(own.findings).toEqual([]);
+    expect(resolverFindings(own)).toEqual([]);
 
     const written = resolve(
       scheme({ writeGameFile: true, map, ledger: own.ledger }),
@@ -263,7 +267,7 @@ describe('the pool', () => {
       BUILT_IN_DEVICES,
     );
     expect(sent(written, 'L.index_1')).toEqual({ tap: key('F13') });
-    expect(written.findings).toEqual([
+    expect(resolverFindings(written)).toEqual([
       expect.objectContaining({ rule: 'key-unnamable', severity: 'error', control: 'L.index_1' }),
     ]);
   });

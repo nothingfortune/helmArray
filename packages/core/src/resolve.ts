@@ -13,6 +13,10 @@ import { PRESSES } from './model';
 import type { BindSheetRow, Binding, Finding, Ledger, PinPlan, Plan, UnitProfile } from './plan';
 import { clone } from './clone';
 import { KEY_POOL, formatCanName } from './pool';
+import { signalId } from './signal';
+import { runChecks } from './checks';
+
+export { signalId };
 
 export class ResolveError extends Error {}
 
@@ -29,22 +33,6 @@ function buttonControls(units: readonly AzeronDevice[]): string[] {
   return units.flatMap((unit) =>
     unit.positions.filter((p) => p.name !== 'stick').map((p) => `${prefixOf(unit)}.${p.name}`),
   );
-}
-
-/** A signal as a comparable string. Two control-presses may never send the same one. */
-export function signalId(signal: Signal): string {
-  switch (signal.kind) {
-    case 'key':
-      return `key:${[...(signal.mods ?? [])].sort().join('+')}+${signal.code}`;
-    case 'mouse':
-      return `mouse:${signal.button}`;
-    case 'scroll':
-      return `scroll:${signal.dir}`;
-    case 'pad':
-      return `pad:${signal.control}`;
-    case 'macro':
-      return `macro:${signal.trigger}`;
-  }
 }
 
 const slot = (control: string, press: Press) => `${control}|${press}`;
@@ -253,10 +241,12 @@ export function resolve(scheme: Scheme, game: Game, devices: readonly Device[]):
     bindings: bindings(scheme, game, controls, dealt.signals),
     bindSheet: dealt.bindSheet,
     ledger: dealt.ledger,
-    findings: dealt.findings,
+    findings: [],
   };
   if (scheme.output === 'keys' && scheme.writeGameFile && game.file) {
     plan.gameFile = { format: game.file.format };
   }
+  // The resolver's own findings come first and can't be accepted; then the checks.
+  plan.findings = [...dealt.findings, ...runChecks(scheme, game, devices, plan, dealt.findings)];
   return plan;
 }
