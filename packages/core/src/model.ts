@@ -177,6 +177,11 @@ export interface Scheme {
   gameId: string;
   name: string;
   output: 'pad' | 'keys';
+  /**
+   * Pad output: which Xbox control each Azeron button sends. The same in every mode; the
+   * game's own pad bindings decide what it does. Edited in the app; presets fill it.
+   */
+  padMap: Record<ControlId, PadControl>;
   /** Per mode, per control, per press: which action. */
   map: Record<ModeId, Record<ControlId, Partial<Record<Press, ActionId>>>>;
   behaviour: Record<ControlId, Behaviour>;
