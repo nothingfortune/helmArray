@@ -182,6 +182,12 @@ export interface Scheme {
    * game's own pad bindings decide what it does. Edited in the app; presets fill it.
    */
   padMap: Record<ControlId, PadControl>;
+  /**
+   * Key output only. True: the units send keys from the pool and the game's file is written to
+   * listen for them. False: the units send the game's own keys and its file is left alone; what
+   * can't be matched becomes a bind sheet row. Ignored for a game with no writable file.
+   */
+  writeGameFile: boolean;
   /** Per mode, per control, per press: which action. */
   map: Record<ModeId, Record<ControlId, Partial<Record<Press, ActionId>>>>;
   behaviour: Record<ControlId, Behaviour>;

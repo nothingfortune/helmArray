@@ -1,0 +1,606 @@
+{
+  "units": {
+    "left": {
+      "deviceId": "cyborg2-left",
+      "hand": "left",
+      "pins": [
+        {
+          "control": "L.pinky_1",
+          "position": "pinky_1",
+          "pin": 5,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "L.pinky_2",
+          "position": "pinky_2",
+          "pin": 4,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "L.pinky_3",
+          "position": "pinky_3",
+          "pin": 3,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "L.pinky_4",
+          "position": "pinky_4",
+          "pin": 2,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "L.pinky_5",
+          "position": "pinky_5",
+          "pin": 1,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "L.ring_1",
+          "position": "ring_1",
+          "pin": 11,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "L.ring_2",
+          "position": "ring_2",
+          "pin": 10,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "L.ring_3",
+          "position": "ring_3",
+          "pin": 9,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "L.ring_4",
+          "position": "ring_4",
+          "pin": 8,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "L.ring_5",
+          "position": "ring_5",
+          "pin": 7,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "L.middle_1",
+          "position": "middle_1",
+          "pin": 17,
+          "presses": {
+            "tap": {
+              "kind": "key",
+              "code": "Insert"
+            },
+            "long": {
+              "kind": "key",
+              "code": "Home"
+            }
+          },
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "L.middle_2",
+          "position": "middle_2",
+          "pin": 16,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "L.middle_3",
+          "position": "middle_3",
+          "pin": 15,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "L.middle_4",
+          "position": "middle_4",
+          "pin": 14,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "L.middle_5",
+          "position": "middle_5",
+          "pin": 13,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "L.index_1",
+          "position": "index_1",
+          "pin": 26,
+          "presses": {
+            "tap": {
+              "kind": "key",
+              "code": "PageUp"
+            }
+          },
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "L.index_2",
+          "position": "index_2",
+          "pin": 25,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "L.index_3",
+          "position": "index_3",
+          "pin": 24,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "L.index_4",
+          "position": "index_4",
+          "pin": 23,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "L.index_5",
+          "position": "index_5",
+          "pin": 22,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "L.pinky_side",
+          "position": "pinky_side",
+          "pin": 6,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "L.index_side",
+          "position": "index_side",
+          "pin": 27,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "L.thumb_aux_upper",
+          "position": "thumb_aux_upper",
+          "pin": 20,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "L.thumb_aux_lower",
+          "position": "thumb_aux_lower",
+          "pin": 19,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "L.stick_press",
+          "position": "stick_press",
+          "pin": 32,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "L.dpad_up",
+          "position": "dpad_up",
+          "pin": 34,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "L.dpad_left",
+          "position": "dpad_left",
+          "pin": 35,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "L.dpad_press",
+          "position": "dpad_press",
+          "pin": 37,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "L.dpad_right",
+          "position": "dpad_right",
+          "pin": 33,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "L.dpad_down",
+          "position": "dpad_down",
+          "pin": 36,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        }
+      ],
+      "stick": {
+        "mode": "keys",
+        "angle": -1,
+        "invertX": false
+      }
+    },
+    "right": {
+      "deviceId": "cyborg2-right",
+      "hand": "right",
+      "pins": [
+        {
+          "control": "R.pinky_1",
+          "position": "pinky_1",
+          "pin": 5,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "R.pinky_2",
+          "position": "pinky_2",
+          "pin": 4,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "R.pinky_3",
+          "position": "pinky_3",
+          "pin": 3,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "R.pinky_4",
+          "position": "pinky_4",
+          "pin": 2,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "R.pinky_5",
+          "position": "pinky_5",
+          "pin": 1,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "R.ring_1",
+          "position": "ring_1",
+          "pin": 11,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "R.ring_2",
+          "position": "ring_2",
+          "pin": 10,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "R.ring_3",
+          "position": "ring_3",
+          "pin": 9,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "R.ring_4",
+          "position": "ring_4",
+          "pin": 8,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "R.ring_5",
+          "position": "ring_5",
+          "pin": 7,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "R.middle_1",
+          "position": "middle_1",
+          "pin": 17,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "R.middle_2",
+          "position": "middle_2",
+          "pin": 16,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "R.middle_3",
+          "position": "middle_3",
+          "pin": 15,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "R.middle_4",
+          "position": "middle_4",
+          "pin": 14,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "R.middle_5",
+          "position": "middle_5",
+          "pin": 13,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "R.index_1",
+          "position": "index_1",
+          "pin": 26,
+          "presses": {
+            "tap": {
+              "kind": "key",
+              "code": "Del"
+            }
+          },
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "R.index_2",
+          "position": "index_2",
+          "pin": 25,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "R.index_3",
+          "position": "index_3",
+          "pin": 24,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "R.index_4",
+          "position": "index_4",
+          "pin": 23,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "R.index_5",
+          "position": "index_5",
+          "pin": 22,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "R.pinky_side",
+          "position": "pinky_side",
+          "pin": 6,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "R.index_side",
+          "position": "index_side",
+          "pin": 27,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "R.thumb_aux_upper",
+          "position": "thumb_aux_upper",
+          "pin": 20,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "R.thumb_aux_lower",
+          "position": "thumb_aux_lower",
+          "pin": 19,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "R.stick_press",
+          "position": "stick_press",
+          "pin": 32,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "R.dpad_up",
+          "position": "dpad_up",
+          "pin": 36,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "R.dpad_left",
+          "position": "dpad_left",
+          "pin": 33,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "R.dpad_press",
+          "position": "dpad_press",
+          "pin": 37,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "R.dpad_right",
+          "position": "dpad_right",
+          "pin": 35,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        },
+        {
+          "control": "R.dpad_down",
+          "position": "dpad_down",
+          "pin": 34,
+          "presses": {},
+          "turbo": false,
+          "latch": false
+        }
+      ],
+      "stick": {
+        "mode": "keys",
+        "angle": 176,
+        "invertX": false
+      }
+    }
+  },
+  "bindings": [
+    {
+      "mode": "ship",
+      "control": "L.middle_1",
+      "press": "tap",
+      "action": "fire",
+      "signal": {
+        "kind": "key",
+        "code": "Insert"
+      }
+    },
+    {
+      "mode": "ship",
+      "control": "L.middle_1",
+      "press": "long",
+      "action": "map",
+      "signal": {
+        "kind": "key",
+        "code": "Home"
+      }
+    },
+    {
+      "mode": "ship",
+      "control": "L.index_1",
+      "press": "tap",
+      "action": "boost",
+      "signal": {
+        "kind": "key",
+        "code": "PageUp"
+      }
+    },
+    {
+      "mode": "foot",
+      "control": "L.index_1",
+      "press": "tap",
+      "action": "sprint",
+      "signal": {
+        "kind": "key",
+        "code": "PageUp"
+      }
+    },
+    {
+      "mode": "foot",
+      "control": "R.index_1",
+      "press": "tap",
+      "action": "shoot",
+      "signal": {
+        "kind": "key",
+        "code": "Del"
+      }
+    }
+  ],
+  "bindSheet": [],
+  "ledger": {
+    "L.middle_1": {
+      "tap": {
+        "kind": "key",
+        "code": "Insert"
+      },
+      "long": {
+        "kind": "key",
+        "code": "Home"
+      }
+    },
+    "L.index_1": {
+      "tap": {
+        "kind": "key",
+        "code": "PageUp"
+      }
+    },
+    "R.index_1": {
+      "tap": {
+        "kind": "key",
+        "code": "Del"
+      }
+    }
+  },
+  "findings": [],
+  "gameFile": {
+    "format": "elite-binds"
+  }
+}

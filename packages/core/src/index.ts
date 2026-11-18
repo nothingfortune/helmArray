@@ -6,3 +6,5 @@ export * from './devices/index';
 export * from './plan';
 export * from './resolve';
 export * from './presets/xbox';
+export * from './pool';
+export * from './presets/keys';

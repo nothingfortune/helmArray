@@ -1,0 +1,32 @@
+import { clone } from '../clone';
+import type { Game, Scheme } from '../model';
+
+/**
+ * The *game's own keys* preset: key output on the keys the game already has, so its file is
+ * never touched. It starts with no button carrying an action; the player places them, and each
+ * button sends the action's own key (or a free key and a bind sheet row when it can't).
+ */
+export function gameKeysPreset(game: Game): Scheme {
+  const map: Scheme['map'] = {};
+  for (const mode of game.modes) map[mode.id] = {};
+  return {
+    id: `${game.id}-own-keys`,
+    gameId: game.id,
+    name: "Game's own keys",
+    output: 'keys',
+    padMap: {},
+    writeGameFile: false,
+    map,
+    behaviour: {},
+    ledger: {},
+    accepted: [],
+  };
+}
+
+/**
+ * *Copy a scheme*: everything, the ledger included, so the copy sends the same keys and the
+ * game's file needs no change to play it.
+ */
+export function copyScheme(scheme: Scheme, id: string, name: string): Scheme {
+  return { ...clone(scheme), id, name };
+}

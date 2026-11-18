@@ -1,4 +1,13 @@
-import type { ActionId, ControlId, Hand, ModeId, Press, Signal, StickBehaviour } from './model';
+import type {
+  ActionId,
+  ControlId,
+  GameFileFormat,
+  Hand,
+  ModeId,
+  Press,
+  Signal,
+  StickBehaviour,
+} from './model';
 
 /** One Cyborg II position, fully specified: what each press sends and how it behaves. */
 export interface PinPlan {
@@ -40,9 +49,20 @@ export interface Finding {
 
 export type Ledger = Record<ControlId, Partial<Record<Press, Signal>>>;
 
+/** What to press in the game's own controls menu: set this action to this key. */
+export interface BindSheetRow {
+  mode: ModeId;
+  action: ActionId;
+  signal: Signal;
+}
+
 export interface Plan {
   units: { left: UnitProfile; right: UnitProfile };
   bindings: Binding[];
+  /** Key output with the game's file written: the adapter writes `bindings` into it. */
+  gameFile?: { format: GameFileFormat };
+  /** Key output on the game's own keys: what the player must set in the game's menu. */
+  bindSheet: BindSheetRow[];
   ledger: Ledger;
   findings: Finding[];
 }
