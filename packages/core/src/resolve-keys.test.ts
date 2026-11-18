@@ -217,6 +217,27 @@ describe('the pool', () => {
     ]);
   });
 
+  it("reports a ledger key the game's file can't name, once the file is written", () => {
+    const map: Scheme['map'] = { foot: { 'L.index_1': { tap: 'emote' } } };
+    const own = resolve(
+      scheme({ writeGameFile: false, map, ledger: allButFKeys }),
+      game,
+      BUILT_IN_DEVICES,
+    );
+    expect(sent(own, 'L.index_1')).toEqual({ tap: key('F13') });
+    expect(own.findings).toEqual([]);
+
+    const written = resolve(
+      scheme({ writeGameFile: true, map, ledger: own.ledger }),
+      game,
+      BUILT_IN_DEVICES,
+    );
+    expect(sent(written, 'L.index_1')).toEqual({ tap: key('F13') });
+    expect(written.findings).toEqual([
+      expect.objectContaining({ rule: 'key-unnamable', severity: 'error', control: 'L.index_1' }),
+    ]);
+  });
+
   it('reaches F13 when no file has to name it', () => {
     const plan = resolve(
       scheme({

@@ -113,6 +113,16 @@ function dealKeys(scheme: Scheme, game: Game, controls: readonly string[]): Deal
       const carriedHere = carried(scheme, game, control, press);
       if (carriedHere.length === 0) continue;
       let signal = ledger[control]?.[press];
+      if (signal?.kind === 'key' && format !== undefined && !formatCanName(format, signal.code)) {
+        // A key dealt while the game kept its own keys can be one this file has no name for.
+        // The ledger keeps it: say so rather than hand back a file that can't be written.
+        findings.push({
+          rule: 'key-unnamable',
+          severity: 'error',
+          control,
+          message: `This button sends ${signal.code}, which the game's file has no name for. Give it a new key.`,
+        });
+      }
       if (!signal && format === undefined) {
         // The game's own key, from the first mode that has a usable one.
         signal = carriedHere
