@@ -3,3 +3,6 @@
 export * from './model';
 export * from './keys';
 export * from './devices/index';
+export * from './plan';
+export * from './resolve';
+export * from './presets/xbox';
