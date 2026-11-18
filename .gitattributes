@@ -1,0 +1,6 @@
+# LF everywhere, whatever core.autocrlf says.
+* text=auto eol=lf
+
+# Game binding files are CRLF and are compared byte for byte; Git must not normalise them.
+*.ini -text
+*.binds -text
