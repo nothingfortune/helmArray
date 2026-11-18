@@ -217,6 +217,28 @@ describe('the pool', () => {
     ]);
   });
 
+  it('lets an action moved to an emptied button send the key that button kept, as the finding says', () => {
+    // L.index_2 once had an action and still holds Insert; every other key is given out.
+    const ledger: Scheme['ledger'] = Object.fromEntries(
+      Object.entries(allButFKeys).filter(([control]) => control !== 'R.x0'),
+    );
+    ledger['L.index_2'] = { tap: key('Insert') };
+    const stuck = resolve(
+      scheme({ map: { ship: { 'L.index_1': { tap: 'boost' } } }, ledger }),
+      game,
+      BUILT_IN_DEVICES,
+    );
+    expect(stuck.findings.map((f) => f.rule)).toEqual(['pool-spent']);
+
+    const moved = resolve(
+      scheme({ map: { ship: { 'L.index_2': { tap: 'boost' } } }, ledger }),
+      game,
+      BUILT_IN_DEVICES,
+    );
+    expect(sent(moved, 'L.index_2')).toEqual({ tap: key('Insert') });
+    expect(moved.findings).toEqual([]);
+  });
+
   it("reports a ledger key the game's file can't name, once the file is written", () => {
     const map: Scheme['map'] = { foot: { 'L.index_1': { tap: 'emote' } } };
     const own = resolve(

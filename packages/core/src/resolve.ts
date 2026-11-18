@@ -120,7 +120,7 @@ function dealKeys(scheme: Scheme, game: Game, controls: readonly string[]): Deal
           rule: 'key-unnamable',
           severity: 'error',
           control,
-          message: `This button sends ${signal.code}, which the game's file has no name for. Give it a new key.`,
+          message: `This button sends ${signal.code}, which the game's file has no name for. Move its action to another button.`,
         });
       }
       if (!signal && format === undefined) {
@@ -135,7 +135,10 @@ function dealKeys(scheme: Scheme, game: Game, controls: readonly string[]): Deal
           rule: 'pool-spent',
           severity: 'error',
           control,
-          message: 'No free key is left to send this button. Take an action off another button.',
+          // Keys are never re-dealt, so taking an action off a button frees no key. What works is
+          // moving this action to a button that was emptied: that button keeps its key.
+          message:
+            'Every key is taken. Move this action to a button you have emptied: it still has its key.',
         });
         continue;
       }
