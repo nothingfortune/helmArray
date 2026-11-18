@@ -83,6 +83,34 @@ describe('package boundaries', () => {
       expect(await problems('packages/app/src/renderer/x.ts', code)).toEqual([]);
     });
 
+    it.each([
+      "import { mainWindowOptions } from '../main/windows';",
+      "export { x } from '../../main/deep/x';",
+    ])('the windows refuse main-process code: %s', async (line) => {
+      expect(await problems('packages/app/src/renderer/x.ts', `${line}\nexport {};\n`)).toContain(
+        restricted,
+      );
+    });
+
+    it('the windows may use shared code and their own folders', async () => {
+      const code = [
+        "import { color } from '../shared/tokens';",
+        "import { m } from './maintenance/m';",
+        'export { color, m };',
+        '',
+      ].join('\n');
+      expect(await problems('packages/app/src/renderer/x.ts', code)).toEqual([]);
+    });
+
+    it.each(["import { load } from '../main/index';", "import { App } from '../renderer/main';"])(
+      'shared code refuses %s',
+      async (line) => {
+        expect(await problems('packages/app/src/shared/x.ts', `${line}\nexport {};\n`)).toContain(
+          restricted,
+        );
+      },
+    );
+
     it('shared code is pure', async () => {
       expect(
         await problems(

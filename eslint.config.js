@@ -51,7 +51,15 @@ const boundaries = [
     rules: {
       '@typescript-eslint/no-restricted-imports': [
         'error',
-        { patterns: [{ regex: '^[^.]', message: `app/shared ${pure}` }] },
+        {
+          patterns: [
+            { regex: '^[^.]', message: `app/shared ${pure}` },
+            {
+              regex: '^(\\.\\./)+(main|renderer)(/|$)',
+              message: 'app/shared is used by main and the windows, so it imports neither.',
+            },
+          ],
+        },
       ],
     },
   },
@@ -71,6 +79,13 @@ const boundaries = [
               name,
               message: 'The windows have no Node. Ask app/main.',
             })),
+          ],
+          patterns: [
+            {
+              regex: '^(\\.\\./)+main(/|$)',
+              message:
+                'The windows never import main-process code. Share pure code through app/shared.',
+            },
           ],
         },
       ],

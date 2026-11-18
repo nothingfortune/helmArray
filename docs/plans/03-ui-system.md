@@ -24,12 +24,17 @@ The Editor and Play view boards are clickable.
 | `raised`     | `#1A1F27` | keys, secondary buttons              |
 | `hover`      | `#222833` |                                      |
 | `line`       | `#262C36` | borders; `#2A313C` on keys           |
+| `edge`       | `#6B7687` | inputs, empty slots (≥ 3:1 on panel and key) |
 | `text`       | `#EDF0F4` |                                      |
-| `muted`      | `#8E98A8` | secondary text (≥ 4.5:1 on panel)    |
-| `faint`      | `#5E6878` | placeholders, empty keys only        |
-| `accent`     | `#FFB224` | primary button, selection, pressed   |
+| `secondary`  | `#C3CAD5` | text on keys, ghost buttons          |
+| `muted`      | `#8E98A8` | labels, hints (≥ 4.5:1 on panel)     |
+| `accent`     | `#FFB224` | primary button, selection, pressed; ink `#1A1200` on it, pressed fill `#3A2E14` |
 | roles        | combat `#FF7A90` · movement `#3BD6B0` · ability `#6EA8FF` · travel `#B5E361` · menu `#B99BFF` | a key's dot and faint tint |
-| state        | ok `#4ADE80` · warning `#FFD866` · error `#FF5D5D` | sync pill, checks |
+| state        | ok `#4ADE80` · warning `#FFD866` · error `#FF5D5D` (dots, borders), error text `#FF8A8A` | sync pill, checks |
+
+The canvas's contrast audit retired `faint #5E6878` (it failed 4.5:1). Every token, with the
+role tints and status backgrounds, is in `packages/app/src/shared/tokens.ts`, which wins over
+this table.
 
 Type: Space Grotesk (names: games, screens, titles), Inter (everything read), JetBrains Mono
 (only what a device sends). Scale 40 / 24 / 15 / 13 / 12. Spacing on 4. Radii 6 (chips,
