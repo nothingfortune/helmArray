@@ -51,6 +51,7 @@ export function xboxControllerPreset(
     gameId: game.id,
     name: 'Xbox controller',
     output: 'pad',
+    writeGameFile: false,
     padMap: { ...padMap },
     map,
     behaviour: {
