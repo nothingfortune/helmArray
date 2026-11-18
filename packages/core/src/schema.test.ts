@@ -1,0 +1,126 @@
+import { describe, expect, it } from 'vitest';
+import type { Game, Scheme } from './model';
+import { copyScheme, gameKeysPreset } from './presets/keys';
+import type { Migration } from './schema';
+import { MIGRATIONS, SchemaError, currentVersion, load, runMigrations, store } from './schema';
+// Frozen: what a scheme looked like on disk at version 1. Never regenerate it.
+import schemeV1 from './__fixtures__/scheme.v1.json';
+
+const game: Game = {
+  id: 'skiff',
+  name: 'Skiff',
+  modes: [{ id: 'ship', name: 'Ship' }],
+  actions: [{ id: 'boost', name: 'Boost', mode: 'ship', role: 'movement', required: true }],
+  file: { format: 'elite-binds' },
+};
+
+/** Freeze every object in a value, so a migration that edits its input throws. */
+function deepFreeze<T>(value: T): T {
+  if (typeof value === 'object' && value !== null) {
+    Object.values(value).forEach(deepFreeze);
+    Object.freeze(value);
+  }
+  return value;
+}
+
+describe('the versions', () => {
+  it('are one more than the migrations of each kind, so a new version needs its migration', () => {
+    expect(currentVersion('scheme')).toBe(MIGRATIONS.scheme.length + 1);
+    expect(currentVersion('game')).toBe(MIGRATIONS.game.length + 1);
+  });
+});
+
+describe('store and load', () => {
+  it('stamp the current version, and give back the same scheme', () => {
+    const scheme = copyScheme(gameKeysPreset(game), 'mine', 'Mine');
+    const stored = store('scheme', scheme);
+    expect(Object.keys(stored)[0]).toBe('schemaVersion');
+    expect(stored.schemaVersion).toBe(currentVersion('scheme'));
+    expect(load('scheme', JSON.parse(JSON.stringify(stored)))).toEqual(scheme);
+  });
+
+  it('give back the same game', () => {
+    expect(load('game', store('game', game))).toEqual(game);
+  });
+
+  it('share nothing with what they were given', () => {
+    const scheme = gameKeysPreset(game);
+    const stored = store('scheme', scheme);
+    stored.map['ship'] = { 'L.index_1': { tap: 'boost' } };
+    expect(scheme.map['ship']).toEqual({});
+  });
+
+  it('still load a scheme saved at version 1', () => {
+    const scheme: Scheme = load('scheme', schemeV1);
+    expect(scheme).toMatchObject({
+      id: 'skiff-own-keys',
+      output: 'keys',
+      writeGameFile: true,
+      ledger: { 'L.index_1': { tap: { kind: 'key', code: 'PageUp' } } },
+      accepted: [
+        { rule: 'combat-tap-delayed', control: 'L.middle_1', reason: 'Map is a long hold' },
+      ],
+    });
+    expect(scheme).not.toHaveProperty('schemaVersion');
+  });
+});
+
+describe('the migration runner', () => {
+  // Two made-up steps: version 1 named the output `mode`, version 2 kept a single `note`.
+  const steps: Migration[] = [
+    ({ mode, ...rest }) => ({ ...rest, output: mode }),
+    ({ note, ...rest }) => ({ ...rest, notes: note === undefined ? [] : [note] }),
+  ];
+
+  it('runs every step from the file’s version to the current one, in order', () => {
+    expect(runMigrations({ schemaVersion: 1, mode: 'keys', note: 'hi' }, 'scheme', steps)).toEqual({
+      output: 'keys',
+      notes: ['hi'],
+    });
+  });
+
+  it('starts at the file’s version', () => {
+    expect(runMigrations({ schemaVersion: 2, output: 'pad' }, 'scheme', steps)).toEqual({
+      output: 'pad',
+      notes: [],
+    });
+    expect(runMigrations({ schemaVersion: 3, output: 'pad', notes: [] }, 'scheme', steps)).toEqual({
+      output: 'pad',
+      notes: [],
+    });
+  });
+
+  it('leaves what it read untouched, even for a step that edits its input', () => {
+    const editing: Migration[] = [
+      (doc) => {
+        doc['output'] = 'pad';
+        (doc['map'] as Record<string, unknown>)['foot'] = {};
+        return doc;
+      },
+    ];
+    const raw = deepFreeze({ schemaVersion: 1, output: 'keys', map: { ship: {} } });
+    expect(runMigrations(raw, 'scheme', editing)).toEqual({
+      output: 'pad',
+      map: { ship: {}, foot: {} },
+    });
+    expect(raw).toEqual({ schemaVersion: 1, output: 'keys', map: { ship: {} } });
+  });
+
+  it('refuses a file saved by a newer helmArray, and says what to do', () => {
+    expect(() => runMigrations({ schemaVersion: 4 }, 'scheme', steps)).toThrow(
+      new SchemaError('This scheme was saved by a newer helmArray. Update helmArray to open it.'),
+    );
+  });
+
+  it.each([
+    ['nothing', null],
+    ['a list', []],
+    ['text', 'scheme'],
+    ['no version', { id: 'x' }],
+    ['version 0', { schemaVersion: 0 }],
+    ['a part version', { schemaVersion: 1.5 }],
+    ['a version in words', { schemaVersion: '1' }],
+  ])('refuses %s', (_, raw) => {
+    expect(() => runMigrations(raw, 'game', steps)).toThrow(SchemaError);
+  });
+});
