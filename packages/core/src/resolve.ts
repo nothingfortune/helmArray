@@ -66,6 +66,14 @@ function carried(scheme: Scheme, game: Game, control: string, press: Press) {
   return out;
 }
 
+/**
+ * Whether a unit can send the signal on this press. Scroll was only seen written on a tap
+ * (reference/guides/unit-protocol.md), and a unit is sent only what the Azeron app was seen to send.
+ */
+function canSend(signal: Signal, press: Press): boolean {
+  return signal.kind !== 'scroll' || press === 'tap';
+}
+
 function dealPad(scheme: Scheme, controls: readonly string[]): Dealt {
   const signals = new Map<string, Signal>();
   for (const control of controls) {
@@ -127,7 +135,9 @@ function dealKeys(scheme: Scheme, game: Game, controls: readonly string[]): Deal
         // The game's own key, from the first mode that has a usable one.
         signal = carriedHere
           .map((c) => actions.get(c.action)?.native?.key)
-          .find((s): s is Signal => s !== undefined && !taken.has(signalId(s)));
+          .find(
+            (s): s is Signal => s !== undefined && canSend(s, press) && !taken.has(signalId(s)),
+          );
       }
       signal ??= fromPool();
       if (!signal) {

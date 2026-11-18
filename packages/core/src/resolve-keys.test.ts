@@ -56,6 +56,14 @@ const game: Game = {
       native: { key: { kind: 'mouse', button: 'left' } },
     },
     { id: 'emote', name: 'Emote', mode: 'foot', role: 'menu', required: false },
+    {
+      id: 'zoom',
+      name: 'Zoom',
+      mode: 'ship',
+      role: 'ability',
+      required: false,
+      native: { key: { kind: 'scroll', dir: 'up', speed: 33 } },
+    },
   ],
   file: { format: 'elite-binds' },
 };
@@ -294,6 +302,22 @@ describe("keys, the game's own", () => {
     expect(sent(plan, 'L.index_1')).toEqual({ tap: { kind: 'mouse', button: 'left' } });
     expect(sent(plan, 'R.index_1')).toEqual({ tap: key('Insert') });
     expect(plan.bindSheet).toEqual([{ mode: 'foot', action: 'shoot', signal: key('Insert') }]);
+  });
+
+  it('sends a scroll on a tap, as the game has it', () => {
+    const plan = own({ ship: { 'L.index_1': { tap: 'zoom' } } });
+    expect(sent(plan, 'L.index_1')).toEqual({ tap: { kind: 'scroll', dir: 'up', speed: 33 } });
+    expect(plan.bindSheet).toEqual([]);
+  });
+
+  it('gives a scroll on a long press or double tap a key and a bind sheet row: the unit only scrolls on a tap', () => {
+    const plan = own({ ship: { 'L.index_1': { long: 'zoom' }, 'L.index_2': { double: 'zoom' } } });
+    expect(sent(plan, 'L.index_1')).toEqual({ long: key('Insert') });
+    expect(sent(plan, 'L.index_2')).toEqual({ double: key('Home') });
+    expect(plan.bindSheet).toEqual([
+      { mode: 'ship', action: 'zoom', signal: key('Insert') },
+      { mode: 'ship', action: 'zoom', signal: key('Home') },
+    ]);
   });
 
   it('puts an action with no key of its own on the bind sheet', () => {
