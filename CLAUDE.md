@@ -13,7 +13,29 @@ see only this repo. The legacy app and its repo keep the old name.
    the owner's to settle.
 3. `reference/` holds hardware evidence and the legacy repo's notes. Read-only; see its README.
 
-There is no code yet. Work follows the roadmap's milestones, M0 first.
+Work follows the roadmap's milestones, in order.
+
+## The workspace
+
+Node 24 and pnpm (the version `packageManager` pins; `corepack enable` or a global install).
+
+| Command        | Does                                                                            |
+| -------------- | ------------------------------------------------------------------------------- |
+| `pnpm install` | Install.                                                                        |
+| `pnpm check`   | The gate: typecheck, lint, format, tests. CI runs exactly this.                 |
+| `pnpm dev`     | The app with hot reload. `--play` on the built app also opens Play view.        |
+| `pnpm tokens`  | Rewrite `styles/tokens.css` from `src/shared/tokens.ts` after changing a token. |
+
+- pnpm refuses a dependency version newer than its minimum release age. Pin an older version
+  rather than adding an exclusion.
+- `packages/core`, `azeron`, `games` ship TypeScript source; `app` bundles them. The package
+  boundaries from `02-architecture.md` are lint rules (`eslint.config.js`), tested in
+  `test/boundaries.test.ts`.
+- Tests never import `electron` (it downloads its binary on first use). Keep main-process
+  logic in pure modules beside `src/main/index.ts` and test those.
+- Design tokens live in `packages/app/src/shared/tokens.ts`, taken from the canvas.
+- CI runs on the owner's self-hosted runner, `[self-hosted, linux, x64, build-rig]`. Every
+  workflow job uses it; never GitHub-hosted runners.
 
 ## The owner
 

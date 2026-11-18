@@ -1,0 +1,66 @@
+/* Written from src/shared/tokens.ts by `pnpm tokens`. Do not edit. */
+:root {
+  --color-bg: #0A0C0F;
+  --color-chrome: #0D0F13;
+  --color-panel: #111419;
+  --color-raised: #1A1F27;
+  --color-hover: #222833;
+  --color-line: #262C36;
+  --color-line-key: #2A313C;
+  --color-edge: #6B7687;
+  --color-text: #EDF0F4;
+  --color-secondary: #C3CAD5;
+  --color-muted: #8E98A8;
+  --color-accent: #FFB224;
+  --color-accent-hover: #FFC861;
+  --color-accent-ink: #1A1200;
+  --color-pressed: #3A2E14;
+  --color-combat: #FF7A90;
+  --color-combat-tint: #22202A;
+  --color-movement: #3BD6B0;
+  --color-movement-tint: #1B2427;
+  --color-ability: #6EA8FF;
+  --color-ability-tint: #1B2130;
+  --color-travel: #B5E361;
+  --color-travel-tint: #1F2523;
+  --color-menu: #B99BFF;
+  --color-menu-tint: #201F2E;
+  --color-ok: #4ADE80;
+  --color-ok-bg: #122019;
+  --color-warning: #FFD866;
+  --color-warning-bg: #2A2412;
+  --color-error: #FF5D5D;
+  --color-error-text: #FF8A8A;
+  --color-error-bg: #2A1719;
+  --color-conflict: #2A1A1D;
+  --font-name: 'Space Grotesk', sans-serif;
+  --font-read: Inter, sans-serif;
+  --font-signal: 'JetBrains Mono', monospace;
+  --size-display: 40px;
+  --size-title: 24px;
+  --size-body: 15px;
+  --size-label: 13px;
+  --size-key: 12px;
+  --size-caption: 12px;
+  --radius-chip: 6px;
+  --radius-key: 10px;
+  --radius-panel: 16px;
+  --space-4: 4px;
+  --space-8: 8px;
+  --space-12: 12px;
+  --space-16: 16px;
+  --space-24: 24px;
+  --space-32: 32px;
+  --space-48: 48px;
+  --motion-hover: 120ms;
+  --motion-drawer: 200ms;
+  --motion-flash: 180ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-hover: 0ms;
+    --motion-drawer: 0ms;
+    --motion-flash: 0ms;
+  }
+}

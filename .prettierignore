@@ -1,0 +1,7 @@
+pnpm-lock.yaml
+reference/
+docs/
+packages/app/src/renderer/styles/tokens.css
+out/
+dist/
+coverage/
