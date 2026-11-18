@@ -1,4 +1,4 @@
-# relayMatrix, phase 2: architecture
+# helmArray, phase 2: architecture
 
 2026-11-17. Phase 2 of 4: features → **architecture** → UI system → roadmap.
 Built from [01-features.md](01-features.md). A new repo; no code is imported from the old one, only the evidence in [reference/](../../reference/README.md).
@@ -157,12 +157,12 @@ open Play view, quit.
 
 ## Storage
 
-- `%APPDATA%/relayMatrix/`: `games/<id>.json`, `schemes/<id>.json`, `settings.json`.
+- `%APPDATA%/helmArray/`: `games/<id>.json`, `schemes/<id>.json`, `settings.json`.
   Each file carries `schemaVersion`; migrations run on load, one function per version.
 - **Snapshots:** every Apply saves the scheme and the plan it produced. History is a list in
   the UI, restore is one click.
 - **Undo** in the editor is in memory, per scheme. Edits autosave; Apply is separate.
-- **Export / import:** one `.relay` file (JSON) per scheme, its game included.
+- **Export / import:** one `.helm` file (JSON) per scheme, its game included.
 - Built-in presets and game action lists ship read-only inside the app; using one copies it.
 
 ## Trust (the app always tells the truth)

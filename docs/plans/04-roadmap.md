@@ -1,4 +1,4 @@
-# relayMatrix, phase 4: roadmap
+# helmArray, phase 4: roadmap
 
 2026-11-17. Phase 4 of 4: features → architecture → UI system → **roadmap**.
 Built from [01-features.md](01-features.md), [02-architecture.md](02-architecture.md) and
@@ -151,7 +151,7 @@ the new app applied. Then archive `relayMatrix-legacy`.
 ### M7 · Trust and release (M)
 
 - Snapshots on every Apply, the history list, one-click restore.
-- Export and import a `.relay` file.
+- Export and import a `.helm` file.
 - The screens that weren't drawn: first run, Devices, Settings, the bind sheet and history.
   Narrow windows below 1280 px.
 - Playwright on Electron, with fake devices and a temp data folder, covering J0–J5.

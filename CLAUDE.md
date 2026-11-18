@@ -1,7 +1,8 @@
 # CLAUDE.md
 
-relayMatrix is being rebuilt from scratch. This file is everything a session needs: there
-is no memory or scratch folder from earlier sessions, and cloud sessions see only this repo.
+helmArray (formerly relayMatrix) is being rebuilt from scratch. This file is everything a
+session needs: there is no memory or scratch folder from earlier sessions, and cloud sessions
+see only this repo. The legacy app and its repo keep the old name.
 
 ## Start here
 

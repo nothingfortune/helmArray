@@ -1,7 +1,7 @@
 {
   "v": 3,
   "createdOnFiles": { "v": 1, "at": "2026-11-17T12:00:00Z" },
-  "title": "relayMatrix UI",
+  "title": "helmArray UI",
   "launch": { "view": "canvas" },
   "pages": [],
   "boards": {

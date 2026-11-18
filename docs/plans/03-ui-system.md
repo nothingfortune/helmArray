@@ -1,4 +1,4 @@
-# relayMatrix, phase 3: UI system
+# helmArray, phase 3: UI system
 
 2026-11-17. Phase 3 of 4: features → architecture → **UI system** → roadmap.
 Drawn on a canvas: https://claude.ai/artifact/SiRT17QxsbgA5YsvvQ89s2 (the UI system sheet, the
