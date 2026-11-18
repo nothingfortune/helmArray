@@ -14,6 +14,7 @@ const pure = 'is pure: it imports nothing but its own files.';
 const boundaries = [
   {
     files: ['packages/core/src/**'],
+    ignores: ['**/*.test.ts'],
     rules: {
       '@typescript-eslint/no-restricted-imports': [
         'error',
@@ -23,6 +24,7 @@ const boundaries = [
   },
   {
     files: ['packages/azeron/src/**', 'packages/games/src/**'],
+    ignores: ['**/*.test.ts'],
     rules: {
       '@typescript-eslint/no-restricted-imports': [
         'error',
