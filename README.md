@@ -4,7 +4,7 @@ One place for every control scheme you play with: two Azeron Cyborg II keypads, 
 mouse, an Xbox controller and rudder pedals. Pick a game, pick a default, play. Change a
 button, press Apply, and the units and the game's own binding file agree with you.
 
-Being rebuilt from scratch. The plan, in order:
+The plan
 
 1. [Features](docs/plans/01-features.md)
 2. [Architecture](docs/plans/02-architecture.md)

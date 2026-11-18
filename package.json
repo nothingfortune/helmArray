@@ -1,0 +1,31 @@
+{
+  "name": "helmarray",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.21.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "check": "node --run typecheck && node --run lint && node --run format:check && node --run test",
+    "typecheck": "tsc -p tsconfig.json && tsc -p packages/core && tsc -p packages/azeron && tsc -p packages/games && tsc -p packages/app/tsconfig.node.json && tsc -p packages/app/tsconfig.web.json",
+    "lint": "eslint --max-warnings=0 .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "dev": "cd packages/app && node --run dev",
+    "tokens": "cd packages/app && node --run tokens"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "24.19.2",
+    "eslint": "10.15.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "globals": "17.14.0",
+    "prettier": "3.10.1",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.73.0",
+    "vite": "8.3.8",
+    "vitest": "5.1.0"
+  }
+}
