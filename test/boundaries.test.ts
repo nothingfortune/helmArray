@@ -34,6 +34,12 @@ describe('package boundaries', () => {
         relative,
       );
     });
+
+    it('lets its tests import vitest, and nothing else may', async () => {
+      const code = "import { it } from 'vitest';\nexport { it };\n";
+      expect(await problems('packages/core/src/model/scheme.test.ts', code)).toEqual([]);
+      expect(await problems(file, code)).toContain(restricted);
+    });
   });
 
   describe.each(['azeron', 'games'])('%s', (pkg) => {
