@@ -143,6 +143,11 @@ export interface Game {
   actions: readonly Action[];
   /** Writable when the format is known. */
   file?: { format: GameFileFormat; path?: string };
+  /**
+   * The sticks must send keys. Everspace 2 stutters with a pad stick and spins with a mouse
+   * one. Set per game, never by default: other games want a pad stick or the pointer.
+   */
+  needsKeyStick?: boolean;
 }
 
 /** A press is a slot on a control. Long and double delay the tap by design. */
@@ -193,5 +198,9 @@ export interface Scheme {
   behaviour: Record<ControlId, Behaviour>;
   /** Keys handed out, never re-dealt. */
   ledger: Record<ControlId, Partial<Record<Press, Signal>>>;
-  accepted: { rule: RuleId; control: ControlId; reason: string }[];
+  /**
+   * Findings the player kept on purpose, and why. A finding about a control names the control;
+   * one about an action on no button names the action.
+   */
+  accepted: { rule: RuleId; control?: ControlId; action?: ActionId; reason: string }[];
 }

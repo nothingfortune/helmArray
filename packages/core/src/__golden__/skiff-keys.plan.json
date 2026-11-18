@@ -599,7 +599,21 @@
       }
     }
   },
-  "findings": [],
+  "findings": [
+    {
+      "rule": "menu-with-combat",
+      "severity": "error",
+      "control": "L.middle_1",
+      "mode": "ship",
+      "message": "Galaxy map shares a button with Fire: mashing it mid-fight opens Galaxy map."
+    },
+    {
+      "rule": "combat-tap-delayed",
+      "severity": "warning",
+      "control": "L.middle_1",
+      "message": "This button has a long press or double tap, so its tap waits to see which you meant. Fire needs the tap at once."
+    }
+  ],
   "gameFile": {
     "format": "elite-binds"
   }
