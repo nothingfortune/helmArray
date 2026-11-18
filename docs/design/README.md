@@ -19,6 +19,19 @@ won't run outside the canvas (`support.js` isn't included). `canvas.json` lists 
 | `Editor` (+ `EditorPicker`, `EditorMacro`, `EditorKeys`) | The scheme editor and its states |
 | `Play`, `PlayPad`, `PlayKeys` | Play view: Azerons, controller, keyboard and mouse   |
 
+## Changing the canvas
+
+A local session with the owner's claude.ai sign-in edits the live canvas through the Artifact
+tool: read the board files it needs (`project/<Board>.dc.html`, and `project/canvas.json` only
+when boards are added, moved or retitled), edit copies under one folder, and publish them to
+the canvas URL with that folder as `root`. Then copy the same files into `canvas/` here in the
+same PR, so the two never drift. A cloud session without that sign-in proposes design changes
+in its PR instead.
+
+When code starts using the design, the tokens in `03-ui-system.md` and `Main.dc.html` become
+CSS variables (M0). If the canvas changes a token, the PR that syncs `canvas/` also updates
+the variables.
+
 ## Where the canvas goes beyond the plan
 
 The canvas was drawn further after `01-features.md` was written. These differ from the plan
@@ -26,7 +39,7 @@ and are the owner's to settle before the milestone that builds them:
 
 1. **Virtual controller.** Devices lists one ("a virtual Xbox controller that Windows sees").
    Phase 1 rules it out: the Azerons send Xbox output themselves.
-2. **Keyboard remaps and macros running through relayMatrix**, with "Start with Windows".
+2. **Keyboard remaps and macros running through helmArray**, with "Start with Windows".
    Phase 1 has the keyboard as a fixed device and macros as v2.
 3. **Macros and layers in the editor** (macro drawer, "Hold for layer 2"). Both are v2 in
    phase 1; the drawing is fine to keep as the v2 design.

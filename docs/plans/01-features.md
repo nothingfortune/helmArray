@@ -1,4 +1,4 @@
-# relayMatrix, phase 1: features
+# helmArray, phase 1: features
 
 2026-11-17. Built for the first time. Phase 1 of 4: **features** → architecture → UI system → roadmap.
 

@@ -1,4 +1,4 @@
-# relayMatrix
+# helmArray
 
 One place for every control scheme you play with: two Azeron Cyborg II keypads, keyboard and
 mouse, an Xbox controller and rudder pedals. Pick a game, pick a default, play. Change a
