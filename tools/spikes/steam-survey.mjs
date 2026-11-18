@@ -42,12 +42,9 @@ if (existsSync(assetIndexPath)) {
   /** @param {KV} node */
   const walk = (node) => {
     for (const [key, value] of Object.entries(node)) {
-      if (
-        /^\d+$/.test(key) &&
-        Number(key) > 1000 &&
-        typeof value === 'object' &&
-        !Array.isArray(value)
-      ) {
+      // An app is any numbered section holding slot keys, whatever its id (Portal 2 is 620).
+      // The wrapping sections hold apps, not slots, so they are walked into instead.
+      if (/^\d+$/.test(key) && typeof value === 'object' && !Array.isArray(value)) {
         if (Object.keys(value).some((k) => /^\d+f$/.test(k))) assetIndex[key] = value;
         else walk(value);
       } else if (typeof value === 'object' && !Array.isArray(value)) walk(value);

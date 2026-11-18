@@ -32,19 +32,21 @@ are 300 × 450 and 26 are 600 × 900. The Library tile is drawn at least 168 px 
 
 ## What the survey found
 
-- 42 of 43 games are in the index, each with a portrait and a header that exist on disk.
-- **Two layouts.** 26 games keep `library_600x900.jpg` directly in their folder. 12 keep
-  `library_capsule.jpg` (or `library_600x900.jpg`) inside a 40-character hashed subfolder, which
-  changes when the art does. The index always names the current one.
-- **Portal 2** has no index entry but has `library_600x900.jpg` in its folder. So the fallback
-  is to scan the folder for `library_600x900.jpg` or `library_capsule.jpg`, at any depth. With
-  that fallback, all 43 have a portrait.
+- All 43 games are in the index (663 apps in all, including ones no longer installed). Each has
+  a portrait and a header that exist on disk. App ids run from 3 to 7 digits, Portal 2's is 620,
+  so never filter them by size.
+- **Two layouts.** For 26 games, the portrait sits directly in their folder as
+  `library_600x900.jpg`. For 12, it is `library_capsule.jpg` (or `library_600x900.jpg`) inside a
+  40-character hashed subfolder, which changes when the art does. The index always names the
+  current one.
+- Scanning the folder for `library_600x900.jpg` or `library_capsule.jpg`, at any depth, also
+  found a portrait for all 43. That makes it a usable fallback when the index lacks a game.
 
 ## For M4
 
 - The `games` adapter reads `assetcache.vdf` first and scans the folder second. It shows the
-  dashed placeholder from the canvas when neither finds anything, for example a game never
-  opened in the Steam library view, or one added by hand.
+  dashed placeholder from the canvas when neither finds anything, for example for a game added
+  by hand. Not seen yet: an installed game missing from the index.
 - Parse binary KeyValues with types `0x00` section, `0x01` string, `0x02` int32, `0x07`
   uint64 and `0x08` end. `tools/spikes/vdf.mjs` is the throwaway version; M4 rebuilds it in
   `games` with tests.
