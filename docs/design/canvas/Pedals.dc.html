@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Pedals</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.pd-c{box-sizing:border-box;height:112px;padding:12px 14px;border-radius:12px;display:flex;flex-direction:column;justify-content:space-between;text-align:left;cursor:pointer;font-family:Inter,sans-serif;color:#EDF0F4;transition:background .12s,border-color .12s,box-shadow .12s}
+.pd-c:hover{filter:brightness(1.12)}
+.pd-c:focus-visible{outline:2px solid #EDF0F4;outline-offset:2px}
+.pd-n{font:600 11px Inter,sans-serif;letter-spacing:.07em;text-transform:uppercase}
+.pd-a{font:600 15px/1.15 Inter,sans-serif}
+.pd-t{position:relative;height:8px;border-radius:4px;box-sizing:border-box}
+.pd-v{font:500 11.5px 'JetBrains Mono',monospace}
+</style>
+</helmet>
+<div role="group" aria-label="Pedals" style="width:600px;height:112px;display:flex;gap:12px;font-family:Inter,sans-serif;color:#EDF0F4">
+<sc-for list="{{cells}}" as="c" hint-placeholder-count="3">
+<button type="button" class="pd-c" style="{{c.style}}" aria-label="{{c.aria}}" onClick="{{c.pick}}">
+<span style="display:flex;justify-content:space-between;align-items:center;width:100%"><span class="pd-n" style="{{c.nameStyle}}">{{c.name}}</span><span class="pd-v" style="{{c.valStyle}}">{{c.valueText}}</span></span>
+<span class="pd-a" style="{{c.actStyle}}">{{c.drives}}</span>
+<span class="pd-t" style="{{c.track}}"><span style="{{c.fill}}"></span><span style="{{c.tick}}"></span></span>
+</button>
+</sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"axes":{"editor":null},"lit":{"editor":"text","default":""},"selected":{"editor":"text","default":""},"onPick":{"editor":null},"$preview":{"width":600,"height":112}}'>
+class Component extends DCLogic {
+renderVals() {
+// Each axis: id, name, what it drives (game word, or empty when unused), centre-resting or end-resting, live value 0..100.
+const axes = this.props.axes || [
+{ id: 'ltoe', name: 'Left toe', drives: 'Thrust down', rest: 'end', value: 0 },
+{ id: 'rudder', name: 'Rudder', drives: 'Yaw', rest: 'centre', value: 50 },
+{ id: 'rtoe', name: 'Right toe', drives: 'Thrust up', rest: 'end', value: 0 }
+];
+const lit = this.props.lit || '';
+const selected = this.props.selected || '';
+const onPick = this.props.onPick;
+const EDGE = '#6B7687', MUTED = '#8E98A8', AMBER = '#FFB224', MOVE = '#3BD6B0';
+const cells = axes.map((a) => {
+const used = !!a.drives;
+const on = lit === a.id;
+const sel = selected === a.id;
+const v = Math.max(0, Math.min(100, a.value || 0));
+const col = on ? AMBER : MOVE;
+const w = a.rest === 'centre' ? 260 : 158;
+let fill = 'display:none', tick = 'display:none', valueText = used ? '' : 'off';
+if (used && a.rest === 'centre') {
+const lo = Math.min(v, 50), hi = Math.max(v, 50);
+fill = 'position:absolute;top:0;bottom:0;left:' + lo + '%;width:' + Math.max(hi - lo, 1) + '%;background:' + col + ';border-radius:4px';
+tick = 'position:absolute;top:-4px;bottom:-4px;left:50%;width:2px;margin-left:-1px;background:' + MUTED + ';border-radius:1px';
+valueText = v === 50 ? 'centre' : (v < 50 ? 'L ' + (50 - v) * 2 + '%' : 'R ' + (v - 50) * 2 + '%');
+} else if (used) {
+fill = 'position:absolute;top:0;bottom:0;left:0;width:' + Math.max(v, 1.5) + '%;background:' + col + ';border-radius:4px';
+valueText = v + '%';
+}
+return {
+name: a.name,
+drives: used ? a.drives : 'Not used',
+valueText,
+aria: a.name + ', ' + (used ? a.drives : 'not used') + ', ' + valueText + (on ? ', moving' : ''),
+pick: () => { if (onPick) onPick(a.id); },
+style: 'width:' + w + 'px;flex:none;background:' + (on ? '#3A2E14' : '#111419') + ';border:1px solid ' + (on ? AMBER : '#1E232C') + ';'
++ (on ? 'box-shadow:0 0 0 3px rgba(255,178,36,.18),0 0 22px rgba(255,178,36,.25);' : '')
++ (sel ? 'outline:2px solid ' + AMBER + ';outline-offset:2px;' : ''),
+nameStyle: 'color:' + (on ? AMBER : MUTED),
+valStyle: 'color:' + (on ? AMBER : MUTED),
+actStyle: 'color:' + (used ? '#EDF0F4' : MUTED) + (used ? '' : ';font-weight:500'),
+track: used ? 'background:#1A1F27' : 'background:transparent;border:1.5px dashed ' + EDGE,
+fill, tick
+};
+});
+return { cells };
+}
+}
+</script>
+</body>
+</html>

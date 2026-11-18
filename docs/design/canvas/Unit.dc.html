@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Azeron unit</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.uk{position:absolute;box-sizing:border-box;border-radius:9px;padding:6px 7px 6px 8px;font-family:Inter,sans-serif;font-weight:600;line-height:1.12;color:#EDF0F4;text-align:left;cursor:pointer;display:flex;align-items:flex-start;transition:background .12s,border-color .12s,box-shadow .12s}
+.uk:hover{filter:brightness(1.18)}
+.uk:focus-visible{outline:2px solid #EDF0F4;outline-offset:2px}
+.ul{min-width:0;overflow-wrap:normal;word-break:normal}
+.ud{position:absolute;bottom:6px;right:6px;width:6px;height:6px;border-radius:3px}
+.ub{position:absolute;right:4px;top:4px;font:700 9px/1 'JetBrains Mono',monospace;color:#C3CAD5;background:#0A0C0F;border-radius:3px;padding:2px 3px}
+.zn{position:absolute;box-sizing:border-box;border-radius:12px;background:#0C0E12;border:1px solid #1E232C}
+.zh{position:absolute;font:600 10px Inter,sans-serif;color:#8E98A8;letter-spacing:.09em;text-transform:uppercase;pointer-events:none}
+.sl{position:absolute;font-family:Inter,sans-serif;font-weight:600;line-height:1.1;color:#EDF0F4;text-align:center;pointer-events:none;overflow:hidden}
+</style>
+</helmet>
+<div style="position:relative;width:640px;height:380px;background:#111419;border:1px solid #20252E;border-radius:16px;box-sizing:border-box;font-family:Inter,sans-serif;color:#EDF0F4;box-shadow:inset 0 1px 0 rgba(255,255,255,.03)">
+<span style="position:absolute;{{handTagStyle}};font:600 11px Inter,sans-serif;color:#8E98A8;letter-spacing:.08em;text-transform:uppercase">{{handName}}</span>
+<sc-for list="{{zones}}" as="z" hint-placeholder-count="3">
+<div class="zn" style="{{z.box}}"></div>
+<span class="zh" style="{{z.head}}">{{z.name}}</span>
+</sc-for>
+<sc-for list="{{items}}" as="it" hint-placeholder-count="30">
+<button type="button" class="uk" style="{{it.style}}" aria-label="{{it.aria}}" onClick="{{it.pick}}"><span class="ul" style="{{it.textStyle}}">{{it.label}}</span><sc-if value="{{it.hasDot}}" hint-placeholder-val="{{true}}"><span class="ud" style="{{it.dot}}"></span></sc-if><sc-if value="{{it.hasBadge}}" hint-placeholder-val="{{false}}"><span class="ub">{{it.badge}}</span></sc-if></button>
+</sc-for>
+<button type="button" aria-label="{{stickAria}}" onClick="{{stickPick}}" style="{{stickStyle}}"></button>
+<sc-for list="{{stickLabels}}" as="s" hint-placeholder-count="5">
+<span class="sl" style="{{s.style}}">{{s.label}}</span>
+</sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"hand":{"editor":"enum","options":["left","right"],"default":"left"},"keys":{"editor":null},"stick":{"editor":null},"lit":{"editor":"text","default":""},"selected":{"editor":"text","default":""},"onPick":{"editor":null},"$preview":{"width":640,"height":380}}'>
+class Component extends DCLogic {
+renderVals() {
+const W = 640;
+const hand = this.props.hand || 'left';
+const right = hand === 'right';
+// [game word, role, short label, badge]. The short label shows only when the game word cannot fit at 11 px.
+const keys = this.props.keys || {
+index_1: ['Prone', 'move'], index_2: ['Jump', 'move'], index_3: ['Sprint', 'move'], index_4: ['Crouch', 'move'], index_5: ['Dive', 'move'],
+middle_1: ['Interact', 'ability'], middle_2: ['Reload', 'combat'], middle_3: ['Melee', 'combat'], middle_4: ['Use stim', 'ability'], middle_5: ['Flashlight', 'ability'],
+ring_1: ['Primary', 'combat'], ring_2: ['Secondary', 'combat'], ring_3: ['Support weapon', 'combat'], ring_4: ['Grenade', 'combat'], ring_5: ['Fire mode', 'combat'],
+pinky_1: ['Map', 'menu'], pinky_2: ['Drop item', 'ability'], pinky_3: ['Stratagems', 'ability', '', 'M'], pinky_4: ['Emote', 'menu'],
+pinky_side: ['Ping', 'ability'], index_side: ['Throw grenade', 'combat'],
+dpad_up: ['Strat ↑', 'ability'], dpad_down: ['Strat ↓', 'ability'], dpad_left: ['Strat ←', 'ability'], dpad_right: ['Strat →', 'ability'], dpad_press: ['Equip', 'menu'],
+thumb_aux_upper: ['Swap weapon', 'combat'], thumb_aux_lower: ['Dive', 'move']
+};
+const stick = this.props.stick || { up: 'Forward', down: 'Back', left: 'Left', right: 'Right', press: 'Sprint', role: 'move' };
+const lit = this.props.lit || '';
+const selected = this.props.selected || '';
+const onPick = this.props.onPick;
+const ROLE = {
+combat: ['#FF7A90', '#22202A'], move: ['#3BD6B0', '#1B2427'], ability: ['#6EA8FF', '#1B2130'],
+travel: ['#B5E361', '#1F2523'], menu: ['#B99BFF', '#201F2E']
+};
+const EDGE = '#6B7687';
+const MUTED = '#8E98A8';
+const SPECIAL = {
+pinky_side: 'Pinky side', index_side: 'Index side',
+thumb_aux_upper: 'Thumb upper', thumb_aux_lower: 'Thumb lower',
+dpad_up: 'D-pad ↑', dpad_down: 'D-pad ↓', dpad_left: 'D-pad ←', dpad_right: 'D-pad →', dpad_press: 'D-pad press'
+};
+const posName = (pos) => {
+if (SPECIAL[pos]) return SPECIAL[pos];
+const [c, n] = pos.split('_');
+return c.charAt(0).toUpperCase() + c.slice(1) + ' ' + n;
+};
+// Label fit: the game word at 13, 12, 11 px wrapping on spaces; then the short label;
+// then 10 px as a last resort. Never an ellipsis.
+const cw = (ch) => /[A-Z0-9%]/.test(ch) ? 0.68 : (/[iljtfrI.,:'!| ]/.test(ch) ? 0.34 : 0.6);
+const tw = (str, fs) => { let t = 0; for (const ch of str) t += cw(ch); return t * fs; };
+// Breaks on spaces, and on soft hyphens (U+00AD) placed in short labels, e.g. "Hard­points".
+const lineCount = (text, fs, avail) => {
+let n = 1, cur = 0;
+for (const word of text.split(' ')) {
+const ww = tw(word.replace(/­/g, ''), fs);
+const add = cur ? tw(' ', fs) + ww : ww;
+if (cur + add <= avail) { cur += add; continue; }
+if (ww <= avail) { if (cur) n++; cur = ww; continue; }
+const parts = word.split('­');
+if (parts.length < 2) return 99;
+if (cur) { n++; cur = 0; }
+for (let i = 0; i < parts.length; i++) {
+const pw = tw(parts[i], fs) + (i < parts.length - 1 ? tw('-', fs) : 0);
+if (pw > avail) return 99;
+if (cur && cur + pw > avail) { n++; cur = pw; } else cur += pw;
+}
+}
+return n;
+};
+const fit = (full, short, avail, availH) => {
+for (const [t, sizes] of [[full, [13, 12, 11]], [short, [13, 12, 11]], [full, [10]], [short, [10]]]) {
+if (!t) continue;
+for (const fs of sizes) {
+const maxL = Math.max(1, Math.floor(availH / (fs * 1.12)));
+if (lineCount(t, fs, avail) <= maxL) return { text: t, css: 'font-size:' + fs + 'px;' };
+}
+}
+return { text: short || full, css: 'font-size:10px;overflow-wrap:anywhere;hyphens:auto;' };
+};
+// Geometry is fixed per position and never depends on what is assigned,
+// so an empty slot holds its place and nothing shifts.
+const rects = {};
+const cols = [['pinky', 66, 74], ['ring', 144, 34], ['middle', 222, 18], ['index', 300, 26]];
+cols.forEach(([c, x, y0]) => { for (let r = 1; r <= 5; r++) rects[c + '_' + r] = [x, y0 + (r - 1) * 54, 72, 48]; });
+rects.pinky_side = [4, 196, 60, 64];
+rects.index_side = [376, 38, 60, 64];
+// Thumb keys, stick and d-pad each sit in their own zone, with more space between
+// zones than inside them, so the clusters read apart before any label is read.
+rects.thumb_aux_upper = [296, 322, 56, 44];
+rects.thumb_aux_lower = [356, 322, 56, 44];
+rects.dpad_up = [503, 230, 60, 34];
+rects.dpad_left = [441, 268, 60, 34];
+rects.dpad_press = [503, 268, 60, 34];
+rects.dpad_right = [565, 268, 60, 34];
+rects.dpad_down = [503, 306, 60, 34];
+const ZONES = [['Thumb', 286, 296, 136, 76], ['Stick', 440, 14, 186, 170], ['D-pad', 440, 198, 186, 168]];
+const fx = (x, w) => right ? W - x - w : x;
+const items = Object.keys(rects).map((pos) => {
+const [x, y, w, h] = rects[pos];
+const k = keys[pos];
+const isLit = lit === pos;
+const isSel = selected === pos;
+const flat = h < 40; // short d-pad keys: text centred vertically, dot in the corner
+let bg = 'transparent', border = '1.5px dashed ' + EDGE, shadow = 'none', color = MUTED, weight = 'font-weight:500;';
+let dot = '';
+if (k) {
+const rc = ROLE[k[1]] || ROLE.ability;
+bg = rc[1]; border = '1px solid #2A313C'; color = '#EDF0F4'; weight = '';
+shadow = 'inset 0 -2px 0 rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.04)';
+dot = 'background:' + rc[0] + (flat ? ';bottom:auto;top:4px;right:4px' : '');
+}
+if (isLit) {
+bg = '#3A2E14'; border = '1px solid #FFB224';
+shadow = '0 0 0 3px rgba(255,178,36,.22),0 0 22px rgba(255,178,36,.35)';
+dot = 'background:#FFB224' + (flat ? ';bottom:auto;top:4px;right:4px' : ''); color = '#EDF0F4'; weight = '';
+}
+const outline = isSel ? 'outline:2px solid #FFB224;outline-offset:2px;' : '';
+const name = posName(pos);
+const aw = w - (flat ? 17 : 16), ah = h - (flat ? 8 : 10);
+const f = k ? fit(k[0], k[2], aw, ah) : fit(name, '', aw, ah);
+return {
+style: 'left:' + fx(x, w) + 'px;top:' + y + 'px;width:' + w + 'px;height:' + h + 'px;background:' + bg + ';border:' + border + ';box-shadow:' + shadow + ';color:' + color + ';' + weight + outline + (flat ? 'align-items:center;padding:4px 9px 4px 8px;' : 'padding-top:5px;padding-bottom:5px;'),
+label: f.text,
+textStyle: f.css,
+hasDot: !!k,
+dot: dot,
+hasBadge: !!(k && k[3]),
+badge: k && k[3] ? k[3] : '',
+aria: (k ? k[0] : 'Empty') + ', ' + name.toLowerCase() + (k && k[3] === 'M' ? ', macro' : '') + (isLit ? ', pressed' : ''),
+pick: () => { if (onPick) onPick(pos); }
+};
+});
+const SD = 60, sx = fx(503, SD), sy = 74, cx = sx + SD / 2, cy = sy + SD / 2;
+const sLit = lit === 'stick';
+const sSel = selected === 'stick';
+const sr = ROLE[stick.role] || ROLE.move;
+const stickStyle = 'position:absolute;left:' + sx + 'px;top:' + sy + 'px;width:' + SD + 'px;height:' + SD + 'px;border-radius:50%;cursor:pointer;box-sizing:border-box;'
++ 'background:' + (sLit ? '#3A2E14' : '#1A1F27') + ';border:' + (sLit ? '1px solid #FFB224' : '1px solid #2A313C') + ';'
++ 'box-shadow:inset 0 0 0 10px ' + (sLit ? 'rgba(255,178,36,.10)' : '#161A21') + (sLit ? ',0 0 22px rgba(255,178,36,.35)' : ',0 2px 0 rgba(0,0,0,.35)') + ';'
++ (sSel ? 'outline:2px solid #FFB224;outline-offset:3px;' : '');
+const chipFit = (text, w) => {
+for (const fs of [12, 11]) { if (lineCount(text, fs, w - 8) <= 1) return 'font-size:' + fs + 'px;'; }
+if (lineCount(text, 10, w - 8) <= 2) return 'font-size:10px;';
+return 'font-size:10px;overflow-wrap:anywhere;';
+};
+const chip = (text, w) => text
+? 'height:26px;display:flex;align-items:center;justify-content:center;border-radius:13px;background:' + sr[1] + ';border:1px solid #2A313C;box-sizing:border-box;padding:0 4px;' + chipFit(text, w)
+: 'height:26px;display:flex;align-items:center;justify-content:center;border-radius:13px;background:transparent;border:1.5px dashed ' + EDGE + ';color:' + MUTED + ';font-weight:500;box-sizing:border-box;padding:0 4px;font-size:11px;';
+const stickLabels = [
+{ label: stick.up || 'Up', style: chip(stick.up, 60) + 'width:60px;left:' + (cx - 30) + 'px;top:' + (sy - 30) + 'px' },
+{ label: stick.down || 'Down', style: chip(stick.down, 60) + 'width:60px;left:' + (cx - 30) + 'px;top:' + (sy + SD + 4) + 'px' },
+{ label: stick.left || 'Left', style: chip(stick.left, 52) + 'width:52px;left:' + (cx - SD / 2 - 56) + 'px;top:' + (cy - 13) + 'px' },
+{ label: stick.right || 'Right', style: chip(stick.right, 52) + 'width:52px;left:' + (cx + SD / 2 + 4) + 'px;top:' + (cy - 13) + 'px' },
+{ label: stick.press || 'Press', style: 'width:' + (SD - 8) + 'px;left:' + (cx - SD / 2 + 4) + 'px;top:' + (cy - 6) + 'px;color:' + (sLit ? '#FFB224' : MUTED) + ';font-size:10.5px' }
+];
+const zones = ZONES.map(([name, x, y, w, h]) => ({ name, box: 'left:' + fx(x, w) + 'px;top:' + y + 'px;width:' + w + 'px;height:' + h + 'px', head: 'left:' + (fx(x, w) + 12) + 'px;top:' + (y + 9) + 'px' }));
+return {
+zones, items, stickStyle, stickLabels,
+stickAria: 'Stick' + (sLit ? ', pressed' : ''),
+stickPick: () => { if (onPick) onPick('stick'); },
+handName: right ? 'Right' : 'Left',
+handTagStyle: right ? 'right:18px;top:14px' : 'left:18px;top:14px'
+};
+}
+}
+</script>
+</body>
+</html>

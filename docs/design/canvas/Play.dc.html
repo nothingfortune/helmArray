@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Play view</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#050608}
+.tab{height:30px;padding:0 12px;border-radius:7px;border:0;font:600 12.5px Inter,sans-serif;cursor:pointer;display:inline-flex;align-items:center;text-decoration:none}
+.tab:focus-visible,.ib:focus-visible,.ptg:focus-visible{outline:2px solid #EDF0F4;outline-offset:2px}
+.ib{width:30px;height:30px;border-radius:7px;border:0;background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.ib:hover{background:#1A1F27}
+.ptg{height:30px;padding:0 10px;border-radius:7px;display:inline-flex;align-items:center;gap:7px;font:600 12.5px Inter,sans-serif;cursor:pointer}
+</style>
+</helmet>
+<div style="width:1344px;height:660px;box-sizing:border-box;background:#0A0C0F;border:1px solid #262C36;border-radius:14px;overflow:hidden;color:#EDF0F4;font-family:Inter,sans-serif;display:flex;flex-direction:column;box-shadow:0 30px 80px rgba(0,0,0,.6)">
+<div style="height:46px;flex:none;display:flex;align-items:center;gap:14px;padding:0 10px 0 16px;border-bottom:1px solid #1A1F27;background:#0D0F13">
+<span style="font:700 15px 'Space Grotesk',sans-serif">Helldivers 2</span>
+<span style="font-size:12.5px;color:#8E98A8">Main · Keys</span>
+<div style="flex:1"></div>
+<button type="button" class="ptg" aria-pressed="{{pedalsPressed}}" onClick="{{togglePedals}}" style="{{pedalsBtn}}"><span style="{{pedalsDot}}"></span>Pedals</button>
+<div style="display:flex;gap:2px;padding:3px;background:#111419;border:1px solid #20252E;border-radius:9px">
+<a class="tab" href="Play.dc.html" aria-current="page" style="background:#262C36;color:#EDF0F4;box-shadow:inset 0 -2px 0 #FFB224">Azerons</a>
+<a class="tab" href="PlayKeys.dc.html" style="color:#8E98A8">Keyboard</a>
+<a class="tab" href="PlayPad.dc.html" style="color:#8E98A8">Controller</a>
+</div>
+<button type="button" class="ib" aria-label="Keep on top" aria-pressed="true" style="background:#2A2412"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#FFB224" stroke-width="1.6" aria-hidden="true"><path d="M6 2h4l-.5 4 2.5 2.5H4L6.5 6z"></path><path d="M8 8.5V14"></path></svg></button>
+<button type="button" class="ib" aria-label="Close"><svg width="12" height="12" viewBox="0 0 12 12" stroke="#8E98A8" stroke-width="1.8" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8"></path></svg></button>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:12px;padding:12px 20px 0;min-height:0">
+<div style="display:flex;gap:24px">
+<dc-import name="Unit" hand="left" keys="{{keysL}}" lit="{{litL}}" selected="" on-pick="{{pressL}}" hint-size="640px,380px"></dc-import>
+<dc-import name="Unit" hand="right" keys="{{keysR}}" stick="{{stickR}}" lit="{{litR}}" selected="" on-pick="{{pressR}}" hint-size="640px,380px"></dc-import>
+</div>
+<sc-if value="{{showPedals}}" hint-placeholder-val="{{true}}">
+<dc-import name="Pedals" axes="{{axes}}" lit="{{litP}}" selected="" on-pick="{{pressP}}" hint-size="600px,112px"></dc-import>
+</sc-if>
+</div>
+<div style="height:52px;flex:none;display:flex;align-items:center;gap:10px;padding:0 20px">
+<span style="font:600 11px Inter,sans-serif;color:#8E98A8;text-transform:uppercase;letter-spacing:.07em;margin-right:4px">Last</span>
+<sc-for list="{{recent}}" as="r" hint-placeholder-count="4">
+<span style="{{r.style}}">{{r.label}}<span style="color:#8E98A8;font-weight:500">{{r.where}}</span></span>
+</sc-for>
+<div style="flex:1"></div>
+<span style="font-size:12px;color:#8E98A8">Presses on any device light up here. Click a key to try it.</span>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1344,"height":660}}'>
+class Component extends DCLogic {
+constructor(p) { super(p); this.state = { lit: 'L:middle_4', pedals: true, pv: { ltoe: 0, rudder: 50, rtoe: 0 }, recent: [['Use stim', 'left'], ['Reload', 'left'], ['Sprint', 'pedals'], ['Fire', 'right']] }; }
+componentWillUnmount() { clearTimeout(this.t); }
+renderVals() {
+const s = this.state;
+const keysL = {
+index_1: ['Prone', 'move'], index_2: ['Jump', 'move'], index_3: ['Sprint', 'move'], index_4: ['Crouch', 'move'], index_5: ['Dive', 'move'],
+middle_1: ['Interact', 'ability'], middle_2: ['Reload', 'combat'], middle_3: ['Melee', 'combat'], middle_4: ['Use stim', 'ability'], middle_5: ['Flashlight', 'ability'],
+ring_1: ['Primary', 'combat'], ring_2: ['Secondary', 'combat'], ring_3: ['Support weapon', 'combat'], ring_4: ['Grenade', 'combat'], ring_5: ['Fire mode', 'combat'],
+pinky_1: ['Map', 'menu'], pinky_2: ['Drop item', 'ability'], pinky_3: ['Stratagems', 'ability', '', 'M'], pinky_4: ['Emote', 'menu'],
+pinky_side: ['Ping', 'ability'], index_side: ['Throw grenade', 'combat'],
+dpad_up: ['Strat ↑', 'ability'], dpad_down: ['Strat ↓', 'ability'], dpad_left: ['Strat ←', 'ability'], dpad_right: ['Strat →', 'ability'], dpad_press: ['Equip', 'menu'],
+thumb_aux_upper: ['Swap weapon', 'combat'], thumb_aux_lower: ['Dive', 'move']
+};
+const keysR = {
+index_1: ['Fire', 'combat'], index_2: ['Aim', 'combat'], index_3: ['Weapon menu', 'menu'], index_4: ['Change scope', 'combat'],
+middle_1: ['Stratagems', 'ability'], middle_2: ['Ping', 'ability'], middle_3: ['Map', 'menu'], middle_4: ['Communication', 'menu', 'Comms'],
+ring_1: ['Third person', 'ability'], ring_2: ['Toggle FPV', 'ability'],
+pinky_1: ['Menu', 'menu'], index_side: ['Melee', 'combat'],
+dpad_up: ['Strat ↑', 'ability'], dpad_down: ['Strat ↓', 'ability'], dpad_left: ['Strat ←', 'ability'], dpad_right: ['Strat →', 'ability'],
+thumb_aux_upper: ['Reload', 'combat'], thumb_aux_lower: ['Use stim', 'ability']
+};
+const stickR = { up: 'Look up', down: 'Look down', left: 'Look left', right: 'Look right', press: 'Shoulder', role: 'move' };
+const AX = [
+{ id: 'ltoe', name: 'Left toe', drives: 'Sprint', rest: 'end' },
+{ id: 'rudder', name: 'Rudder', drives: '', rest: 'centre' },
+{ id: 'rtoe', name: 'Right toe', drives: 'Use stim', rest: 'end' }
+];
+const flash = (lit, label, where, pv) => {
+clearTimeout(this.t);
+this.setState({ lit, pv: pv || s.pv, recent: [[label, where]].concat(s.recent).slice(0, 5) });
+if (pv) this.t = setTimeout(() => this.setState({ pv: { ltoe: 0, rudder: 50, rtoe: 0 } }), 900);
+};
+const press = (hand, pos) => {
+const map = hand === 'L' ? keysL : keysR;
+const label = pos === 'stick' ? (hand === 'L' ? 'Move' : 'Look') : (map[pos] ? map[pos][0] : null);
+if (!label) return;
+flash(hand + ':' + pos, label, hand === 'L' ? 'left' : 'right');
+};
+const pressP = (id) => {
+const a = AX.find((x) => x.id === id);
+if (!a || !a.drives) return;
+const pv = { ltoe: 0, rudder: 50, rtoe: 0 }; pv[id] = id === 'rudder' ? 20 : 72;
+flash('P:' + id, a.drives, 'pedals', pv);
+};
+const [h, p] = (s.lit || ':').split(':');
+return {
+keysL, keysR, stickR,
+axes: AX.map((a) => Object.assign({}, a, { value: s.pv[a.id] })),
+litL: h === 'L' ? p : '', litR: h === 'R' ? p : '', litP: h === 'P' ? p : '',
+pressL: (pos) => press('L', pos), pressR: (pos) => press('R', pos), pressP,
+showPedals: s.pedals,
+pedalsPressed: s.pedals ? 'true' : 'false',
+togglePedals: () => this.setState({ pedals: !s.pedals }),
+pedalsBtn: s.pedals ? 'background:#1A1F27;color:#EDF0F4;border:1px solid #2A313C' : 'background:transparent;color:#8E98A8;border:1px dashed #6B7687',
+pedalsDot: 'width:7px;height:7px;border-radius:4px;background:' + (s.pedals ? '#4ADE80' : 'transparent') + ';border:1.5px solid ' + (s.pedals ? '#4ADE80' : '#8E98A8') + ';box-sizing:border-box',
+recent: s.recent.map(([label, where], i) => ({
+label, where: ' · ' + where,
+style: 'display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 10px;border-radius:7px;font:600 12.5px Inter,sans-serif;'
++ (i === 0 ? 'background:#3A2E14;color:#FFB224;border:1px solid #5A4316' : 'background:#111419;color:#C3CAD5;border:1px solid #1E232C')
+}))
+};
+}
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Contrast audit</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0A0C0F}
+.h3{margin:0;font:600 11px Inter,sans-serif;color:#8E98A8;text-transform:uppercase;letter-spacing:.07em}
+.row{display:grid;grid-template-columns:72px minmax(0,1fr) 64px 48px 78px;gap:14px;align-items:center;padding:8px 0;border-top:1px solid #1A1F27}
+.num{font:500 12.5px 'JetBrains Mono',monospace;color:#EDF0F4;text-align:right}
+.tag{display:inline-flex;align-items:center;justify-content:center;height:24px;border-radius:12px;font:600 12px Inter,sans-serif}
+</style>
+</helmet>
+<div style="width:820px;box-sizing:border-box;padding:32px;background:#0A0C0F;color:#EDF0F4;font-family:Inter,sans-serif;display:flex;flex-direction:column;gap:20px">
+
+<div style="display:flex;flex-direction:column;gap:8px">
+<h1 style="margin:0;font:700 28px/1.1 'Space Grotesk',sans-serif;letter-spacing:-0.01em">Contrast audit</h1>
+<p style="margin:0;font-size:13.5px;line-height:1.5;color:#C3CAD5">Every pair is measured against WCAG 2.2 AA. Text needs 4.5:1. Shapes you must find to use a control need 3:1. Ratios below are computed from the swatches shown, not typed in.</p>
+</div>
+
+<div style="display:flex;flex-direction:column">
+<span class="h3" style="padding-bottom:8px">In use · text</span>
+<sc-for list="{{textRows}}" as="r" hint-placeholder-count="11">
+<div class="row">
+<div style="{{r.sample}}">Aa</div>
+<div style="display:flex;flex-direction:column;gap:2px;min-width:0"><span style="font:600 13.5px Inter,sans-serif">{{r.name}}</span><span style="font:500 11.5px 'JetBrains Mono',monospace;color:#8E98A8">{{r.hex}}</span></div>
+<span class="num">{{r.ratio}}</span>
+<span class="num" style="color:#8E98A8">{{r.need}}</span>
+<span class="tag" style="{{r.tag}}">{{r.verdict}}</span>
+</div>
+</sc-for>
+</div>
+
+<div style="display:flex;flex-direction:column">
+<span class="h3" style="padding-bottom:8px">In use · shapes and indicators</span>
+<sc-for list="{{shapeRows}}" as="r" hint-placeholder-count="4">
+<div class="row">
+<div style="{{r.sample}}"></div>
+<div style="display:flex;flex-direction:column;gap:2px;min-width:0"><span style="font:600 13.5px Inter,sans-serif">{{r.name}}</span><span style="font:500 11.5px 'JetBrains Mono',monospace;color:#8E98A8">{{r.hex}}</span></div>
+<span class="num">{{r.ratio}}</span>
+<span class="num" style="color:#8E98A8">{{r.need}}</span>
+<span class="tag" style="{{r.tag}}">{{r.verdict}}</span>
+</div>
+</sc-for>
+</div>
+
+<div style="display:flex;flex-direction:column">
+<span class="h3" style="padding-bottom:8px">Retired · failed the audit</span>
+<sc-for list="{{oldRows}}" as="r" hint-placeholder-count="4">
+<div class="row">
+<div style="{{r.sample}}">{{r.mark}}</div>
+<div style="display:flex;flex-direction:column;gap:2px;min-width:0"><span style="font:600 13.5px Inter,sans-serif">{{r.name}}</span><span style="font:500 11.5px 'JetBrains Mono',monospace;color:#8E98A8">{{r.hex}}</span></div>
+<span class="num">{{r.ratio}}</span>
+<span class="num" style="color:#8E98A8">{{r.need}}</span>
+<span class="tag" style="{{r.tag}}">{{r.verdict}}</span>
+</div>
+</sc-for>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:6px;padding:12px 14px;border-radius:10px;background:#1E1B12;border:1px solid #3A3218">
+<span style="font:600 13.5px Inter,sans-serif">Not counted</span>
+<span style="font-size:13px;line-height:1.45;color:#C3CAD5">Filled key borders (#2A313C) and panel lines (#262C36) are decoration: each key is found by its label, not its edge. An empty slot has no label, so its edge uses the 3:1 grey.</span>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:6px;padding:12px 14px;border-radius:10px;background:#111419;border:1px solid #262C36">
+<span style="font:600 13.5px Inter,sans-serif">Open item</span>
+<span style="font-size:13px;line-height:1.45;color:#C3CAD5">Role dots use five hues of similar lightness. The action's name carries the meaning today, so nothing is lost, but color is the only cue for role. A shape per role would close it.</span>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:10px">
+<span class="h3">Glossary</span>
+<div style="display:grid;grid-template-columns:200px minmax(0,1fr);gap:8px 16px;font-size:13px;line-height:1.45">
+<span style="color:#8E98A8;font-weight:600">Standards</span><span></span>
+<span style="font-weight:600">WCAG 2.2 AA</span><span style="color:#C3CAD5">Web Content Accessibility Guidelines, version 2.2, conformance level AA.</span>
+<span style="font-weight:600">WCAG 1.4.3 Contrast (Minimum)</span><span style="color:#C3CAD5">Text needs 4.5:1, or 3:1 at 24 px and up.</span>
+<span style="font-weight:600">WCAG 1.4.11 Non-text Contrast</span><span style="color:#C3CAD5">Shapes needed to find or understand a control need 3:1.</span>
+<span style="font-weight:600">WCAG 1.4.1 Use of Color</span><span style="color:#C3CAD5">Color cannot be the only way to tell things apart.</span>
+<span style="font-weight:600">WCAG 2.4.7 Focus Visible</span><span style="color:#C3CAD5">Keyboard focus must show on every control.</span>
+<span style="color:#8E98A8;font-weight:600">Measure</span><span></span>
+<span style="font-weight:600">Contrast ratio</span><span style="color:#C3CAD5">(lighter luminance + 0.05) divided by (darker luminance + 0.05). Runs from 1:1 (identical) to 21:1 (black on white).</span>
+</div>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":820,"height":1180}}'>
+class Component extends DCLogic {
+renderVals() {
+const lum = (h) => {
+h = h.replace('#', '');
+const c = [0, 2, 4].map((i) => parseInt(h.substr(i, 2), 16) / 255).map((v) => v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+};
+const cr = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+const PASS = 'background:#122019;color:#4ADE80;';
+const FAIL = 'background:#2A1719;color:#FF8A8A;';
+const mk = (name, fg, bg, need, kind, old) => {
+const r = cr(fg, bg);
+const ok = r >= need;
+const sample = kind === 'text'
+? 'height:36px;border-radius:7px;display:flex;align-items:center;justify-content:center;font:700 16px Inter,sans-serif;background:' + bg + ';color:' + fg + ';border:1px solid #262C36'
+: 'height:36px;border-radius:7px;background:' + bg + ';border:' + (kind === 'dash' ? '2px dashed ' : '2px solid ') + fg;
+return {
+name, hex: fg + ' on ' + bg, sample, mark: kind === 'text' ? 'Aa' : '',
+ratio: r.toFixed(2) + ':1', need: need + ':1',
+verdict: old ? 'Retired' : (ok ? 'Pass' : 'Fail'),
+tag: 'width:78px;' + (old || !ok ? FAIL : PASS)
+};
+};
+const textRows = [
+mk('Text on ground', '#EDF0F4', '#0A0C0F', 4.5, 'text'),
+mk('Secondary on key', '#C3CAD5', '#1A1F27', 4.5, 'text'),
+mk('Muted on panel', '#8E98A8', '#111419', 4.5, 'text'),
+mk('Muted on hover', '#8E98A8', '#222833', 4.5, 'text'),
+mk('Muted on selected segment (lowest)', '#8E98A8', '#262C36', 4.5, 'text'),
+mk('Accent on ground', '#FFB224', '#0A0C0F', 4.5, 'text'),
+mk('Ink on accent button', '#1A1200', '#FFB224', 4.5, 'text'),
+mk('Accent on pressed key', '#FFB224', '#3A2E14', 4.5, 'text'),
+mk('In sync status', '#4ADE80', '#122019', 4.5, 'text'),
+mk('Warning status', '#FFD866', '#2A2412', 4.5, 'text'),
+mk('Error status', '#FF8A8A', '#2A1719', 4.5, 'text')
+];
+const shapeRows = [
+mk('Edge on ground (inputs, controller outline)', '#6B7687', '#0A0C0F', 3, 'dash'),
+mk('Edge on panel (empty slots)', '#6B7687', '#111419', 3, 'dash'),
+mk('Edge on key fill (lowest)', '#6B7687', '#1A1F27', 3, 'dash'),
+mk('Accent ring on panel (selection, active tab)', '#FFB224', '#111419', 3, 'solid')
+];
+const oldRows = [
+mk('Dim text on panel (hand tag, hints)', '#5E6878', '#111419', 4.5, 'text', true),
+mk('Faint text on cover art label', '#4A5362', '#161A22', 4.5, 'text', true),
+mk('Empty slot dashes', '#2E3540', '#111419', 3, 'dash', true),
+mk('Input border', '#262C36', '#0A0C0F', 3, 'dash', true)
+];
+return { textRows, shapeRows, oldRows };
+}
+}
+</script>
+</body>
+</html>
