@@ -10,3 +10,4 @@ export * from './pool';
 export * from './presets/keys';
 export * from './checks';
 export * from './signal';
+export * from './schema';

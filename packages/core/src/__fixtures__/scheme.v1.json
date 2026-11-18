@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "skiff-own-keys",
+  "gameId": "skiff",
+  "name": "Game's own keys",
+  "output": "keys",
+  "padMap": {},
+  "writeGameFile": true,
+  "map": {
+    "ship": { "L.index_1": { "tap": "boost" }, "L.middle_1": { "tap": "fire", "long": "map" } },
+    "foot": { "L.index_1": { "tap": "sprint" } }
+  },
+  "behaviour": { "L.stick": { "stick": { "mode": "keys", "deadzone": 10 } } },
+  "ledger": {
+    "L.middle_1": {
+      "tap": { "kind": "key", "code": "Insert" },
+      "long": { "kind": "key", "code": "Home" }
+    },
+    "L.index_1": { "tap": { "kind": "key", "code": "PageUp" } }
+  },
+  "accepted": [
+    { "rule": "combat-tap-delayed", "control": "L.middle_1", "reason": "Map is a long hold" }
+  ]
+}
