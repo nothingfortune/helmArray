@@ -196,9 +196,7 @@ function sendsNothing(ctx: Context): Finding[] {
     let why: string | undefined;
     if (!known) {
       why = 'is on a control none of your devices has';
-    } else if (!known.button) {
-      continue; // sticks and axes carry actions through their own mode, not a press
-    } else if (known.azeron) {
+    } else if (known.azeron && known.button) {
       if (ctx.pins.get(control)?.presses[press] || flagged.has(control)) continue;
       why =
         ctx.scheme.output === 'pad' && press !== 'tap'
@@ -207,9 +205,11 @@ function sendsNothing(ctx: Context): Finding[] {
             ? 'is on a button that sends no Xbox control'
             : 'is on a button that sends nothing';
     } else if (press !== 'tap') {
-      why = "is on a long press or double tap, which this key doesn't have";
+      // Only a unit's buttons have long presses and double taps. Keys, mouse buttons, the
+      // pad's buttons and triggers, and the sticks only press.
+      why = "is on a long press or double tap, which this control doesn't have";
     } else {
-      continue;
+      continue; // a fixed control sends what it is; a stick or axis carries it through its mode
     }
     out.push({
       rule: 'sends-nothing',

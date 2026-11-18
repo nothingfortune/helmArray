@@ -179,6 +179,22 @@ describe('sends-nothing: a button whose action sends nothing', () => {
     expect(found(plan, 'sends-nothing').map((f) => f.control)).toEqual(['key.W', 'L.nowhere']);
   });
 
+  it("is an error for a long press or double tap on the pad's triggers and the sticks", () => {
+    const plan = run(
+      keys(
+        {},
+        {
+          fight: { 'pad.RT': { long: 'heal' }, 'L.stick': { double: 'pause' } },
+          drive: { 'pad.LT': { tap: 'horn' } },
+        },
+      ),
+    );
+    expect(found(plan, 'sends-nothing').map((f) => [f.mode, f.control])).toEqual([
+      ['fight', 'L.stick'],
+      ['fight', 'pad.RT'],
+    ]);
+  });
+
   it('passes for actions on taps of buttons that send something', () => {
     expect(found(run(xboxControllerPreset(game)), 'sends-nothing')).toEqual([]);
     expect(found(run(keys({}, { fight: { 'key.W': { tap: 'heal' } } })), 'sends-nothing')).toEqual(
