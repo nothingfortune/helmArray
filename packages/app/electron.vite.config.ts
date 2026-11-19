@@ -11,6 +11,12 @@ export default defineConfig({
       externalizeDeps: { exclude: workspace },
     },
   },
+  // A sandboxed page can only run a CommonJS preload, whatever the package's own type.
+  preload: {
+    build: {
+      rollupOptions: { output: { format: 'cjs', entryFileNames: '[name].cjs' } },
+    },
+  },
   renderer: {
     plugins: [react()],
     build: {

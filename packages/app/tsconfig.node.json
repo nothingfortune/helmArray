@@ -4,5 +4,5 @@
     "types": ["node"],
     "allowImportingTsExtensions": true
   },
-  "include": ["src/main", "src/shared", "scripts", "electron.vite.config.ts"]
+  "include": ["src/main", "src/preload", "src/shared", "scripts", "electron.vite.config.ts"]
 }
