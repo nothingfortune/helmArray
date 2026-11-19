@@ -14,6 +14,7 @@
     "@helmarray/azeron": "workspace:*",
     "@helmarray/core": "workspace:*",
     "@helmarray/games": "workspace:*",
+    "node-hid": "3.4.0",
     "radix-ui": "1.8.1",
     "react": "19.3.1",
     "react-dom": "19.3.1"
