@@ -44,6 +44,10 @@ const scheme: Scheme = {
 };
 const records = unitRecords(resolve(scheme, game, BUILT_IN_DEVICES).units.left, CYBORG2_LEFT);
 
+// This package's tests get no DOM or Node types; the timer is the platform's own.
+const later = (globalThis as unknown as { setTimeout: (fn: () => void, ms: number) => unknown })
+  .setTimeout;
+
 async function ready(unit: FakeUnit) {
   const session = new UnitSession(unit);
   const identity = await session.identify();
@@ -120,6 +124,35 @@ describe('a session with a unit', () => {
     expect(failure).toMatchObject({ kind: 'no-answer', written: 0 });
     expect(commands(unit).filter((c) => c === Command.OBM_COPY)).toHaveLength(2);
   });
+
+  it('sends a record again whole when an answer is lost, and it lands intact', async () => {
+    const unit = new FakeUnit({
+      slots: { 0: { name: 'A' } },
+      loseFirstAnswerTo: [Command.OBM_COPY],
+    });
+    const { session } = await ready(unit);
+    const result = await session.write(0, 'Skiff', records);
+    expect(result.differences).toEqual([]);
+    expect(result.written).toBe(records.length);
+  });
+
+  it(
+    'gives up on an answer at its deadline, however much else the unit says',
+    { timeout: 3000 },
+    async () => {
+      const chatter = new Uint8Array(64);
+      chatter.set([2, 0, Command.BUTTON_POSITION, 1, 1, 1, 2, 1, 1]);
+      const chattering = {
+        send: async () => undefined,
+        // A report every millisecond, for as long as anyone listens.
+        receive: () => new Promise<Uint8Array>((done) => later(() => done(chatter), 1)),
+      };
+      const started = Date.now();
+      const session = new UnitSession(chattering, undefined, 30);
+      await expect(session.identify()).rejects.toMatchObject({ kind: 'no-answer' });
+      expect(Date.now() - started).toBeLessThan(1000);
+    },
+  );
 
   it('refuses to delete the slot it runs, or its last', async () => {
     const { session } = await ready(

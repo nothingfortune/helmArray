@@ -24,6 +24,8 @@ export interface FakeUnitOptions {
   chatterEvery?: number;
   /** Commands it never answers, to test what happens when an answer is lost. */
   silentOn?: readonly number[];
+  /** Commands whose first answer is lost, as a dropped report would be. */
+  loseFirstAnswerTo?: readonly number[];
 }
 
 const BUTTON_LENGTH = 68;
@@ -85,6 +87,7 @@ export class FakeUnit implements Transport {
   private stream: Uint8Array[] = [];
   private answers = 0;
   private seq = 0;
+  private readonly lost = new Set<number>();
 
   constructor(private readonly options: FakeUnitOptions = {}) {
     for (const [slot, s] of Object.entries(options.slots ?? { 0: { name: 'Default' } })) {
@@ -137,7 +140,8 @@ export class FakeUnit implements Transport {
         return this.answer(r.command, [slotArg]);
       }
       case Command.OBM_COPY: {
-        const parts = [...(this.incoming.get(r.length) ?? []), ...r.payload];
+        // A first part starts the record afresh: a record sent again begins from part 1.
+        const parts = [...(r.part === 1 ? [] : (this.incoming.get(r.length) ?? [])), ...r.payload];
         this.answer(r.command, [], r.seq); // each part, echoing the host's sequence
         if (parts.length < r.length) return void this.incoming.set(r.length, parts);
         this.incoming.delete(r.length);
@@ -159,6 +163,10 @@ export class FakeUnit implements Transport {
   }
 
   private answer(command: number, payload: number[], seq?: number) {
+    if (this.options.loseFirstAnswerTo?.includes(command) && !this.lost.has(command)) {
+      this.lost.add(command);
+      return;
+    }
     this.outbox.push(unitReport(command, seq ?? this.nextSeq(), 1, 1, payload));
     if (this.options.chatterEvery && ++this.answers % this.options.chatterEvery === 0) {
       this.outbox.unshift(unitReport(Command.BUTTON_POSITION, this.nextSeq(), 1, 1, [1, 1]));

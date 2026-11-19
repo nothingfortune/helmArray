@@ -71,6 +71,8 @@ export class UnitSession {
     private readonly transport: Transport,
     /** Every report out and in, for the log a person opens when something fails. */
     private readonly trace: (line: string) => void = () => undefined,
+    /** How long to wait for an answer, however much else the unit says meanwhile. */
+    private readonly replyMs = REPLY_MS,
   ) {}
 
   /** Who the unit is. Refuses firmware and hardware this protocol wasn't read from. */
@@ -260,9 +262,12 @@ export class UnitSession {
 
   /** The unit's answer to a command (and sequence, when given), passing over the rest. */
   private async reply(command: number, seq?: number): Promise<UnitReport> {
-    const deadline = Date.now() + REPLY_MS;
+    const deadline = Date.now() + this.replyMs;
     for (;;) {
-      const raw = await this.transport.receive(Math.max(0, deadline - Date.now()));
+      // Checked on every report: a unit chattering about button positions must not keep a
+      // lost answer waiting forever.
+      const left = deadline - Date.now();
+      const raw = left > 0 ? await this.transport.receive(left) : null;
       if (raw === null)
         throw new UnitError('no-answer', `The unit didn’t answer ${commandName(command)}.`);
       let report: UnitReport;
