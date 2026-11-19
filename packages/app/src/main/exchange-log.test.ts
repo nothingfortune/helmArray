@@ -162,6 +162,30 @@ describe('exchange log', () => {
       expect(await log.recent(-2)).toEqual([]);
     });
 
+    it('reads both files as they stood, even when a write would rotate them mid-read', async () => {
+      const disk = diskLogFiles;
+      let reads = 0;
+      let log: ReturnType<typeof createExchangeLog> | null = null;
+      const files: LogFiles = {
+        ...disk,
+        read: async (path) => {
+          const text = await disk.read(path);
+          if (reads++ === 0) {
+            // Exchanges go on while the first file is read: enough to rotate.
+            for (let i = 0; i < 5; i++) log?.write('left', `late ${i}`);
+            await new Promise((resolve) => setTimeout(resolve, 20));
+          }
+          return text;
+        },
+      };
+      log = createExchangeLog({ dir, files, maxBytes: 120, now: at('2026-11-19T10:00:00.000Z') });
+      for (let i = 0; i < 3; i++) log.write('left', `early ${i}`);
+      await log.flush();
+      const lines = await log.recent(100);
+      expect(lines.map((l) => l.split('] ')[1])).toEqual(['early 0', 'early 1', 'early 2']);
+      await log.flush();
+    });
+
     it('waits for lines still being written', async () => {
       const log = createExchangeLog({ dir, now: at('2026-11-19T10:00:00.000Z') });
       log.write('left', 'just now');

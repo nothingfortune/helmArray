@@ -135,18 +135,25 @@ export function createExchangeLog(options: ExchangeLogOptions): ExchangeLog {
       write(unit, line);
     },
     flush,
-    recent: async (count) => {
-      await flush();
-      if (!(count > 0)) return [];
-      const lines: string[] = [];
-      for (const path of [previousPath, currentPath]) {
-        try {
-          lines.push(...linesOf(await files.read(path)));
-        } catch (error) {
-          onError(error);
-        }
-      }
-      return lines.slice(-Math.floor(count));
-    },
+    // The read takes its turn in the queue like a write, so no rotation can move lines from one
+    // file to the other between reading the two.
+    recent: (count) =>
+      new Promise<string[]>((resolve) => {
+        if (!(count > 0)) return void flush().then(() => resolve([]));
+        const lines: string[] = [];
+        void enqueue(async () => {
+          try {
+            for (const path of [previousPath, currentPath]) {
+              try {
+                lines.push(...linesOf(await files.read(path)));
+              } catch (error) {
+                onError(error);
+              }
+            }
+          } finally {
+            resolve(lines.slice(-Math.floor(count)));
+          }
+        });
+      }),
   };
 }
