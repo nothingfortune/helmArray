@@ -201,10 +201,10 @@ describe('handsFor', () => {
         kind: 'press',
         hand: 'left',
         ids: [LEFT, RIGHT],
-        prompt: 'Press any key on your left Azeron.',
+        prompt: 'Press the profile button on your left Azeron.',
       },
     });
-    expect(PRESS_PROMPT).toBe('Press any key on your left Azeron.');
+    expect(PRESS_PROMPT).toBe('Press the profile button on your left Azeron.');
   });
 
   it('settles both units from one answer', async () => {

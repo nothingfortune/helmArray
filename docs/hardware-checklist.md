@@ -20,8 +20,10 @@ which step and what the app showed, and attach the exchange log (Settings → Ex
 
 1. [ ] Start helmArray with both units plugged in. Within a few seconds both device chips
        show, and neither shows an error.
-2. [ ] On a fresh install (no settings yet), the app asks for one press at most: *"Press any
-       key on your left Azeron."* After that press, the chips say Left and Right correctly.
+2. [ ] On a fresh install (no settings yet), the app asks for one press at most: *"Press the
+       profile button on your left Azeron."* After that press, the chips say Left and Right
+       correctly, and the unit you pressed is back on the slot it was running (it flicks to the
+       next slot for a moment).
 3. [ ] Quit and start the app again. It asks nothing; Left and Right are still right.
 4. [ ] Unplug the right unit. Its chip turns off within a second. The left chip doesn't change.
 5. [ ] Plug it back in. Its chip comes back as Right without a question.

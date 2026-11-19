@@ -1,7 +1,7 @@
 // Which unit is the left one. A unit's id (the number `identify` reports, e.g. 49229) is
 // permanent, but nothing a unit reports says which hand it is. So the app remembers id -> hand,
 // and asks only when it must. This is the state logic and the prompt text; what listens for the
-// answer (a key press attributed to a device) waits on spike 1 and is not here.
+// answer (the unit whose running slot moves when its profile button is pressed) is hand-finder.ts.
 
 import { randomUUID } from 'node:crypto';
 import { readFile, rename, writeFile } from 'node:fs/promises';
@@ -111,7 +111,7 @@ export interface HandsResult {
   ask: HandQuestion | null;
 }
 
-export const PRESS_PROMPT = 'Press any key on your left Azeron.';
+export const PRESS_PROMPT = 'Press the profile button on your left Azeron.';
 export const CHOOSE_PROMPT = 'Is this your left or right Azeron?';
 
 /**
