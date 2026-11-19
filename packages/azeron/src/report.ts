@@ -113,6 +113,22 @@ export function parseUnitReport(report: Uint8Array): UnitReport {
   };
 }
 
+/** A host report, as a fake unit reads it: `[0][length][command][seq][parts][part][part length]…`. */
+export function parseHostReport(report: Uint8Array): UnitReport {
+  if (report.length !== REPORT_LENGTH || report[0] !== 0) {
+    throw new ProtocolError('Not a host report.');
+  }
+  const at = (i: number) => report[i] ?? 0;
+  return {
+    length: at(1),
+    command: at(2),
+    seq: at(3),
+    parts: at(4),
+    part: at(5),
+    payload: report.slice(HEADER, HEADER + Math.min(at(6), PART_CAPACITY)),
+  };
+}
+
 /** The name of a command byte, for logs. */
 export function commandName(code: number): string {
   const found = (Object.keys(Command) as CommandName[]).find((name) => Command[name] === code);

@@ -4,3 +4,6 @@ export * from './report';
 export * from './records';
 export * from './profile';
 export * from './stored';
+export * from './verify';
+export * from './session';
+export * from './fake';
