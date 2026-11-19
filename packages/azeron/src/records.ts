@@ -250,6 +250,9 @@ export const MAX_PROFILE_NAME = 19;
 
 /** PROFILE_NAME's payload: `[slot][length][name]`, printable ASCII, 1 to 19 characters. */
 export function profileNamePayload(slot: number, name: string): Uint8Array {
+  if (!Number.isInteger(slot) || slot < 0 || slot > 0xff) {
+    throw new ProtocolError(`Slot ${slot} is not one a unit has.`);
+  }
   const bytes = Array.from(name, (ch) => ch.charCodeAt(0));
   if (bytes.length === 0 || bytes.length > MAX_PROFILE_NAME) {
     throw new ProtocolError(`A unit keeps a name of 1 to ${MAX_PROFILE_NAME} characters.`);

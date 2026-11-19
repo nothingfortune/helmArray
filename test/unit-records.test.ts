@@ -286,4 +286,11 @@ describe('the profile name', () => {
     expect(() => profileNamePayload(1, 'Café')).toThrow(ProtocolError);
     expect(profileNamePayload(1, 'x'.repeat(19))).toHaveLength(21);
   });
+
+  it('refuses a slot that would wrap or round to another slot', () => {
+    expect(() => profileNamePayload(257, 'Name')).toThrow(ProtocolError);
+    expect(() => profileNamePayload(1.9, 'Name')).toThrow(ProtocolError);
+    expect(() => profileNamePayload(-1, 'Name')).toThrow(ProtocolError);
+    expect(profileNamePayload(5, 'Name')[0]).toBe(5);
+  });
 });
