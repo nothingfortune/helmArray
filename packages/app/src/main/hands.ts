@@ -24,7 +24,10 @@ export function jsonFileStorage(path: string): HandsStorage {
       try {
         return JSON.parse(await readFile(path, 'utf8')) as unknown;
       } catch (error) {
-        if ((error as { code?: string }).code === 'ENOENT') return undefined;
+        // No file, or one cut short by a crash: either way nothing is remembered, so ask again.
+        if ((error as { code?: string }).code === 'ENOENT' || error instanceof SyntaxError) {
+          return undefined;
+        }
         throw error;
       }
     },

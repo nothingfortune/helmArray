@@ -140,6 +140,19 @@ describe('the hand store', () => {
     expect(store.get(3)).toBe('right');
   });
 
+  it('asks again, rather than failing, when the file was cut short', async () => {
+    await writeFile(file, '{"49229": "le', 'utf8');
+    const store = await openHandStore(jsonFileStorage(file));
+    expect(store.get(LEFT)).toBeUndefined();
+    await store.assign(LEFT, 'left');
+    expect((await openHandStore(jsonFileStorage(file))).get(LEFT)).toBe('left');
+  });
+
+  it('still fails for an error that is not a missing or broken file', async () => {
+    // A folder where the file should be: reading it is an error that must not be hidden.
+    await expect(openHandStore(jsonFileStorage(dir))).rejects.toThrow();
+  });
+
   it('reads a file written by hand', async () => {
     await writeFile(file, JSON.stringify({ [LEFT]: 'left' }), 'utf8');
     expect((await openHandStore(jsonFileStorage(file))).get(LEFT)).toBe('left');
