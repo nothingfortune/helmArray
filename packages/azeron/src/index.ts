@@ -3,3 +3,4 @@
 export * from './report';
 export * from './records';
 export * from './profile';
+export * from './stored';
