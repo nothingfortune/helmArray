@@ -5,3 +5,4 @@ packages/app/src/renderer/styles/tokens.css
 out/
 dist/
 coverage/
+.claude/

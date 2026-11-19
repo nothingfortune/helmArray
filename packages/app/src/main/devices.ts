@@ -86,11 +86,13 @@ export class Devices {
     this.generation++;
     this.cancelNext?.();
     this.cancelNext = null;
-    const closing = [...this.entries.values()].map((entry) => this.drop(entry));
+    // Every unit let go is tracked until its open and close have finished, so a second stop
+    // waits for them too and a restart can't open a path still being let go.
     const hadUnits = this.entries.size > 0;
+    for (const [path, entry] of this.entries) this.cleanUp(path, entry);
     this.entries.clear();
     if (hadUnits) this.emit();
-    await Promise.all([...closing, ...this.cleaning.values()]);
+    await Promise.all([...this.cleaning.values()]);
   }
 
   /** Calls `listener` with a fresh snapshot on every change. Returns the way to stop. */
@@ -154,7 +156,8 @@ export class Devices {
       changed = true;
     }
     if (changed) this.emit();
-    for (const entry of added) void this.connect(entry);
+    // A listener may have stopped the service, or the unit gone, during emit.
+    for (const entry of added) if (!entry.dropped) void this.connect(entry);
   }
 
   private async connect(entry: Entry): Promise<void> {

@@ -545,6 +545,35 @@ describe('the devices service', () => {
       expect(bench.opened).toEqual(['left-path']);
     });
 
+    it('makes a second stop wait for what the first is still letting go', async () => {
+      const gate = deferred();
+      bench.opening = gate.promise;
+      bench.plug('left-path', new FakeUnit({ deviceId: LEFT }));
+      devices.start();
+      await settle();
+      void devices.stop();
+      let second = false;
+      const stopping = devices.stop().then(() => (second = true));
+      await settle();
+      expect(second).toBe(false);
+      gate.release();
+      await stopping;
+      expect(bench.closed).toEqual(['left-path']);
+    });
+
+    it('opens nothing when a listener stops it on the first snapshot', async () => {
+      bench.opening = deferred().promise;
+      bench.plug('left-path', new FakeUnit({ deviceId: LEFT }));
+      let stopping: Promise<void> | null = null;
+      devices.onChange(() => {
+        stopping ??= devices.stop();
+      });
+      devices.start();
+      await settle();
+      await stopping;
+      expect(bench.opened).toEqual([]);
+    });
+
     it('can be started again, and identifies afresh', async () => {
       bench.plug('left-path', new FakeUnit({ deviceId: LEFT }));
       devices.start();
