@@ -28,7 +28,6 @@ export interface FakeUnitOptions {
   loseFirstAnswerTo?: readonly number[];
 }
 
-const BUTTON_LENGTH = 68;
 /** How the unit stores a record: page 0 is the first 53 bytes (106 for the stick). */
 const PAGE0 = { button: 53, stick: 106 };
 const STICK_TYPES = new Set([4, 0x15, 0x28]);
@@ -57,9 +56,22 @@ export function storedFromWritten(w: Uint8Array): Uint8Array {
     return Uint8Array.from(out);
   }
   if (type === 0x23) {
-    // Scroll's stored layout was never captured: the fake keeps what it was sent.
-    const raw = [2, id, pinOne, pinTwo, 0x23, at(4 + 7), at(4 + 7 + 22), ...w.subarray(5)];
-    return Uint8Array.from({ length: BUTTON_LENGTH }, (_, i) => raw[i] ?? 0);
+    // A scrolling tap (written: x 5, y 6, intervals 7 and 9; long at 11 and double at 33, 22
+    // bytes each). Stored as a button, its tap's 6 bytes where a key's 14 would be.
+    out.push(2, id, pinOne, pinTwo, 0x23, at(11), at(33), at(5), at(6));
+    le(be(7));
+    le(be(9));
+    for (const b of [11, 33]) for (let k = 0; k < 7; k++) le(be(b + 1 + k * 2));
+    le(be(27)); // the long press's delay
+    le(be(49)); // the double tap's
+    out.push((at(26) << 1) | (at(48) << 2));
+    out.push(0, 0, 0, 0); // the tap has no hold time or turbo of its own
+    for (const b of [11, 33]) {
+      le(be(b + 18));
+      out.push(at(b + 20), at(b + 21));
+    }
+    out.push(0, 0);
+    return Uint8Array.from(out);
   }
   // A button: tap at 4 (20 bytes), long at 24 and double at 46 (22 bytes, with a delay).
   const blocks = [4, 24, 46];

@@ -108,14 +108,53 @@ describe('a slot stream', () => {
 
 describe('a stored record', () => {
   it('of a type whose layout isn’t known is kept whole, never misread', () => {
-    const raw = Uint8Array.from([2, 9, 14, 255, 0x23, 11, 11, 1, 0, 0x96, 0]);
+    // 16 is a macro, which the app runs itself and stores as nothing anyone has decoded.
+    const raw = Uint8Array.from([2, 9, 14, 255, 16, 11, 11, 1, 0, 0x96, 0]);
     expect(decodeStoredRecord(raw)).toEqual({
       kind: 'undecoded',
       id: 9,
       pinOne: 14,
       pinTwo: 255,
-      typeBytes: [0x23, 11, 11],
+      typeBytes: [16, 11, 11],
       raw,
+    });
+  });
+
+  it('that scrolls reads its direction and intervals where a key’s codes would be', () => {
+    const tail = Array.from({ length: 28 }, () => 0);
+    const raw = Uint8Array.from([
+      2,
+      4,
+      5,
+      255,
+      0x23,
+      6,
+      6,
+      0,
+      0xff,
+      0x96,
+      0,
+      0x2d,
+      0,
+      ...tail,
+      0xf4,
+      1,
+      0xc8,
+      0,
+      ...Array.from({ length: 15 }, () => 0),
+    ]);
+    const record = decodeStoredRecord(raw);
+    expect(record).toMatchObject({
+      kind: 'button',
+      tap: {
+        typeByte: 0x23,
+        keys: [],
+        mods: [],
+        wheel: { x: 0, y: -1, interval: 150, yInterval: 45 },
+      },
+      long: { typeByte: 6 },
+      longDelay: 500,
+      doubleDelay: 200,
     });
   });
 
