@@ -17,6 +17,8 @@ class Bench {
   /** Held by a test to make the next listing or first report slow. */
   listing: Promise<void> | null = null;
   firstReply: Promise<void> | null = null;
+  /** Held by a test to keep openUnit from finishing. */
+  opening: Promise<void> | null = null;
   listingError: Error | null = null;
 
   plug(path: string, unit: FakeUnit) {
@@ -35,6 +37,7 @@ class Bench {
 
   openUnit = async (path: string): Promise<ClosableTransport> => {
     this.opened.push(path);
+    await this.opening;
     const unit = this.plugged.get(path);
     if (!unit) throw new Error('nothing there');
     return {
@@ -476,6 +479,28 @@ describe('the devices service', () => {
       await settle();
       expect(bench.closed).toEqual(['left-path']);
       expect(devices.snapshot().units).toEqual([]);
+    });
+
+    it('resolves only once a unit that was still opening is closed', async () => {
+      const gate = deferred();
+      bench.opening = gate.promise;
+      bench.plug('left-path', new FakeUnit({ deviceId: LEFT }));
+      devices.start();
+      await settle();
+      let stopped = false;
+      const stopping = devices.stop().then(() => (stopped = true));
+      await settle();
+      expect(stopped).toBe(false);
+      expect(bench.closed).toEqual([]);
+      gate.release();
+      await stopping;
+      expect(bench.closed).toEqual(['left-path']);
+      bench.opening = null;
+      devices.start();
+      await settle();
+      expect(bench.opened).toEqual(['left-path', 'left-path']);
+      expect(bench.closed).toEqual(['left-path']);
+      expect(devices.snapshot().units[0]?.state).toBe('ready');
     });
 
     it('can be started again, and identifies afresh', async () => {

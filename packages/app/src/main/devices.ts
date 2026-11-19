@@ -52,6 +52,8 @@ interface Entry {
   session?: UnitSession;
   transport?: ClosableTransport;
   closing?: Promise<void>;
+  /** Settles when `openUnit` has finished, opened or not: stop waits on it to close the unit. */
+  opening?: Promise<void>;
   /** Unplugged (or the service stopped) while it was being set up: nothing more is done to it. */
   dropped: boolean;
 }
@@ -157,7 +159,12 @@ export class Devices {
     try {
       let transport: ClosableTransport;
       try {
-        transport = await this.deps.openUnit(path);
+        const opening = this.deps.openUnit(path);
+        entry.opening = opening.then(
+          () => undefined,
+          () => undefined,
+        );
+        transport = await opening;
       } catch (error) {
         throw new Error(`The unit couldn’t be opened: ${messageOf(error)}`, { cause: error });
       }
@@ -185,9 +192,12 @@ export class Devices {
   }
 
   /** Marks an entry gone and lets go of its transport (now, or when it finishes opening). */
-  private drop(entry: Entry): Promise<void> {
+  private async drop(entry: Entry): Promise<void> {
     entry.dropped = true;
-    return this.close(entry);
+    // A unit still opening has no transport yet: wait for it, so stop() resolves only once
+    // everything it opened is closed and a restart can't open the same path twice.
+    await entry.opening;
+    await this.close(entry);
   }
 
   private close(entry: Entry): Promise<void> {
