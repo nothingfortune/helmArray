@@ -54,6 +54,7 @@ async function ready(unit: FakeUnit) {
   await session.readSlots();
   return { session, identity };
 }
+const UNIT_ID = 49229; // what a FakeUnit says unless told otherwise
 const commands = (unit: FakeUnit) => unit.received.map((r) => parseHostReport(r).command);
 
 describe('a session with a unit', () => {
@@ -77,7 +78,7 @@ describe('a session with a unit', () => {
     });
     const { session } = await ready(unit);
 
-    const result = await session.write(1, 'Skiff', records);
+    const result = await session.write(1, 'Skiff', records, UNIT_ID);
     expect(result.written).toBe(records.length);
     expect(result.differences).toEqual([]);
     expect(result.nameDiffers).toBe(false);
@@ -103,23 +104,91 @@ describe('a session with a unit', () => {
   it('writes over a slot it has without adding one', async () => {
     const unit = new FakeUnit({ slots: { 0: { name: 'Default' }, 1: { name: 'Skiff' } } });
     const { session } = await ready(unit);
-    expect((await session.write(1, 'Skiff', records)).differences).toEqual([]);
+    expect((await session.write(1, 'Skiff', records, UNIT_ID)).differences).toEqual([]);
     expect(commands(unit)).not.toContain(Command.CHECK_PROFILE);
+  });
+
+  describe('a layout meant for another unit', () => {
+    const writing: number[] = [Command.CHECK_PROFILE, Command.PROFILE_NAME, Command.OBM_COPY];
+    const sentWrites = (unit: FakeUnit) => commands(unit).filter((c) => writing.includes(c));
+
+    it('is refused with a plain sentence, and not one report is sent', async () => {
+      const unit = new FakeUnit({ deviceId: 29993, slots: { 0: { name: 'A' } } });
+      const { session } = await ready(unit);
+      const before = unit.received.length;
+      const failure = await session.write(0, 'Skiff', records, 49229).catch((e: unknown) => e);
+      expect(failure).toBeInstanceOf(UnitError);
+      expect(failure).toMatchObject({ kind: 'refused', written: 0 });
+      expect((failure as UnitError).message).toBe(
+        'This layout is for another unit; nothing was written.',
+      );
+      expect(unit.received).toHaveLength(before);
+      expect(sentWrites(unit)).toEqual([]);
+      expect(unit.slots.get(0)?.name).toBe('A');
+      // The same check would catch a send: the matching write does grow what the unit received.
+      await session.write(0, 'Skiff', records, 29993);
+      expect(unit.received.length).toBeGreaterThan(before);
+      expect(sentWrites(unit).length).toBeGreaterThan(0);
+    });
+
+    it('is written when the unit is the one it is for', async () => {
+      const unit = new FakeUnit({ deviceId: 29993, slots: { 0: { name: 'A' } } });
+      const { session } = await ready(unit);
+      const result = await session.write(0, 'Skiff', records, 29993);
+      expect(result.differences).toEqual([]);
+      expect(unit.slots.get(0)?.name).toBe('Skiff');
+    });
+
+    it('is refused after a replug put another unit there, until it is asked for by its own id', async () => {
+      let current = new FakeUnit({ deviceId: 49229, slots: { 0: { name: 'Left' } } });
+      const session = new UnitSession({
+        send: (r) => current.send(r),
+        receive: () => current.receive(),
+      });
+      await session.identify();
+      await session.readSlots();
+      await session.write(0, 'Skiff', records, 49229);
+
+      const replugged = new FakeUnit({ deviceId: 29993, slots: { 0: { name: 'Right' } } });
+      current = replugged;
+      await session.identify();
+      await session.readSlots();
+      const before = replugged.received.length;
+      await expect(session.write(0, 'Skiff', records, 49229)).rejects.toMatchObject({
+        kind: 'refused',
+      });
+      expect(replugged.received).toHaveLength(before);
+      expect(replugged.slots.get(0)?.name).toBe('Right');
+
+      await session.write(0, 'Skiff', records, 29993);
+      expect(replugged.slots.get(0)?.name).toBe('Skiff');
+    });
+
+    it('is refused when the unit identified last was refused, whoever the layout is for', async () => {
+      const unit = new FakeUnit({ firmware: 113 });
+      const session = new UnitSession(unit);
+      await expect(session.identify()).rejects.toThrow(UnitError);
+      await expect(session.write(0, 'Skiff', records, 49229)).rejects.toThrow(
+        'Identify the unit first',
+      );
+    });
   });
 
   it('puts a new slot only at the lowest free number, and sends nothing otherwise', async () => {
     const unit = new FakeUnit({ slots: { 0: { name: 'A' }, 2: { name: 'B' } } });
     const { session } = await ready(unit);
     const before = unit.received.length;
-    await expect(session.write(3, 'Skiff', records)).rejects.toThrow('A new slot goes at 1');
-    await expect(session.write(1, 'x'.repeat(20), records)).rejects.toThrow(ProtocolError);
+    await expect(session.write(3, 'Skiff', records, UNIT_ID)).rejects.toThrow(
+      'A new slot goes at 1',
+    );
+    await expect(session.write(1, 'x'.repeat(20), records, UNIT_ID)).rejects.toThrow(ProtocolError);
     expect(unit.received.length).toBe(before);
   });
 
   it('stops at a lost answer to a record, says how far it got, and never sends it again', async () => {
     const unit = new FakeUnit({ slots: { 0: { name: 'A' } }, silentOn: [Command.OBM_COPY] });
     const { session } = await ready(unit);
-    const failure = await session.write(0, 'Skiff', records).catch((e: unknown) => e);
+    const failure = await session.write(0, 'Skiff', records, UNIT_ID).catch((e: unknown) => e);
     expect(failure).toBeInstanceOf(UnitError);
     expect(failure).toMatchObject({ kind: 'no-answer', written: 0 });
     expect(String(failure)).toContain('Write it again');
@@ -132,9 +201,9 @@ describe('a session with a unit', () => {
       loseFirstAnswerTo: [Command.OBM_COPY],
     });
     const { session } = await ready(unit);
-    await expect(session.write(0, 'Skiff', records)).rejects.toThrow(UnitError);
+    await expect(session.write(0, 'Skiff', records, UNIT_ID)).rejects.toThrow(UnitError);
     await session.readSlots();
-    const again = await session.write(0, 'Skiff', records);
+    const again = await session.write(0, 'Skiff', records, UNIT_ID);
     expect(again.differences).toEqual([]);
     expect(again.written).toBe(records.length);
   });
@@ -161,7 +230,7 @@ describe('a session with a unit', () => {
     const unit = new FakeUnit({ slots: { 0: { name: 'A' } } });
     const { session } = await ready(unit);
     unit.silence(Command.PROFILE_PAYLOAD_V2);
-    const failure = await session.write(0, 'Skiff', records).catch((e: unknown) => e);
+    const failure = await session.write(0, 'Skiff', records, UNIT_ID).catch((e: unknown) => e);
     expect(failure).toMatchObject({ kind: 'no-answer', written: records.length });
     expect(String(failure)).toContain(`All ${records.length} inputs were written`);
     expect(unit.slots.get(0)?.records.size).toBe(records.length);
@@ -173,7 +242,7 @@ describe('a session with a unit', () => {
       loseFirstAnswerTo: [Command.CHECK_PROFILE],
     });
     const { session } = await ready(unit);
-    const result = await session.write(1, 'Skiff', records);
+    const result = await session.write(1, 'Skiff', records, UNIT_ID);
     expect(result.differences).toEqual([]);
     expect(commands(unit).filter((c) => c === Command.CHECK_PROFILE)).toHaveLength(1);
   });
@@ -181,14 +250,16 @@ describe('a session with a unit', () => {
   it('stops when the unit didn’t add the slot, sending nothing else', async () => {
     const unit = new FakeUnit({ slots: { 0: { name: 'A' } }, silentOn: [Command.CHECK_PROFILE] });
     const { session } = await ready(unit);
-    await expect(session.write(1, 'Skiff', records)).rejects.toThrow('nothing else was sent');
+    await expect(session.write(1, 'Skiff', records, UNIT_ID)).rejects.toThrow(
+      'nothing else was sent',
+    );
     expect(commands(unit)).not.toContain(Command.PROFILE_NAME);
   });
 
   it('reads the slots afresh after a failed write before doing anything else', async () => {
     const unit = new FakeUnit({ slots: { 0: { name: 'A' } }, silentOn: [Command.OBM_COPY] });
     const { session } = await ready(unit);
-    await expect(session.write(0, 'Skiff', records)).rejects.toThrow(UnitError);
+    await expect(session.write(0, 'Skiff', records, UNIT_ID)).rejects.toThrow(UnitError);
     await expect(session.deleteSlot(0)).rejects.toThrow('Read the unit');
   });
 
@@ -199,7 +270,9 @@ describe('a session with a unit', () => {
     await expect(session.readSlots()).rejects.toThrow('Identify the unit first');
     await expect(session.deleteSlot(1)).rejects.toThrow('Identify the unit first');
     await expect(session.switchTo(1)).rejects.toThrow('Identify the unit first');
-    await expect(session.write(1, 'Skiff', records)).rejects.toThrow('Identify the unit first');
+    await expect(session.write(1, 'Skiff', records, UNIT_ID)).rejects.toThrow(
+      'Identify the unit first',
+    );
     expect(commands(unit).every((c) => c === Command.FIRMWARE_VERSION)).toBe(true);
   });
 
@@ -210,14 +283,14 @@ describe('a session with a unit', () => {
     await expect(session.deleteSlot(2)).rejects.toThrow(UnitError);
     expect(unit.slots.has(2)).toBe(false);
     const before = unit.received.length;
-    await expect(session.write(2, 'Skiff', records)).rejects.toThrow('Read the unit');
+    await expect(session.write(2, 'Skiff', records, UNIT_ID)).rejects.toThrow('Read the unit');
     expect(unit.received.length).toBe(before);
   });
 
   it('forgets the slots on identifying again, as after a replug', async () => {
     const { session } = await ready(new FakeUnit({ slots: { 0: { name: 'A' } } }));
     await session.identify();
-    await expect(session.write(0, 'Skiff', records)).rejects.toThrow('Read the unit');
+    await expect(session.write(0, 'Skiff', records, UNIT_ID)).rejects.toThrow('Read the unit');
   });
 
   it('keeps the written count when the read-back can’t be decoded', async () => {
@@ -234,7 +307,7 @@ describe('a session with a unit', () => {
     const session = new UnitSession(transport);
     await session.identify();
     await session.readSlots();
-    const write = session.write(0, 'Skiff', records);
+    const write = session.write(0, 'Skiff', records, UNIT_ID);
     corrupt = true;
     const failure = await write.catch((e: unknown) => e);
     expect(failure).toMatchObject({ written: records.length });
@@ -286,7 +359,9 @@ describe('a session with a unit', () => {
   it('refuses a new slot when every slot is in use', async () => {
     const slots = Object.fromEntries([0, 1, 2].map((n) => [n, { name: `S${n}` }]));
     const { session } = await ready(new FakeUnit({ slots, limit: 3 }));
-    await expect(session.write(3, 'Skiff', records)).rejects.toThrow('All 3 slots are in use');
+    await expect(session.write(3, 'Skiff', records, UNIT_ID)).rejects.toThrow(
+      'All 3 slots are in use',
+    );
   });
 
   it('reads the slots again when the stream stops part way', async () => {
@@ -312,7 +387,7 @@ describe('a session with a unit', () => {
   it('refuses to write or delete before the slots are read', async () => {
     const session = new UnitSession(new FakeUnit());
     await session.identify();
-    await expect(session.write(0, 'Skiff', records)).rejects.toThrow('Read the unit');
+    await expect(session.write(0, 'Skiff', records, UNIT_ID)).rejects.toThrow('Read the unit');
     await expect(session.deleteSlot(0)).rejects.toThrow('Read the unit');
   });
 });
