@@ -79,7 +79,15 @@ export interface ExchangeLog {
 const oneLine = (text: string) => text.replace(/\r\n|\r|\n/g, ' ');
 
 export function createExchangeLog(options: ExchangeLogOptions): ExchangeLog {
-  const { dir, files = diskLogFiles, now = () => new Date(), onError = () => undefined } = options;
+  const { dir, files = diskLogFiles, now = () => new Date() } = options;
+  // A reporter that throws must not poison the queue.
+  const onError = (error: unknown) => {
+    try {
+      options.onError?.(error);
+    } catch {
+      // Nothing more can be done about a log that can't say it is failing.
+    }
+  };
   const maxBytes = options.maxBytes ?? DEFAULT_MAX_BYTES;
   const currentPath = join(dir, 'exchange.log');
   const previousPath = join(dir, 'exchange.1.log');
@@ -99,7 +107,15 @@ export function createExchangeLog(options: ExchangeLogOptions): ExchangeLog {
       await files.ensureDir(dir);
       dirReady = true;
     }
-    if ((await files.size(currentPath)) >= maxBytes) await files.rename(currentPath, previousPath);
+    if ((await files.size(currentPath)) >= maxBytes) {
+      try {
+        await files.rename(currentPath, previousPath);
+      } catch (error) {
+        // A viewer holding the file open can refuse the move. Say so, and still write the
+        // line: a log that stops while full is lost exactly when it is wanted.
+        onError(error);
+      }
+    }
     await files.append(currentPath, text);
   };
 

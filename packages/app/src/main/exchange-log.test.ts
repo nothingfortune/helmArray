@@ -196,5 +196,82 @@ describe('exchange log', () => {
       log.write('left', 'kept');
       expect(await log.recent(10)).toEqual(['2026-11-19T10:00:00.000Z [left] kept']);
     });
+
+    it('still writes the line when the full file cannot be moved aside', async () => {
+      const errors: unknown[] = [];
+      const log = createExchangeLog({
+        dir,
+        maxBytes: 50,
+        files: { ...diskLogFiles, rename: () => Promise.reject(new Error('file in use')) },
+        now: at('2026-11-19T10:00:00.000Z'),
+        onError: (error) => errors.push(error),
+      });
+      for (let i = 0; i < 5; i++) log.write('left', `line ${i}`);
+      const lines = await log.recent(10);
+      expect(lines.map((l) => l.split('] ')[1])).toEqual([
+        'line 0',
+        'line 1',
+        'line 2',
+        'line 3',
+        'line 4',
+      ]);
+      expect(errors.length).toBeGreaterThan(0);
+    });
+
+    it('is not stopped by an error reporter that throws', async () => {
+      const fail = new Set(['append']);
+      const log = createExchangeLog({
+        dir,
+        files: failing(fail),
+        now: at('2026-11-19T10:00:00.000Z'),
+        onError: () => {
+          throw new Error('reporter broke');
+        },
+      });
+      log.write('left', 'lost');
+      await log.flush();
+      fail.clear();
+      log.write('left', 'kept');
+      expect(await log.recent(10)).toEqual(['2026-11-19T10:00:00.000Z [left] kept']);
+    });
+  });
+
+  it('never runs two file operations at once, and keeps the order, with slow files', async () => {
+    let running = 0;
+    let overlapped = false;
+    let held = '';
+    const slow = async <T>(work: () => T): Promise<T> => {
+      running++;
+      if (running > 1) overlapped = true;
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      const result = work();
+      running--;
+      return result;
+    };
+    const files: LogFiles = {
+      ensureDir: () => slow(() => undefined),
+      append: (_path, text) =>
+        slow(() => {
+          held += text;
+        }),
+      size: () => slow(() => held.length),
+      rename: () => slow(() => undefined),
+      read: () => slow(() => held),
+    };
+    const log = createExchangeLog({
+      dir,
+      files,
+      maxBytes: 200,
+      now: at('2026-11-19T10:00:00.000Z'),
+    });
+    for (let i = 0; i < 20; i++) log.write('left', `n${i}`);
+    await log.flush();
+    expect(overlapped).toBe(false);
+    expect(
+      held
+        .split('\n')
+        .filter(Boolean)
+        .map((l) => l.split('] ')[1]),
+    ).toEqual(Array.from({ length: 20 }, (_, i) => `n${i}`));
   });
 });
