@@ -104,6 +104,8 @@ function compareStick(out: Difference[], meant: StickRecord, stored: StoredStick
     ['smoothing', t.isAnalogSmoothing, stored.isAnalogSmoothing],
     ['trigger magnitude', t.triggerMagnitude, stored.triggerMagnitude],
     ['combined, hold trigger and angle lock', others, storedOthers],
+    // Bits 5–7 mean nothing anyone has seen set: one that is set is a difference, not noise.
+    ['unknown switches', 0, stored.switches & 0xe0],
     ['invert X', t.invertXAxis, stored.invertXAxis],
     ['invert Y', t.invertYAxis, stored.invertYAxis],
     ['combined magnitude', t.combinedAnalogMagnitude, stored.combinedAnalogMagnitude],

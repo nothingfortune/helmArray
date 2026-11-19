@@ -99,6 +99,32 @@ describe('a slot stream', () => {
     expect(() => new SlotStream().push(piece(0, 1, [4, 2, 0], []))).toThrow(ProtocolError);
   });
 
+  it('reads on past a record it can’t decode, to the records and slots after it', () => {
+    const macro = {
+      page0: [2, 4, 5, 255, 16, 11, 11, ...Array.from({ length: 46 }, () => 9)],
+      page1: [9, 9, 9],
+    };
+    const key = button(6, 9, [1, 11, 11]);
+    const stream = new SlotStream();
+    const items = 7;
+    stream.push(name(0, items, 0, 'One'));
+    stream.push(settings(1, items));
+    stream.push(piece(2, items, [4, 2, 0], macro.page0));
+    stream.push(piece(2, items, [4, 2, 1], macro.page1));
+    stream.push(piece(3, items, [6, 2, 0], key.page0));
+    stream.push(piece(3, items, [6, 2, 1], key.page1));
+    stream.push(name(4, items, 1, 'Two'));
+    stream.push(settings(5, items));
+    stream.push(piece(6, items, [6, 2, 0], key.page0));
+    expect(stream.push(piece(7, items, [6, 2, 1], key.page1))).toBe(true);
+    const [one, two] = stream.slots();
+    expect(one?.records.map((r) => [r.id, r.kind])).toEqual([
+      [4, 'undecoded'],
+      [6, 'button'],
+    ]);
+    expect(two?.records.map((r) => [r.id, r.kind])).toEqual([[6, 'button']]);
+  });
+
   it('has no slots to give before it ends', () => {
     const stream = new SlotStream();
     stream.push(name(0, 2, 0, 'A'));

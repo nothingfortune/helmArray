@@ -73,10 +73,10 @@ given is never re-dealt across edits, and every check has a passing and a failin
 - A fake unit that misbehaves as the real ones do: `REQUEST_PROFILE` answers with the running
   slot, and `CHECK_PROFILE` only answers for the lowest free number.
 
-Open from the legacy work (`reference/legacy/handoff-2026-11-15.md`): how a unit stores scroll is
-not captured (read it back as undecoded, never misread), nor is the stick as the Xbox **right**
-stick, nor a chord. Each needs a **[local]** capture before it is built
-(`reference/captures/RECON-STEPS.md`).
+Open from the legacy work (`reference/legacy/handoff-2026-11-15.md`): how a unit stores scroll,
+the stick as the Xbox **right** stick, and a chord each needed a **[local]** capture. The
+captures of 2026-11-19 (`reference/captures/2026-11-19/FINDINGS.md`) settled scroll and the
+right stick, now built; a chord was written by the app but waits on the model (one key per press).
 
 **Done when** a write reproduces `onboard-112.json` byte for byte, every reference capture
 parses, and the session's write → verify → switch → clean-up passes against the fake.

@@ -26,6 +26,8 @@ export interface FakeUnitOptions {
   silentOn?: readonly number[];
   /** Commands whose first answer is lost, as a dropped report would be. */
   loseFirstAnswerTo?: readonly number[];
+  /** Commands it answers without doing, as a unit that ignored them would. */
+  ignore?: readonly number[];
 }
 
 /** How the unit stores a record: page 0 is the first 53 bytes (106 for the stick). */
@@ -115,6 +117,7 @@ export class FakeUnit implements Transport {
     const r = parseHostReport(report);
     if (this.options.silentOn?.includes(r.command) || this.silenced.has(r.command)) return;
     const slotArg = r.payload[0] ?? 0;
+    const ignored = this.options.ignore?.includes(r.command) ?? false;
     switch (r.command) {
       case Command.FIRMWARE_VERSION:
         return this.answer(r.command, [this.options.firmware ?? 112, this.options.keypadType ?? 8]);
@@ -145,7 +148,9 @@ export class FakeUnit implements Transport {
       }
       case Command.PROFILE_NAME: {
         const slot = this.slots.get(slotArg);
-        if (slot)
+        // A slot it doesn't hold gets silence: a write there must fail, not seem to land.
+        if (!slot) return;
+        if (!ignored)
           slot.name = String.fromCharCode(...r.payload.slice(2, 2 + (r.payload[1] ?? 0))).slice(
             0,
             19,
@@ -153,22 +158,31 @@ export class FakeUnit implements Transport {
         return this.answer(r.command, [slotArg]);
       }
       case Command.OBM_COPY: {
+        if (r.part === 1 && !this.slots.has(r.payload[0] ?? -1)) return;
         // A first part starts the record afresh: a record sent again begins from part 1.
         const parts = [...(r.part === 1 ? [] : (this.incoming.get(r.length) ?? [])), ...r.payload];
         this.answer(r.command, [], r.seq); // each part, echoing the host's sequence
         if (parts.length < r.length) return void this.incoming.set(r.length, parts);
         this.incoming.delete(r.length);
         const written = Uint8Array.from(parts);
-        this.slots.get(written[0] ?? -1)?.records.set(written[1] ?? 0, storedFromWritten(written));
+        if (!ignored)
+          this.slots
+            .get(written[0] ?? -1)
+            ?.records.set(written[1] ?? 0, storedFromWritten(written));
         return;
       }
       case Command.SWITCH_PROFILE:
-        if (this.slots.has(slotArg)) this.running = slotArg;
+        if (this.slots.has(slotArg) && !ignored) this.running = slotArg;
         return this.answer(r.command, [this.running]);
       case Command.DELETE_PROFILE:
-        if (slotArg !== this.running) this.slots.delete(slotArg);
+        if (slotArg !== this.running && !ignored) this.slots.delete(slotArg);
         return this.answer(r.command, []);
     }
+  }
+
+  /** Puts a report in front of whatever the unit says next, as a late answer would arrive. */
+  inject(report: Uint8Array) {
+    this.outbox.push(report);
   }
 
   /** Stops answering a command from now on, as a unit that has stopped listening would. */
@@ -193,7 +207,14 @@ export class FakeUnit implements Transport {
 
   private next() {
     const report = this.stream.shift();
-    if (report) this.outbox.push(report);
+    if (!report) return;
+    const losing = this.options.loseFirstAnswerTo?.includes(Command.PROFILE_PAYLOAD_V2);
+    if (losing && !this.lost.has(Command.PROFILE_PAYLOAD_V2)) {
+      // The first piece goes missing: the stream stops there, waiting for an acknowledgement.
+      this.lost.add(Command.PROFILE_PAYLOAD_V2);
+      return;
+    }
+    this.outbox.push(report);
   }
 
   private nextSeq() {

@@ -132,12 +132,14 @@ describe('what the units sent', () => {
   ].flatMap((f) => reportsIn(json(f)).filter((r) => !r.path.includes('.host')));
   const fromCaptures = captured('in');
 
-  it('all parses, with each part inside its report', () => {
-    const all = [...fromFixtures, ...fromCaptures];
+  it('all parses, and every streamed piece passes its check byte', () => {
+    const all = [...fromFixtures, ...fromCaptures].map(({ hex }) => parseUnitReport(fromHex(hex)));
     expect(all.length).toBeGreaterThan(500);
-    for (const { hex } of all) {
-      const report = parseUnitReport(fromHex(hex));
-      expect(report.payload.length).toBe(fromHex(hex)[6]);
+    const pieces = all.filter((r) => r.command === Command.PROFILE_PAYLOAD_V2);
+    expect(pieces.length).toBeGreaterThan(200);
+    for (const { payload } of pieces) {
+      const [a = 0, b = 0, c = 0, check] = payload;
+      expect(check).toBe(a ^ b ^ c);
     }
   });
 

@@ -168,7 +168,13 @@ function blockFor(signal: Signal, pin: PinPlan, where: string): Block {
 function pressBlock(pin: PinPlan, press: Press, where: string): Block | WheelTap {
   const signal = pin.presses[press];
   if (!signal) return EMPTY;
-  if (signal.kind === 'scroll' && press === 'tap') return scroll(signal.dir, signal.speed, where);
+  if (signal.kind === 'scroll' && press === 'tap') {
+    // A stored scroll has no room for hold or turbo: refused rather than dropped unsaid.
+    if (pin.latch || pin.turbo !== false) {
+      throw new ProtocolError(`${where}: a scroll can't latch or repeat on the unit.`);
+    }
+    return scroll(signal.dir, signal.speed, where);
+  }
   return blockFor(signal, pin, `${where} ${press}`);
 }
 

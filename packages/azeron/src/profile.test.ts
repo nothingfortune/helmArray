@@ -63,6 +63,12 @@ describe('a button', () => {
     expect(r?.double).toMatchObject({ type: 'pad', keys: [0x0004] });
   });
 
+  it('refuses a scroll that latches or repeats, which the unit has no room for', () => {
+    const up = { tap: { kind: 'scroll', dir: 'up', speed: 33 } } as const;
+    expect(() => index1(profile([pin(up, { latch: true })]))).toThrow('latch or repeat');
+    expect(() => index1(profile([pin(up, { turbo: { interval: 20 } })]))).toThrow(ProtocolError);
+  });
+
   it('sends mouse back and forward as buttons 4 and 5', () => {
     const r = index1(
       profile([
