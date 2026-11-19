@@ -1,14 +1,17 @@
 import type { BrowserWindowConstructorOptions } from 'electron';
 import { color } from '../shared/tokens';
 
-// Every window runs its page sandboxed, with no Node and an isolated context.
-const webPreferences = {
-  contextIsolation: true,
-  nodeIntegration: false,
-  sandbox: true,
-} as const;
+// Every window runs its page sandboxed, with no Node and an isolated context. The preload (the
+// built file, given by the caller) is the only way in: it hands the page `window.helm`.
+const webPreferences = (preload: string) =>
+  ({
+    contextIsolation: true,
+    nodeIntegration: false,
+    sandbox: true,
+    preload,
+  }) as const;
 
-export function mainWindowOptions(): BrowserWindowConstructorOptions {
+export function mainWindowOptions(preload: string): BrowserWindowConstructorOptions {
   return {
     title: 'helmArray',
     width: 1440,
@@ -18,12 +21,12 @@ export function mainWindowOptions(): BrowserWindowConstructorOptions {
     backgroundColor: color.bg,
     show: false,
     autoHideMenuBar: true,
-    webPreferences: { ...webPreferences },
+    webPreferences: webPreferences(preload),
   };
 }
 
 // Play view: its own small window, kept on top of the game.
-export function playWindowOptions(): BrowserWindowConstructorOptions {
+export function playWindowOptions(preload: string): BrowserWindowConstructorOptions {
   return {
     title: 'helmArray Play view',
     width: 1344,
@@ -34,6 +37,6 @@ export function playWindowOptions(): BrowserWindowConstructorOptions {
     alwaysOnTop: true,
     backgroundColor: color.bg,
     show: false,
-    webPreferences: { ...webPreferences },
+    webPreferences: webPreferences(preload),
   };
 }

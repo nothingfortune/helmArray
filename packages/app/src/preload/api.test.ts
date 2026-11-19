@@ -1,0 +1,96 @@
+import { describe, expect, it } from 'vitest';
+import type { AppState } from '../shared/api';
+import { CHANNELS } from '../shared/api';
+import { createHelmApi } from './api';
+import type { IpcBridge } from './api';
+
+const STATE: AppState = {
+  devices: [],
+  sync: { label: 'Not checked yet', tone: 'warning' },
+  writeBlock: null,
+  question: null,
+};
+
+function bridge() {
+  const invoked: [string, unknown[]][] = [];
+  const listeners = new Map<string, Set<(event: unknown, ...args: unknown[]) => void>>();
+  const ipc: IpcBridge = {
+    invoke: (channel, ...args) => {
+      invoked.push([channel, args]);
+      return Promise.resolve(channel === CHANNELS.recentLog ? ['a line'] : STATE);
+    },
+    on: (channel, listener) => {
+      const set = listeners.get(channel) ?? new Set();
+      set.add(listener);
+      listeners.set(channel, set);
+    },
+    removeListener: (channel, listener) => void listeners.get(channel)?.delete(listener),
+  };
+  const emit = (channel: string, ...args: unknown[]) => {
+    for (const listener of [...(listeners.get(channel) ?? [])])
+      listener({ sender: 'electron' }, ...args);
+  };
+  return { ipc, invoked, listeners, emit };
+}
+
+describe('window.helm', () => {
+  it('asks the state over its channel', async () => {
+    const b = bridge();
+    expect(await createHelmApi(b.ipc).state()).toEqual(STATE);
+    expect(b.invoked).toEqual([[CHANNELS.state, []]]);
+  });
+
+  it('gives a listener the state, never the event', () => {
+    const b = bridge();
+    const seen: unknown[][] = [];
+    createHelmApi(b.ipc).onState((...args: unknown[]) => void seen.push(args));
+    b.emit(CHANNELS.stateChanged, STATE);
+    expect(seen).toEqual([[STATE]]);
+  });
+
+  it('stops listening when told to', () => {
+    const b = bridge();
+    const seen: unknown[] = [];
+    const stop = createHelmApi(b.ipc).onState((state) => void seen.push(state));
+    stop();
+    b.emit(CHANNELS.stateChanged, STATE);
+    expect(seen).toEqual([]);
+    expect(b.listeners.get(CHANNELS.stateChanged)?.size).toBe(0);
+  });
+
+  it('keeps two listeners apart', () => {
+    const b = bridge();
+    const api = createHelmApi(b.ipc);
+    const first: unknown[] = [];
+    const second: unknown[] = [];
+    const stopFirst = api.onState((state) => void first.push(state));
+    api.onState((state) => void second.push(state));
+    stopFirst();
+    b.emit(CHANNELS.stateChanged, STATE);
+    expect([first.length, second.length]).toEqual([0, 1]);
+  });
+
+  it('sends a hand choice with the unit and the hand', async () => {
+    const b = bridge();
+    await createHelmApi(b.ipc).chooseHand(49229, 'left');
+    expect(b.invoked).toEqual([[CHANNELS.chooseHand, [49229, 'left']]]);
+  });
+
+  it('asks for the log lines, and gets them', async () => {
+    const b = bridge();
+    expect(await createHelmApi(b.ipc).recentLog(20)).toEqual(['a line']);
+    expect(b.invoked).toEqual([[CHANNELS.recentLog, [20]]]);
+  });
+
+  it('asks to open the log folder', async () => {
+    const b = bridge();
+    await createHelmApi(b.ipc).openLogFolder();
+    expect(b.invoked).toEqual([[CHANNELS.openLogFolder, []]]);
+  });
+
+  it('resolves chooseHand and openLogFolder with nothing', async () => {
+    const api = createHelmApi(bridge().ipc);
+    expect(await api.chooseHand(1, 'right')).toBeUndefined();
+    expect(await api.openLogFolder()).toBeUndefined();
+  });
+});

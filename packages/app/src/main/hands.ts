@@ -1,7 +1,7 @@
 // Which unit is the left one. A unit's id (the number `identify` reports, e.g. 49229) is
 // permanent, but nothing a unit reports says which hand it is. So the app remembers id -> hand,
 // and asks only when it must. This is the state logic and the prompt text; what listens for the
-// answer (a key press attributed to a device) waits on spike 1 and is not here.
+// answer (the first of the two units to be unplugged) is hand-finder.ts.
 
 import { randomUUID } from 'node:crypto';
 import { readFile, rename, writeFile } from 'node:fs/promises';
@@ -94,12 +94,12 @@ export interface UnitHand {
 /** What to ask the person, when the units alone can't settle it. */
 export type HandQuestion =
   /**
-   * Two units, neither known. The press says which of `ids` is `hand`; the other follows.
-   * Answer with `assign(<the id the press came from>, hand)`.
+   * Two units, neither known. Whichever of `ids` is unplugged first is `hand`; the other follows.
+   * Answer with `assign(<the id that went>, hand)`.
    */
   | { kind: 'press'; hand: Hand; ids: [number, number]; prompt: string }
   /**
-   * A press can't say which unit it came from when only one is there, so ask outright.
+   * Unplugging can't tell one unit from another when only one is there, so ask outright.
    * Answer with `assign(id, <the hand chosen>)`.
    */
   | { kind: 'choose'; id: number; prompt: string };
@@ -111,7 +111,7 @@ export interface HandsResult {
   ask: HandQuestion | null;
 }
 
-export const PRESS_PROMPT = 'Press any key on your left Azeron.';
+export const PRESS_PROMPT = 'Unplug your left Azeron for a moment, then plug it back in.';
 export const CHOOSE_PROMPT = 'Is this your left or right Azeron?';
 
 /**
