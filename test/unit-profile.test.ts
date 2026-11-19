@@ -173,12 +173,18 @@ describe('the stick', () => {
     );
   });
 
-  it('as a mouse, carries its sensitivity', () => {
+  it('as a mouse, tunes as the app wrote the owner’s “super sensitive” stick', () => {
+    const sent = json<{ records: { capture: string; slot: number; input: Input; wire: string }[] }>(
+      'unit-protocol/onboard-112.json',
+    ).records.find((r) => r.capture === 'joystick-mouse' && r.input.pinTwo === 30);
     const stick = unitRecords(
-      left({ mode: 'mouse', sensitivity: 2, angle: 0, invertX: false }),
+      left({ mode: 'mouse', sensitivity: 2, angle: 5, invertX: false }),
       CYBORG2_LEFT,
     ).find((r) => r.kind === 'stick');
-    expect(stick && encodeRecord(1, stick)[16]).toBe(2);
+    // Header and tuning: the directions after byte 38 are keys the template left behind.
+    expect(stick && toHex(encodeRecord(sent?.slot ?? 0, stick)).slice(0, 76)).toBe(
+      sent?.wire.slice(0, 76),
+    );
   });
 });
 

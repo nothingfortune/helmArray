@@ -33,4 +33,6 @@ id 29993, USB device 4. Decoded into `../../unit-protocol/captures-2026-11-19.js
 - **The app** deletes a slot with `DELETE_PROFILE` before adding one where the owner chose,
   adds with `CHECK_PROFILE` at the lowest free number, and switches to the slot it wrote.
 - **Reading on connect**, it streamed the left unit's four older slots in one stream (`parts`
-  135), then the newly written slot 3 on its own (`parts` 33).
+  135), then slot 3 on its own (`parts` 33). That second stream answered a `REQUEST_PROFILE`
+  for slot **2**: the unit sent slot 3, the one it was running. This confirms on firmware 112
+  why helmArray never sends `REQUEST_PROFILE`, and reads slots only with `PROFILE_PAYLOAD_V2`.

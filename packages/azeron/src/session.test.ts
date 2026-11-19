@@ -96,6 +96,7 @@ describe('a session with a unit', () => {
     expect(sent.every((c) => SENDABLE.some((n) => names.find(([k]) => k === n)?.[1] === c))).toBe(
       true,
     );
+    expect(sent.indexOf(Command.CHECK_PROFILE)).toBeGreaterThanOrEqual(0);
     expect(sent.indexOf(Command.CHECK_PROFILE)).toBeLessThan(sent.indexOf(Command.PROFILE_NAME));
   });
 
@@ -115,24 +116,27 @@ describe('a session with a unit', () => {
     expect(unit.received.length).toBe(before);
   });
 
-  it('says how far a write got when the unit stops answering, after one more try', async () => {
+  it('stops at a lost answer to a record, says how far it got, and never sends it again', async () => {
     const unit = new FakeUnit({ slots: { 0: { name: 'A' } }, silentOn: [Command.OBM_COPY] });
     const { session } = await ready(unit);
     const failure = await session.write(0, 'Skiff', records).catch((e: unknown) => e);
     expect(failure).toBeInstanceOf(UnitError);
     expect(failure).toMatchObject({ kind: 'no-answer', written: 0 });
-    expect(commands(unit).filter((c) => c === Command.OBM_COPY)).toHaveLength(2);
+    expect(String(failure)).toContain('Write it again');
+    expect(commands(unit).filter((c) => c === Command.OBM_COPY)).toHaveLength(1);
   });
 
-  it('sends a record again whole when an answer is lost, and it lands intact', async () => {
+  it('after a lost answer to a record, writing the layout again lands it intact', async () => {
     const unit = new FakeUnit({
       slots: { 0: { name: 'A' } },
       loseFirstAnswerTo: [Command.OBM_COPY],
     });
     const { session } = await ready(unit);
-    const result = await session.write(0, 'Skiff', records);
-    expect(result.differences).toEqual([]);
-    expect(result.written).toBe(records.length);
+    await expect(session.write(0, 'Skiff', records)).rejects.toThrow(UnitError);
+    await session.readSlots();
+    const again = await session.write(0, 'Skiff', records);
+    expect(again.differences).toEqual([]);
+    expect(again.written).toBe(records.length);
   });
 
   it(
@@ -197,6 +201,103 @@ describe('a session with a unit', () => {
     await expect(session.switchTo(1)).rejects.toThrow('Identify the unit first');
     await expect(session.write(1, 'Skiff', records)).rejects.toThrow('Identify the unit first');
     expect(commands(unit).every((c) => c === Command.FIRMWARE_VERSION)).toBe(true);
+  });
+
+  it('forgets the slots when a read after a delete fails, so nothing is written on them', async () => {
+    const unit = new FakeUnit({ slots: { 0: { name: 'A' }, 1: { name: 'B' }, 2: { name: 'C' } } });
+    const { session } = await ready(unit);
+    unit.silence(Command.PROFILE_PAYLOAD_V2);
+    await expect(session.deleteSlot(2)).rejects.toThrow(UnitError);
+    expect(unit.slots.has(2)).toBe(false);
+    const before = unit.received.length;
+    await expect(session.write(2, 'Skiff', records)).rejects.toThrow('Read the unit');
+    expect(unit.received.length).toBe(before);
+  });
+
+  it('forgets the slots on identifying again, as after a replug', async () => {
+    const { session } = await ready(new FakeUnit({ slots: { 0: { name: 'A' } } }));
+    await session.identify();
+    await expect(session.write(0, 'Skiff', records)).rejects.toThrow('Read the unit');
+  });
+
+  it('keeps the written count when the read-back can’t be decoded', async () => {
+    const unit = new FakeUnit({ slots: { 0: { name: 'A' } } });
+    let corrupt = false;
+    const transport = {
+      send: (r: Uint8Array) => unit.send(r),
+      receive: async () => {
+        const r = await unit.receive();
+        if (corrupt && r && r[2] === Command.PROFILE_PAYLOAD_V2) r[10] = (r[10] ?? 0) ^ 0xff;
+        return r;
+      },
+    };
+    const session = new UnitSession(transport);
+    await session.identify();
+    await session.readSlots();
+    const write = session.write(0, 'Skiff', records);
+    corrupt = true;
+    const failure = await write.catch((e: unknown) => e);
+    expect(failure).toMatchObject({ written: records.length });
+    expect(String(failure)).toContain('reading the slot back failed');
+  });
+
+  it('passes over a late answer, never taking it for the next one', async () => {
+    const unit = new FakeUnit({ slots: { 0: { name: 'A' }, 1: { name: 'B' } }, running: 1 });
+    const { session } = await ready(unit);
+    const stale = new Uint8Array(64);
+    stale.set([1, 0, Command.HARDWARE_PROFILE_INDEX, 9, 1, 1, 1, 0]); // an old answer: slot 0
+    unit.inject(stale);
+    expect(await session.runningSlot()).toBe(1);
+  });
+
+  it('says so when the unit doesn’t run the slot it was told to', async () => {
+    const { session } = await ready(
+      new FakeUnit({
+        slots: { 0: { name: 'A' }, 1: { name: 'B' } },
+        running: 0,
+        ignore: [Command.SWITCH_PROFILE],
+      }),
+    );
+    await expect(session.switchTo(1)).rejects.toThrow('the unit runs 0');
+  });
+
+  it('says so when a deleted slot is still there', async () => {
+    const { session } = await ready(
+      new FakeUnit({
+        slots: { 0: { name: 'A' }, 1: { name: 'B' } },
+        running: 0,
+        ignore: [Command.DELETE_PROFILE],
+      }),
+    );
+    await expect(session.deleteSlot(1)).rejects.toThrow('still there');
+  });
+
+  it('reads the slots to see a delete whose answer was lost, and finds it done', async () => {
+    const unit = new FakeUnit({
+      slots: { 0: { name: 'A' }, 1: { name: 'B' } },
+      running: 0,
+      loseFirstAnswerTo: [Command.DELETE_PROFILE],
+    });
+    const { session } = await ready(unit);
+    expect((await session.deleteSlot(1)).map((s) => s.slot)).toEqual([0]);
+    expect(commands(unit).filter((c) => c === Command.DELETE_PROFILE)).toHaveLength(1);
+  });
+
+  it('refuses a new slot when every slot is in use', async () => {
+    const slots = Object.fromEntries([0, 1, 2].map((n) => [n, { name: `S${n}` }]));
+    const { session } = await ready(new FakeUnit({ slots, limit: 3 }));
+    await expect(session.write(3, 'Skiff', records)).rejects.toThrow('All 3 slots are in use');
+  });
+
+  it('reads the slots again when the stream stops part way', async () => {
+    const unit = new FakeUnit({
+      slots: { 0: { name: 'A' } },
+      loseFirstAnswerTo: [Command.PROFILE_PAYLOAD_V2],
+    });
+    const session = new UnitSession(unit, undefined, 30);
+    await session.identify();
+    expect((await session.readSlots()).map((s) => s.name)).toEqual(['A']);
+    expect(commands(unit).filter((c) => c === Command.PROFILE_PAYLOAD_V2)).toHaveLength(2);
   });
 
   it('refuses to delete the slot it runs, or its last', async () => {
