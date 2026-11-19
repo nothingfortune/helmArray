@@ -5,6 +5,10 @@ import type { Migration } from './schema';
 import { MIGRATIONS, SchemaError, currentVersion, load, runMigrations, store } from './schema';
 // Frozen: what a scheme looked like on disk at version 1. Never regenerate it.
 import schemeV1 from './__fixtures__/scheme.v1.json';
+import schemeV1Turbo from './__fixtures__/scheme.v1-turbo.json';
+import { BUILT_IN_DEVICES } from './devices/index';
+import { DEFAULT_TURBO_INTERVAL } from './model';
+import { resolve } from './resolve';
 
 const game: Game = {
   id: 'skiff',
@@ -62,6 +66,17 @@ describe('store and load', () => {
       ],
     });
     expect(scheme).not.toHaveProperty('schemaVersion');
+  });
+
+  it('give a version-1 turbo the default rate, so it still repeats and resolves to a rate', () => {
+    const scheme: Scheme = load('scheme', schemeV1Turbo);
+    expect(scheme.behaviour).toEqual({
+      'L.index_1': { turbo: { interval: DEFAULT_TURBO_INTERVAL }, latch: false },
+      'L.index_2': {},
+    });
+    const plan = resolve(scheme, game, BUILT_IN_DEVICES);
+    const pin = plan.units.left.pins.find((p) => p.control === 'L.index_1');
+    expect(pin?.turbo).toEqual({ interval: 50 });
   });
 });
 

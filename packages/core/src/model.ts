@@ -168,6 +168,13 @@ export interface StickBehaviour {
   invertY?: boolean;
 }
 
+/**
+ * helmArray's own turbo rate, in ms between repeats (about 20 a second): what turning turbo on
+ * starts at, and what a version-1 scheme's `turbo: true` became. Not the Azeron app's default,
+ * which was never captured.
+ */
+export const DEFAULT_TURBO_INTERVAL = 50;
+
 export interface Behaviour {
   /** Repeat the key while held, every `interval` ms (1–255), the unit's own turbo. */
   turbo?: { interval: number };

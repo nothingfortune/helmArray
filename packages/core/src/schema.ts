@@ -4,6 +4,7 @@
 
 import { clone } from './clone';
 import type { Game, Scheme } from './model';
+import { DEFAULT_TURBO_INTERVAL } from './model';
 
 /** What a stored file holds, by kind. */
 export interface StoredKinds {
@@ -24,7 +25,18 @@ export type Migration = (doc: Record<string, unknown>) => Record<string, unknown
  * a stored shape changes; never edit or remove one a released app has run.
  */
 export const MIGRATIONS: Readonly<Record<StoredKind, readonly Migration[]>> = {
-  scheme: [],
+  scheme: [
+    // 1 → 2: turbo carries its rate. `turbo: true` repeats at helmArray's default; false is
+    // left out, as a scheme with no turbo leaves it.
+    (doc) => {
+      const behaviour = (doc['behaviour'] ?? {}) as Record<string, Record<string, unknown>>;
+      for (const control of Object.values(behaviour)) {
+        if (control['turbo'] === true) control['turbo'] = { interval: DEFAULT_TURBO_INTERVAL };
+        else if (control['turbo'] === false) delete control['turbo'];
+      }
+      return doc;
+    },
+  ],
   game: [],
 };
 

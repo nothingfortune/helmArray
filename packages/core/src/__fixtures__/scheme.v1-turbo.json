@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "skiff-own-keys",
+  "gameId": "skiff",
+  "name": "Turbo",
+  "output": "keys",
+  "padMap": {},
+  "writeGameFile": true,
+  "map": { "ship": { "L.index_1": { "tap": "boost" } } },
+  "behaviour": {
+    "L.index_1": { "turbo": true, "latch": false },
+    "L.index_2": { "turbo": false }
+  },
+  "ledger": {},
+  "accepted": []
+}
