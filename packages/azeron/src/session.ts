@@ -164,7 +164,22 @@ export class UnitSession {
       }
       written++;
     }
-    const stored = (await this.readSlots()).find((s) => s.slot === slot);
+    let slots: StoredSlot[];
+    try {
+      slots = await this.readSlots();
+    } catch (error) {
+      // Every input went in; only the check didn't happen. Say so, rather than imply nothing
+      // was written.
+      if (error instanceof UnitError) {
+        throw new UnitError(
+          error.kind,
+          `All ${written} inputs were written, but reading the slot back failed: ${error.message}`,
+          written,
+        );
+      }
+      throw error;
+    }
+    const stored = slots.find((s) => s.slot === slot);
     if (!stored) {
       throw new UnitError(
         'refused',

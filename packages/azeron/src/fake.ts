@@ -88,6 +88,7 @@ export class FakeUnit implements Transport {
   private answers = 0;
   private seq = 0;
   private readonly lost = new Set<number>();
+  private readonly silenced = new Set<number>();
 
   constructor(private readonly options: FakeUnitOptions = {}) {
     for (const [slot, s] of Object.entries(options.slots ?? { 0: { name: 'Default' } })) {
@@ -100,7 +101,7 @@ export class FakeUnit implements Transport {
   async send(report: Uint8Array): Promise<void> {
     this.received.push(report);
     const r = parseHostReport(report);
-    if (this.options.silentOn?.includes(r.command)) return;
+    if (this.options.silentOn?.includes(r.command) || this.silenced.has(r.command)) return;
     const slotArg = r.payload[0] ?? 0;
     switch (r.command) {
       case Command.FIRMWARE_VERSION:
@@ -156,6 +157,11 @@ export class FakeUnit implements Transport {
         if (slotArg !== this.running) this.slots.delete(slotArg);
         return this.answer(r.command, []);
     }
+  }
+
+  /** Stops answering a command from now on, as a unit that has stopped listening would. */
+  silence(command: number) {
+    this.silenced.add(command);
   }
 
   async receive(): Promise<Uint8Array | null> {

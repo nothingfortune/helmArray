@@ -154,6 +154,16 @@ describe('a session with a unit', () => {
     },
   );
 
+  it('says every input went in when only the read-back fails', async () => {
+    const unit = new FakeUnit({ slots: { 0: { name: 'A' } } });
+    const { session } = await ready(unit);
+    unit.silence(Command.PROFILE_PAYLOAD_V2);
+    const failure = await session.write(0, 'Skiff', records).catch((e: unknown) => e);
+    expect(failure).toMatchObject({ kind: 'no-answer', written: records.length });
+    expect(String(failure)).toContain(`All ${records.length} inputs were written`);
+    expect(unit.slots.get(0)?.records.size).toBe(records.length);
+  });
+
   it('refuses to delete the slot it runs, or its last', async () => {
     const { session } = await ready(
       new FakeUnit({ slots: { 0: { name: 'A' }, 1: { name: 'B' } }, running: 1 }),
