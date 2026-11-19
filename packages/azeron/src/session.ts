@@ -68,6 +68,8 @@ export class UnitSession {
   private limit: number | null = null;
   /** Set only by an identify that accepted the unit: nothing else is done to one it refused. */
   private identified = false;
+  /** The id of the unit the last accepted identify saw; what a write's layout is checked against. */
+  private unitId: number | null = null;
   /** One operation at a time: two would share the sequence and take each other's answers. */
   private queue: Promise<unknown> = Promise.resolve();
 
@@ -86,6 +88,7 @@ export class UnitSession {
   identify(): Promise<UnitIdentity> {
     return this.exclusive(async () => {
       this.identified = false;
+      this.unitId = null;
       this.slots = null;
       this.limit = null;
       const version = (await this.ask('FIRMWARE_VERSION')).payload;
@@ -111,6 +114,7 @@ export class UnitSession {
       };
       this.limit = limit;
       this.identified = true;
+      this.unitId = identity.deviceId;
       return identity;
     });
   }
@@ -134,8 +138,17 @@ export class UnitSession {
    * CHECK_PROFILE adds it, and a unit answers that only for the lowest free one. An existing
    * slot is renamed and written over. Everything is encoded before anything is sent, so a
    * record the unit can't hold leaves the slot untouched.
+   *
+   * `expectedDeviceId` is the id of the unit the layout is for. If the unit the session last
+   * identified is another one (the other hand, or a different unit after a replug), nothing is
+   * sent.
    */
-  write(slot: number, name: string, records: readonly UnitRecord[]): Promise<WriteResult> {
+  write(
+    slot: number,
+    name: string,
+    records: readonly UnitRecord[],
+    expectedDeviceId: number,
+  ): Promise<WriteResult> {
     return this.exclusive(async () => {
       const encoded = records.map((record) => ({
         id: record.id,
@@ -143,6 +156,10 @@ export class UnitSession {
       }));
       const namePayload = profileNamePayload(slot, name);
       this.requireIdentified();
+      if (this.unitId !== expectedDeviceId) {
+        this.trace(`write refused: layout is for unit ${expectedDeviceId}, this is ${this.unitId}`);
+        throw new UnitError('refused', 'This layout is for another unit; nothing was written.');
+      }
       const held = this.knownSlots();
       const limit = this.limit ?? 0;
       const adding = !held.some((s) => s.slot === slot);
