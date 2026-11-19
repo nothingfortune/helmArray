@@ -66,6 +66,8 @@ export class UnitSession {
   private seq = 0;
   private slots: StoredSlot[] | null = null;
   private limit: number | null = null;
+  /** Set only by an identify that accepted the unit: nothing else is done to one it refused. */
+  private identified = false;
 
   constructor(
     private readonly transport: Transport,
@@ -77,6 +79,7 @@ export class UnitSession {
 
   /** Who the unit is. Refuses firmware and hardware this protocol wasn't read from. */
   async identify(): Promise<UnitIdentity> {
+    this.identified = false;
     const version = (await this.ask('FIRMWARE_VERSION')).payload;
     const firmware = version[0] ?? 0;
     if (!KNOWN_FIRMWARE.includes(firmware)) {
@@ -93,12 +96,14 @@ export class UnitSession {
       throw new UnitError('unsupported', 'The unit’s details were too short to hold its id.');
     const limit = (await this.ask('PROFILE_LIMIT')).payload[0] ?? 0;
     this.limit = limit;
-    return {
+    const identity = {
       firmware,
       deviceId: (details[17] ?? 0) | ((details[18] ?? 0) << 8),
       slotLimit: limit,
       runningSlot: await this.runningSlot(),
     };
+    this.identified = true;
+    return identity;
   }
 
   /** The slot the unit runs, asked each time: the profile button moves it unannounced. */
@@ -114,6 +119,7 @@ export class UnitSession {
    * app does. A stream that stops part way is read again, once.
    */
   async readSlots(): Promise<StoredSlot[]> {
+    this.requireIdentified();
     try {
       this.slots = await this.stream();
     } catch (error) {
@@ -133,20 +139,52 @@ export class UnitSession {
   async write(slot: number, name: string, records: readonly UnitRecord[]): Promise<WriteResult> {
     const encoded = records.map((record) => ({ id: record.id, bytes: encodeRecord(slot, record) }));
     const namePayload = profileNamePayload(slot, name);
+    this.requireIdentified();
     const held = this.knownSlots();
-    if (this.limit === null) throw new ProtocolError('Identify the unit before writing to it.');
+    const limit = this.limit ?? 0;
     const adding = !held.some((s) => s.slot === slot);
     if (adding) {
-      const free = lowestFree(held, this.limit);
+      const free = lowestFree(held, limit);
       if (slot !== free) {
         throw new ProtocolError(
           free === undefined
-            ? `All ${this.limit} slots are in use: pick one to write over.`
+            ? `All ${limit} slots are in use: pick one to write over.`
             : `A new slot goes at ${free}, the lowest free number, not ${slot}.`,
         );
       }
-      // Not repeated: a lost answer may mean the slot was added.
-      await this.ask('CHECK_PROFILE', Uint8Array.of(slot), false);
+    }
+    try {
+      return await this.writeInto(slot, name, records, encoded, namePayload, adding);
+    } catch (error) {
+      // After a failure what the unit holds is uncertain: the next step reads it afresh.
+      if (error instanceof UnitError) this.slots = null;
+      throw error;
+    }
+  }
+
+  private async writeInto(
+    slot: number,
+    name: string,
+    records: readonly UnitRecord[],
+    encoded: readonly { id: number; bytes: Uint8Array }[],
+    namePayload: Uint8Array,
+    adding: boolean,
+  ): Promise<WriteResult> {
+    if (adding) {
+      try {
+        // Not repeated: the unit answers it only for the lowest free number, so a second one
+        // for a slot it did add would never be answered.
+        await this.ask('CHECK_PROFILE', Uint8Array.of(slot), false);
+      } catch (error) {
+        if (!(error instanceof UnitError) || error.kind !== 'no-answer') throw error;
+        this.trace(`no answer to adding slot ${slot}; reading the slots to see`);
+        if (!(await this.readSlots()).some((s) => s.slot === slot)) {
+          throw new UnitError(
+            'no-answer',
+            `The unit didn’t add slot ${slot}; nothing else was sent.`,
+          );
+        }
+      }
     }
     await this.ask('PROFILE_NAME', namePayload);
     let written = 0;
@@ -198,6 +236,7 @@ export class UnitSession {
 
   /** Makes the unit run a slot, and asks it which it runs to be sure. */
   async switchTo(slot: number): Promise<void> {
+    this.requireIdentified();
     if (!this.knownSlots().some((s) => s.slot === slot))
       throw new ProtocolError(`The unit has no slot ${slot}.`);
     await this.ask('SWITCH_PROFILE', Uint8Array.of(slot));
@@ -211,6 +250,7 @@ export class UnitSession {
    * their numbers. The running slot and the last slot are refused.
    */
   async deleteSlot(slot: number): Promise<StoredSlot[]> {
+    this.requireIdentified();
     const held = this.knownSlots();
     if (!held.some((s) => s.slot === slot))
       throw new ProtocolError(`The unit has no slot ${slot}.`);
@@ -229,6 +269,10 @@ export class UnitSession {
     if (after.some((s) => s.slot === slot))
       throw new UnitError('refused', `Slot ${slot} is still there after deleting it.`);
     return after;
+  }
+
+  private requireIdentified() {
+    if (!this.identified) throw new ProtocolError('Identify the unit first.');
   }
 
   private knownSlots(): StoredSlot[] {

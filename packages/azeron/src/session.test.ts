@@ -164,6 +164,42 @@ describe('a session with a unit', () => {
     expect(unit.slots.get(0)?.records.size).toBe(records.length);
   });
 
+  it('carries on when the unit added a slot but its answer was lost', async () => {
+    const unit = new FakeUnit({
+      slots: { 0: { name: 'A' } },
+      loseFirstAnswerTo: [Command.CHECK_PROFILE],
+    });
+    const { session } = await ready(unit);
+    const result = await session.write(1, 'Skiff', records);
+    expect(result.differences).toEqual([]);
+    expect(commands(unit).filter((c) => c === Command.CHECK_PROFILE)).toHaveLength(1);
+  });
+
+  it('stops when the unit didn’t add the slot, sending nothing else', async () => {
+    const unit = new FakeUnit({ slots: { 0: { name: 'A' } }, silentOn: [Command.CHECK_PROFILE] });
+    const { session } = await ready(unit);
+    await expect(session.write(1, 'Skiff', records)).rejects.toThrow('nothing else was sent');
+    expect(commands(unit)).not.toContain(Command.PROFILE_NAME);
+  });
+
+  it('reads the slots afresh after a failed write before doing anything else', async () => {
+    const unit = new FakeUnit({ slots: { 0: { name: 'A' } }, silentOn: [Command.OBM_COPY] });
+    const { session } = await ready(unit);
+    await expect(session.write(0, 'Skiff', records)).rejects.toThrow(UnitError);
+    await expect(session.deleteSlot(0)).rejects.toThrow('Read the unit');
+  });
+
+  it('does nothing to a unit it refused, whatever is asked after', async () => {
+    const unit = new FakeUnit({ firmware: 113, slots: { 0: { name: 'A' }, 1: { name: 'B' } } });
+    const session = new UnitSession(unit);
+    await expect(session.identify()).rejects.toThrow(UnitError);
+    await expect(session.readSlots()).rejects.toThrow('Identify the unit first');
+    await expect(session.deleteSlot(1)).rejects.toThrow('Identify the unit first');
+    await expect(session.switchTo(1)).rejects.toThrow('Identify the unit first');
+    await expect(session.write(1, 'Skiff', records)).rejects.toThrow('Identify the unit first');
+    expect(commands(unit).every((c) => c === Command.FIRMWARE_VERSION)).toBe(true);
+  });
+
   it('refuses to delete the slot it runs, or its last', async () => {
     const { session } = await ready(
       new FakeUnit({ slots: { 0: { name: 'A' }, 1: { name: 'B' } }, running: 1 }),
