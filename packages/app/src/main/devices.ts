@@ -69,6 +69,8 @@ export class Devices {
   /** Bumped by every start and stop, so a poll that was in flight across one is ignored. */
   private generation = 0;
   private cancelNext: (() => void) | null = null;
+  /** Counts notices, so a nested one supersedes the one it interrupted. */
+  private emitted = 0;
 
   constructor(private readonly deps: DeviceDeps) {}
 
@@ -224,8 +226,12 @@ export class Devices {
 
   private emit(): void {
     if (this.listeners.size === 0) return;
+    // A listener can change the service (stop it, say), which emits a newer snapshot to
+    // everyone. Then this older one must not reach the listeners still to come.
+    const sequence = ++this.emitted;
     const snapshot = this.snapshot();
     for (const listener of [...this.listeners]) {
+      if (sequence !== this.emitted) return;
       try {
         listener(snapshot);
       } catch (error) {

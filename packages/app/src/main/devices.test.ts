@@ -574,6 +574,21 @@ describe('the devices service', () => {
       expect(bench.opened).toEqual([]);
     });
 
+    it('never leaves a listener on an older snapshot when another stops it mid-notice', async () => {
+      bench.plug('left-path', new FakeUnit({ deviceId: LEFT }));
+      let stopping: Promise<void> | null = null;
+      devices.onChange((snapshot) => {
+        if (snapshot.units.length > 0) stopping ??= devices.stop();
+      });
+      const seen: number[] = [];
+      devices.onChange((snapshot) => seen.push(snapshot.units.length));
+      devices.start();
+      await settle();
+      await stopping;
+      expect(seen.at(-1)).toBe(0);
+      expect(devices.snapshot().units).toEqual([]);
+    });
+
     it('can be started again, and identifies afresh', async () => {
       bench.plug('left-path', new FakeUnit({ deviceId: LEFT }));
       devices.start();
