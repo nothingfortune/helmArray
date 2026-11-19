@@ -17,7 +17,8 @@ export interface PinPlan {
   pinTwo?: number;
   /** Empty when the position sends nothing. */
   presses: Partial<Record<Press, Signal>>;
-  turbo: boolean;
+  /** Repeats while held, every `interval` ms; false when it doesn't. */
+  turbo: false | { interval: number };
   latch: boolean;
 }
 

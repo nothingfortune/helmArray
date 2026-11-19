@@ -169,7 +169,8 @@ export interface StickBehaviour {
 }
 
 export interface Behaviour {
-  turbo?: boolean;
+  /** Repeat the key while held, every `interval` ms (1–255), the unit's own turbo. */
+  turbo?: { interval: number };
   /** Hold to latch: the key stays down until pressed again. */
   latch?: boolean;
   stick?: StickBehaviour;
