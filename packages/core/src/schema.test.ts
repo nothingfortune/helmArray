@@ -76,7 +76,7 @@ describe('store and load', () => {
     });
     const plan = resolve(scheme, game, BUILT_IN_DEVICES);
     const pin = plan.units.left.pins.find((p) => p.control === 'L.index_1');
-    expect(pin?.turbo).toEqual({ interval: 50 });
+    expect(pin?.turbo).toEqual({ interval: 20 });
   });
 });
 

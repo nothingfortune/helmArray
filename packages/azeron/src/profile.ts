@@ -63,8 +63,17 @@ export const UNIT_KEY_CODES: Readonly<Record<KeyCode, number>> = {
 
 const MOD_CODES: Readonly<Record<Mod, number>> = { ctrl: 0xe001, shift: 0xe002, alt: 0xe004 };
 
-/** Mouse buttons by number: left 1 and right 3 confirmed in play, middle 2 in the app. */
-const MOUSE_NUMBERS: Partial<Record<MouseButton, number>> = { left: 1, middle: 2, right: 3 };
+/**
+ * Mouse buttons by number: left 1 and right 3 confirmed in play, middle 2 in the app, back 4
+ * and forward 5 written by the app and pressed in a browser (2026-11-19).
+ */
+const MOUSE_NUMBERS: Readonly<Record<MouseButton, number>> = {
+  left: 1,
+  middle: 2,
+  right: 3,
+  back: 4,
+  forward: 5,
+};
 
 /**
  * Xbox buttons by their XInput bit, as the app's export and wire carry them (A 0x1000 seen).
@@ -138,11 +147,7 @@ function blockFor(signal: Signal, pin: PinPlan, where: string): Block {
         mods: (signal.mods ?? []).map((m) => MOD_CODES[m]),
       };
     case 'mouse': {
-      const number = MOUSE_NUMBERS[signal.button];
-      if (number === undefined) {
-        throw new ProtocolError(`${where}: the ${signal.button} mouse button was never captured.`);
-      }
-      return { ...base, type: 'mouse', keys: [number] };
+      return { ...base, type: 'mouse', keys: [MOUSE_NUMBERS[signal.button]] };
     }
     case 'pad': {
       const bit = PAD_BITS[signal.control];
@@ -202,14 +207,7 @@ function stickRecord(profile: UnitProfile, device: AzeronDevice): StickRecord {
   }
   const s = profile.stick;
   const where = `${profile.hand === 'left' ? 'L' : 'R'}.stick`;
-  // Which Xbox stick a unit's stick drives was captured only for the left unit as the left
-  // stick (reference/guides/unit-protocol.md): anything else waits for a capture.
   const mode = s.mode === 'keys' ? 'keys' : s.mode === 'mouse' ? 'mouse' : 'pad';
-  if (mode === 'pad' && !(profile.hand === 'left' && s.mode === 'pad-left')) {
-    throw new ProtocolError(
-      `${where}: the ${profile.hand} unit's stick as the Xbox ${s.mode === 'pad-left' ? 'left' : 'right'} stick hasn't been captured yet, so it can't be written.`,
-    );
-  }
   if (s.sensitivity !== undefined && mode !== 'mouse') {
     throw new ProtocolError(`${where}: sensitivity is for a stick that moves the mouse.`);
   }
@@ -240,8 +238,9 @@ function stickRecord(profile: UnitProfile, device: AzeronDevice): StickRecord {
     isAngleLock: false,
     lockZoneAngle: 70,
     lockZoneSize: 30,
-    // Every write the app made to a right unit set this, whatever the stick's mode.
-    isRightAnalog: profile.hand === 'right',
+    // As an Xbox stick, this picks which one: set, the right stick, on either unit (written and
+    // shown so by the app, 2026-11-19). In key or mouse mode the app sets it on a right unit.
+    isRightAnalog: mode === 'pad' ? s.mode === 'pad-right' : profile.hand === 'right',
     invertXAxis: s.invertX,
     invertYAxis: s.invertY ?? false,
   };

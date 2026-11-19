@@ -63,6 +63,16 @@ describe('a button', () => {
     expect(r?.double).toMatchObject({ type: 'pad', keys: [0x0004] });
   });
 
+  it('sends mouse back and forward as buttons 4 and 5', () => {
+    const r = index1(
+      profile([
+        pin({ tap: { kind: 'mouse', button: 'back' }, long: { kind: 'mouse', button: 'forward' } }),
+      ]),
+    );
+    expect(r?.tap).toMatchObject({ type: 'mouse', keys: [4] });
+    expect(r?.long).toMatchObject({ type: 'mouse', keys: [5] });
+  });
+
   it('scrolls on a tap at the app’s own rate: speed 33 up is 100 between steps', () => {
     const up = index1(profile([pin({ tap: { kind: 'scroll', dir: 'up', speed: 33 } })]));
     expect(up?.tap).toEqual({ type: 'wheel', x: 0, y: 1, interval: 150, yInterval: 100 });
@@ -72,7 +82,6 @@ describe('a button', () => {
 
   it.each<[string, PinPlan['presses']]>([
     ['scroll on a long press', { long: { kind: 'scroll', dir: 'up', speed: 33 } }],
-    ['a mouse button never captured', { tap: { kind: 'mouse', button: 'back' } }],
     ['a stick direction as a button', { tap: { kind: 'pad', control: 'LS_UP' } }],
     ['a macro', { tap: { kind: 'macro', trigger: 'F13' } }],
     ['a scroll speed over 100', { tap: { kind: 'scroll', dir: 'up', speed: 101 } }],
@@ -107,16 +116,17 @@ describe('the stick', () => {
     expect(stickOf(right, CYBORG2_RIGHT)?.tuning.isRightAnalog).toBe(true);
   });
 
-  it('refuses an Xbox stick that was never captured: the right stick, or anything on the right unit', () => {
-    expect(() => stickOf(profile([], { mode: 'pad-right' }))).toThrow(ProtocolError);
-    const right: UnitProfile = {
+  it('as an Xbox stick, is the right stick or the left by isRightAnalog, on either unit', () => {
+    expect(stickOf(profile([], { mode: 'pad-right' }))?.tuning.isRightAnalog).toBe(true);
+    expect(stickOf(profile([], { mode: 'pad-left' }))?.tuning.isRightAnalog).toBe(false);
+    const right = (mode: 'pad-left' | 'pad-right'): UnitProfile => ({
       deviceId: CYBORG2_RIGHT.id,
       hand: 'right',
       pins: [],
-      stick: { mode: 'pad-right', angle: 176, invertX: false },
-    };
-    expect(() => stickOf(right, CYBORG2_RIGHT)).toThrow('been captured yet');
-    expect(stickOf(profile([], { mode: 'pad-left' }))?.mode).toBe('pad');
+      stick: { mode, angle: 176, invertX: false },
+    });
+    expect(stickOf(right('pad-right'), CYBORG2_RIGHT)?.tuning.isRightAnalog).toBe(true);
+    expect(stickOf(right('pad-left'), CYBORG2_RIGHT)?.tuning.isRightAnalog).toBe(false);
   });
 
   it('refuses deadzones that leave no travel, and sensitivity on a stick that isn’t a mouse', () => {

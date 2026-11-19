@@ -13,6 +13,8 @@ export interface StoredBlock {
   typeByte: number;
   keys: number[];
   mods: number[];
+  /** A tap that scrolls (type 35) stores its direction and intervals where keys would be. */
+  wheel?: { x: number; y: number; interval: number; yInterval: number };
   hold: boolean;
   holdTime: number;
   turbo: boolean;
@@ -67,7 +69,8 @@ export interface StoredStick {
 }
 
 /**
- * A record of a type whose stored layout isn't known (scroll, and the types the app runs itself).
+ * A record of a type whose stored layout isn't known (the types the app runs itself: macros,
+ * sequences, layer switches).
  * Only its id, pins and types are read: reading on could misread it, or run off its end and stop
  * every slot after it from being read.
  */
@@ -93,6 +96,8 @@ export interface StoredSlot {
 /** Types stored in the button layout: the ones helmArray writes, plus 0, 2 and the d-pad (12). */
 const BUTTON_TYPES = new Set([0, 1, 2, 6, 11, 12, 15, 0x16, 0x17]);
 const STICK_TYPES = new Set([4, 0x15, 0x28]);
+/** A tap that scrolls. Stored like a button, its tap's keys and modifiers replaced by 6 bytes. */
+const WHEEL_TYPE = 0x23;
 const SETTINGS_LENGTH = 32;
 
 class Reader {
@@ -105,6 +110,10 @@ class Reader {
   }
   u16(): number {
     return this.u8() | (this.u8() << 8);
+  }
+  i8(): number {
+    const value = this.u8();
+    return value >= 0x80 ? value - 0x100 : value;
   }
   i16(): number {
     const value = this.u16();
@@ -122,7 +131,19 @@ function decodeButton(
   pinTwo: number,
   types: number[],
 ): StoredButton {
-  const presses = types.map((typeByte) => ({ typeByte, keys: r.list(4), mods: r.list(3) }));
+  // Seen 2026-11-19 on both units: a scrolling tap stores x and y (signed bytes), then the two
+  // intervals, where a key's tap stores its four keys and three modifiers.
+  const presses = types.map(
+    (typeByte, i): Omit<StoredBlock, 'hold' | 'holdTime' | 'turbo' | 'turboInterval'> =>
+      i === 0 && typeByte === WHEEL_TYPE
+        ? {
+            typeByte,
+            keys: [],
+            mods: [],
+            wheel: { x: r.i8(), y: r.i8(), interval: r.u16(), yInterval: r.u16() },
+          }
+        : { typeByte, keys: r.list(4), mods: r.list(3) },
+  );
   const longDelay = r.u16();
   const doubleDelay = r.u16();
   const holds = r.u8();
@@ -200,7 +221,10 @@ export function decodeStoredRecord(record: Uint8Array): StoredRecord {
   const types = [r.u8(), r.u8(), r.u8()];
   const [first = 0] = types;
   if (STICK_TYPES.has(first)) return decodeStick(r, id, pinOne, pinTwo, first);
-  if (types.every((t) => BUTTON_TYPES.has(t))) return decodeButton(r, id, pinOne, pinTwo, types);
+  const [, ...rest] = types;
+  if ((BUTTON_TYPES.has(first) || first === WHEEL_TYPE) && rest.every((t) => BUTTON_TYPES.has(t))) {
+    return decodeButton(r, id, pinOne, pinTwo, types);
+  }
   return { kind: 'undecoded', id, pinOne, pinTwo, typeBytes: types, raw: record };
 }
 

@@ -81,9 +81,8 @@ describe('a session with a unit', () => {
     expect(result.written).toBe(records.length);
     expect(result.differences).toEqual([]);
     expect(result.nameDiffers).toBe(false);
-    expect(result.unchecked.map((u) => u.id)).toEqual([
-      records.find((r) => r.kind === 'button' && r.tap.type === 'wheel')?.id,
-    ]);
+    // Scroll reads back and is compared like any key since the 2026-11-19 captures.
+    expect(result.unchecked).toEqual([]);
 
     await session.switchTo(1);
     expect(unit.running).toBe(1);

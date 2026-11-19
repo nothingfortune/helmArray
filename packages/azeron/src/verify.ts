@@ -15,7 +15,10 @@ export interface Difference {
 
 export interface Verdict {
   differences: Difference[];
-  /** Inputs written in a layout that can't be read back yet (scroll): their raw bytes, as held. */
+  /**
+   * Inputs the unit holds in a layout that can't be read back (a type the app runs itself),
+   * with their raw bytes as held. helmArray writes none of those, so this is a surprise.
+   */
   unchecked: { id: number; raw: Uint8Array }[];
 }
 
@@ -45,9 +48,24 @@ function compareBlock(
   }
 }
 
+/** A scrolling tap: its type, direction and intervals; it has no hold or turbo of its own. */
+function compareWheel(out: Difference[], id: number, meant: WheelTap, stored: StoredBlock) {
+  const { x, y, interval, yInterval } = meant;
+  const fields: [string, unknown, unknown][] = [
+    ['type', 0x23, stored.typeByte],
+    ['scroll', { x, y, interval, yInterval }, stored.wheel],
+    ['hold', false, stored.hold],
+    ['turbo', false, stored.turbo],
+  ];
+  for (const [what, a, b] of fields) {
+    if (show(a) !== show(b)) out.push({ id, what: `tap ${what}`, meant: show(a), stored: show(b) });
+  }
+}
+
 function compareButton(out: Difference[], meant: ButtonRecord, stored: StoredButton) {
   const tap = meant.tap as Block | WheelTap;
-  if (tap.type !== 'wheel') compareBlock(out, meant.id, 'tap', tap, stored.tap);
+  if (tap.type === 'wheel') compareWheel(out, meant.id, tap, stored.tap);
+  else compareBlock(out, meant.id, 'tap', tap, stored.tap);
   compareBlock(out, meant.id, 'long press', meant.long, stored.long);
   compareBlock(out, meant.id, 'double tap', meant.double, stored.double);
   if (meant.longDelay !== stored.longDelay) {
@@ -126,13 +144,9 @@ export function verify(written: readonly UnitRecord[], held: readonly StoredReco
         stored: show([stored.pinOne, stored.pinTwo]),
       });
     }
-    if (meant.kind === 'button' && meant.tap.type === 'wheel') {
-      // Scroll's stored layout was never captured: its id, pins and tap type are all that can
-      // be checked, and its bytes are kept so the layout can be learned from a real write.
-      const tapType = stored.kind === 'undecoded' ? stored.typeBytes[0] : undefined;
-      if (tapType !== 0x23)
-        differences.push({ id: meant.id, what: 'tap type', meant: '35', stored: show(tapType) });
-      if (stored.kind === 'undecoded') unchecked.push({ id: meant.id, raw: stored.raw });
+    if (stored.kind === 'undecoded') {
+      unchecked.push({ id: meant.id, raw: stored.raw });
+      differences.push({ id: meant.id, what: 'kind', meant: meant.kind, stored: 'unreadable' });
     } else if (meant.kind === 'button' && stored.kind === 'button') {
       compareButton(differences, meant, stored);
     } else if (meant.kind === 'stick' && stored.kind === 'stick') {
