@@ -434,6 +434,29 @@ describe('the devices service', () => {
     });
   });
 
+  describe('a unit unplugged while it opens', () => {
+    it('is not opened again until the first open has finished and closed', async () => {
+      const gate = deferred();
+      bench.opening = gate.promise;
+      const unit = new FakeUnit({ deviceId: LEFT });
+      bench.plug('left-path', unit);
+      devices.start();
+      await settle();
+      bench.unplug('left-path');
+      await vi.advanceTimersByTimeAsync(POLL_MS);
+      bench.plug('left-path', unit);
+      await vi.advanceTimersByTimeAsync(POLL_MS * 3);
+      expect(bench.opened).toEqual(['left-path']);
+      bench.opening = null;
+      gate.release();
+      await settle();
+      expect(bench.closed).toEqual(['left-path']);
+      await vi.advanceTimersByTimeAsync(POLL_MS);
+      expect(bench.opened).toEqual(['left-path', 'left-path']);
+      expect(devices.snapshot().units[0]?.state).toBe('ready');
+    });
+  });
+
   describe('stopping', () => {
     it('stops polling and closes every unit, failed ones once', async () => {
       bench.plug('left-path', new FakeUnit({ deviceId: LEFT }));
@@ -501,6 +524,25 @@ describe('the devices service', () => {
       expect(bench.opened).toEqual(['left-path', 'left-path']);
       expect(bench.closed).toEqual(['left-path']);
       expect(devices.snapshot().units[0]?.state).toBe('ready');
+    });
+
+    it('waits for a unit unplugged while opening, and never opens it twice', async () => {
+      const gate = deferred();
+      bench.opening = gate.promise;
+      bench.plug('left-path', new FakeUnit({ deviceId: LEFT }));
+      devices.start();
+      await settle();
+      bench.unplug('left-path');
+      await vi.advanceTimersByTimeAsync(POLL_MS);
+      expect(devices.snapshot().units).toEqual([]);
+      let stopped = false;
+      const stopping = devices.stop().then(() => (stopped = true));
+      await settle();
+      expect(stopped).toBe(false);
+      gate.release();
+      await stopping;
+      expect(bench.closed).toEqual([]);
+      expect(bench.opened).toEqual(['left-path']);
     });
 
     it('can be started again, and identifies afresh', async () => {

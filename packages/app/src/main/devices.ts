@@ -62,6 +62,8 @@ const LOG = '(devices)';
 
 export class Devices {
   private readonly entries = new Map<string, Entry>();
+  /** Units unplugged whose open or close hasn't finished: not opened again until it has. */
+  private readonly cleaning = new Map<string, Promise<void>>();
   private readonly listeners = new Set<Listener>();
   private running = false;
   /** Bumped by every start and stop, so a poll that was in flight across one is ignored. */
@@ -84,11 +86,11 @@ export class Devices {
     this.generation++;
     this.cancelNext?.();
     this.cancelNext = null;
-    if (this.entries.size === 0) return;
     const closing = [...this.entries.values()].map((entry) => this.drop(entry));
+    const hadUnits = this.entries.size > 0;
     this.entries.clear();
-    this.emit();
-    await Promise.all(closing);
+    if (hadUnits) this.emit();
+    await Promise.all([...closing, ...this.cleaning.values()]);
   }
 
   /** Calls `listener` with a fresh snapshot on every change. Returns the way to stop. */
@@ -139,12 +141,13 @@ export class Devices {
       if (present.has(path)) continue;
       this.entries.delete(path);
       this.trace(path, 'unplugged');
-      void this.drop(entry);
+      this.cleanUp(path, entry);
       changed = true;
     }
     const added: Entry[] = [];
     for (const path of present) {
-      if (this.entries.has(path)) continue;
+      // A unit still being let go is opened on a later poll, once its cleanup has finished.
+      if (this.entries.has(path) || this.cleaning.has(path)) continue;
       const entry: Entry = { path, state: 'connecting', dropped: false };
       this.entries.set(path, entry);
       added.push(entry);
@@ -189,6 +192,13 @@ export class Devices {
       this.emit();
       await this.close(entry);
     }
+  }
+
+  private cleanUp(path: string, entry: Entry): void {
+    const done = this.drop(entry).finally(() => {
+      if (this.cleaning.get(path) === done) this.cleaning.delete(path);
+    });
+    this.cleaning.set(path, done);
   }
 
   /** Marks an entry gone and lets go of its transport (now, or when it finishes opening). */
