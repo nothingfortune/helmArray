@@ -201,10 +201,10 @@ describe('handsFor', () => {
         kind: 'press',
         hand: 'left',
         ids: [LEFT, RIGHT],
-        prompt: 'Press the profile button on your left Azeron.',
+        prompt: 'Unplug your left Azeron for a moment, then plug it back in.',
       },
     });
-    expect(PRESS_PROMPT).toBe('Press the profile button on your left Azeron.');
+    expect(PRESS_PROMPT).toBe('Unplug your left Azeron for a moment, then plug it back in.');
   });
 
   it('settles both units from one answer', async () => {

@@ -20,10 +20,11 @@ which step and what the app showed, and attach the exchange log (Settings → Ex
 
 1. [ ] Start helmArray with both units plugged in. Within a few seconds both device chips
        show, and neither shows an error.
-2. [ ] On a fresh install (no settings yet), the app asks for one press at most: *"Press the
-       profile button on your left Azeron."* After that press, the chips say Left and Right
-       correctly, and the unit you pressed is back on the slot it was running (it flicks to the
-       next slot for a moment).
+2. [ ] On a fresh install (no settings yet), the app asks once, while neither unit is known:
+       *"Unplug your left Azeron for a moment, then plug it back in."* Do that. The chips then
+       say Left and Right correctly, and the replugged unit comes back as Left. Nothing was
+       sent to either unit for this: the log shows no exchange for the unplug beyond the
+       replugged unit's own identify and slot read.
 3. [ ] Quit and start the app again. It asks nothing; Left and Right are still right.
 4. [ ] Unplug the right unit. Its chip turns off within a second. The left chip doesn't change.
 5. [ ] Plug it back in. Its chip comes back as Right without a question.

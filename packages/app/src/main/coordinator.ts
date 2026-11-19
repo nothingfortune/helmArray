@@ -6,7 +6,6 @@ import type { AppState, Hand } from '../shared/api';
 import { composeAppState, pendingAsk } from './app-state';
 import type { DevicesGate } from './devices-gate';
 import type { DevicesSnapshot } from './devices';
-import type { FindableUnit } from './hand-finder';
 import { createHandFinder } from './hand-finder';
 import type { HandStore, HandsResult } from './hands';
 import { handsFor, settleHands } from './hands';
@@ -16,15 +15,12 @@ export interface CoordinatorDeps {
   devices: {
     snapshot(): DevicesSnapshot;
     onChange(listener: () => void): () => void;
-    session(unitId: number): FindableUnit | undefined;
   };
   hands: HandStore;
   gate: DevicesGate;
   /** The last lines of the exchange log. */
   readLog(lines: number): Promise<string[]>;
   trace?(unit: string, line: string): void;
-  schedule?(fn: () => void, ms: number): () => void;
-  finderPollMs?: number;
 }
 
 export interface Coordinator {
@@ -69,19 +65,19 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
     writeBlock,
   });
   let currentJson = JSON.stringify(current);
-  /** The question and ids last worked out, for the finder to be told at once when blocked. */
-  let lastHands: HandsResult | null = null;
   let queue: Promise<void> = Promise.resolve();
 
   const finder = createHandFinder({
-    session: (id) => devices.session(id),
-    assign: async (id, hand) => {
-      await store.assign(id, hand);
-      await refresh();
+    // One unplug settles both units; the state is worked out once, when both are saved.
+    decide: async (leftId, rightId) => {
+      try {
+        await store.assign(leftId, 'left');
+        await store.assign(rightId, 'right');
+      } finally {
+        await refresh();
+      }
     },
     trace: (line) => trace(`hands: ${line}`),
-    ...(deps.schedule && { schedule: deps.schedule }),
-    ...(deps.finderPollMs !== undefined && { pollMs: deps.finderPollMs }),
   });
 
   const blocked = () => !azeronKnown || writeBlock !== null;
@@ -97,8 +93,9 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
       trace(`remembering a hand failed: ${messageOf(error)}`);
       hands = handsFor(ids, store);
     }
-    lastHands = hands;
-    finder.update(pendingAsk(snapshot, hands), blocked());
+    // A unit unplugged for the question settles both hands: the state worked out here would
+    // show the one left behind as asked about for a moment, so the next one is announced instead.
+    if (finder.update(pendingAsk(snapshot, hands), blocked(), ids)) return;
     const next = composeAppState({ devices: snapshot, hands, writeBlock });
     const json = JSON.stringify(next);
     if (json === currentJson) return;
@@ -130,8 +127,8 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
     azeronChanged: (processes) => {
       azeronKnown = true;
       writeBlock = processes.block?.reason ?? null;
-      // Stop asking the units at once; the state follows when the service has let them go.
-      if (lastHands) finder.update(pendingAsk(devices.snapshot(), lastHands), blocked());
+      // Units about to vanish because the service is stopped are not an unplug.
+      finder.update(null, blocked(), []);
       void gate.azeronRunning(processes.azeronRunning);
       void refresh();
     },

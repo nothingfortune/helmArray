@@ -113,7 +113,6 @@ async function startServices(): Promise<() => Promise<void>> {
     devices: {
       snapshot: () => devices.snapshot(),
       onChange: (listener) => devices.onChange(() => listener()),
-      session: (id) => devices.session(id),
     },
     hands,
     gate,

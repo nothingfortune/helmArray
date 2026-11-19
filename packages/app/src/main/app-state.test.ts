@@ -109,12 +109,12 @@ describe('the app state', () => {
     expect(state.question).toBeNull();
   });
 
-  it('asks for the profile button when two new units are plugged in', () => {
+  it('asks for the left unit to be unplugged when two new units are plugged in', () => {
     const state = compose([unit('a', LEFT), unit('b', RIGHT)]);
     expect(state.devices.map((chip) => chip.hand)).toEqual(['unknown', 'unknown']);
     expect(state.question).toEqual({
       kind: 'press',
-      prompt: 'Press the profile button on your left Azeron.',
+      prompt: 'Unplug your left Azeron for a moment, then plug it back in.',
     });
   });
 

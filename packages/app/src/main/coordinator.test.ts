@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AppState } from '../shared/api';
 import { createCoordinator } from './coordinator';
 import type { DevicesSnapshot, UnitSnapshot } from './devices';
-import type { FindableUnit } from './hand-finder';
 import { openHandStore } from './hands';
 import type { HandsStorage } from './hands';
 import { processState } from './processes';
@@ -10,21 +9,6 @@ import { processState } from './processes';
 const LEFT = 49229;
 const RIGHT = 29993;
 const BLOCK = 'Close the Azeron app first: it talks to the units too.';
-
-class FakeUnitSet implements FindableUnit {
-  switched: number[] = [];
-  asked = 0;
-  constructor(public running: number) {}
-  runningSlot() {
-    this.asked++;
-    return Promise.resolve(this.running);
-  }
-  switchTo(slot: number) {
-    this.switched.push(slot);
-    this.running = slot;
-    return Promise.resolve();
-  }
-}
 
 async function bench(saved: Record<string, 'left' | 'right'> = {}) {
   const stored: { value: unknown } = { value: Object.keys(saved).length ? saved : undefined };
@@ -37,7 +21,6 @@ async function bench(saved: Record<string, 'left' | 'right'> = {}) {
   };
   const hands = await openHandStore(storage);
   const units: UnitSnapshot[] = [];
-  const sessions = new Map<number, FakeUnitSet>();
   const listeners = new Set<() => void>();
   const gateCalls: boolean[] = [];
   const states: AppState[] = [];
@@ -49,7 +32,6 @@ async function bench(saved: Record<string, 'left' | 'right'> = {}) {
         listeners.add(listener);
         return () => void listeners.delete(listener);
       },
-      session: (id) => sessions.get(id),
     },
     hands,
     gate: {
@@ -64,27 +46,20 @@ async function bench(saved: Record<string, 'left' | 'right'> = {}) {
   });
   helm.onState((state) => states.push(state));
 
-  const plug = (path: string, id: number, running = 1, state: UnitSnapshot['state'] = 'ready') => {
+  const plug = (path: string, id: number, state: UnitSnapshot['state'] = 'ready') => {
     units.push({
       path,
       state,
-      identity: { firmware: 112, deviceId: id, slotLimit: 8, runningSlot: running },
+      identity: { firmware: 112, deviceId: id, slotLimit: 8, runningSlot: 1 },
     });
-    if (state === 'ready') sessions.set(id, new FakeUnitSet(running));
     for (const listener of listeners) listener();
   };
   const unplug = (path: string) => {
     const index = units.findIndex((u) => u.path === path);
-    const [gone] = units.splice(index, 1);
-    if (gone?.identity) sessions.delete(gone.identity.deviceId);
+    units.splice(index, 1);
     for (const listener of listeners) listener();
   };
-  const unit = (id: number): FakeUnitSet => {
-    const found = sessions.get(id);
-    if (!found) throw new Error(`no unit ${id}`);
-    return found;
-  };
-  return { helm, hands, stored, units, sessions, unit, gateCalls, states, traces, plug, unplug };
+  return { helm, hands, stored, units, listeners, gateCalls, states, traces, plug, unplug };
 }
 
 const settle = () => vi.advanceTimersByTimeAsync(0);
@@ -152,7 +127,7 @@ describe('the coordinator', () => {
     expect(b.helm.state().writeBlock).toBeNull();
   });
 
-  it('asks for the profile button with two new units', async () => {
+  it('asks for the left unit to be unplugged with two new units', async () => {
     const b = await bench();
     b.helm.start();
     b.helm.azeronChanged(AZERON_CLOSED);
@@ -161,80 +136,90 @@ describe('the coordinator', () => {
     await settle();
     expect(b.helm.state().question).toEqual({
       kind: 'press',
-      prompt: 'Press the profile button on your left Azeron.',
+      prompt: 'Unplug your left Azeron for a moment, then plug it back in.',
     });
   });
 
-  it('asks nothing while the first look at the running programs is still to come', async () => {
+  it('works out which is the left from the first unit unplugged, and settles both', async () => {
     const b = await bench();
-    b.helm.start();
-    b.plug('a', LEFT);
-    b.plug('b', RIGHT);
-    await vi.advanceTimersByTimeAsync(2000);
-    expect(b.sessions.get(LEFT)?.asked).toBe(0);
-    expect(b.sessions.get(RIGHT)?.asked).toBe(0);
-  });
-
-  it('works out which is the left from a press of the profile button, then settles both', async () => {
-    const b = await bench();
+    const seen: AppState[] = [];
     b.helm.start();
     b.helm.azeronChanged(AZERON_CLOSED);
-    b.plug('a', LEFT, 1);
-    b.plug('b', RIGHT, 2);
-    await vi.advanceTimersByTimeAsync(700);
+    b.plug('a', LEFT);
+    b.plug('b', RIGHT);
+    await settle();
     expect(b.helm.state().question?.kind).toBe('press');
+    b.helm.onState((state) => seen.push(state));
 
-    const right = b.unit(RIGHT);
-    right.running = 3; // the button, pressed on the unit that is the left one by the person's word
-    await vi.advanceTimersByTimeAsync(300);
-
-    // The pressed unit (RIGHT's id) is the left hand; the other follows without a question.
+    b.unplug('b'); // RIGHT's id is the unit the person called their left one
+    await settle();
     expect(b.stored.value).toEqual({ [RIGHT]: 'left', [LEFT]: 'right' });
-    expect(right.switched).toEqual([2]);
-    expect(b.sessions.get(LEFT)?.switched).toEqual([]);
-    expect(b.helm.state().question).toBeNull();
+    // The unit left behind is never put up as a question while the other is out.
+    expect(seen.every((state) => state.question === null)).toBe(true);
+    expect(b.helm.state().devices.map((chip) => [chip.hand, chip.unitId])).toEqual([
+      ['right', LEFT],
+    ]);
+
+    // Plugged back in, it is identified afresh and shows the hand it was given.
+    b.plug('b2', RIGHT);
+    await settle();
     expect(b.helm.state().devices.map((chip) => [chip.hand, chip.unitId])).toEqual([
       ['left', RIGHT],
       ['right', LEFT],
     ]);
-
-    // And the looking has stopped.
-    const asked = right.asked;
-    await vi.advanceTimersByTimeAsync(2000);
-    expect(right.asked).toBe(asked);
+    expect(b.helm.state().question).toBeNull();
   });
 
-  it('stops looking for a press when the Azeron app opens', async () => {
+  it('decides nothing when both units vanish at once', async () => {
     const b = await bench();
     b.helm.start();
     b.helm.azeronChanged(AZERON_CLOSED);
     b.plug('a', LEFT);
     b.plug('b', RIGHT);
-    await vi.advanceTimersByTimeAsync(700);
+    await settle();
+    b.units.length = 0; // both gone in one snapshot
+    for (const listener of b.listeners) listener();
+    await settle();
+    expect(b.stored.value).toBeUndefined();
+  });
+
+  it('decides nothing for units the Azeron app made the service let go', async () => {
+    const b = await bench();
+    b.helm.start();
+    b.helm.azeronChanged(AZERON_CLOSED);
+    b.plug('a', LEFT);
+    b.plug('b', RIGHT);
+    await settle();
     b.helm.azeronChanged(AZERON_OPEN);
-    const before = [b.unit(LEFT).asked, b.unit(RIGHT).asked];
-    await vi.advanceTimersByTimeAsync(3000);
-    expect([b.unit(LEFT).asked, b.unit(RIGHT).asked]).toEqual(before);
+    b.unplug('a');
+    b.unplug('b');
+    await settle();
+    expect(b.stored.value).toBeUndefined();
+    expect(b.helm.state().writeBlock).toBe(BLOCK);
   });
 
-  it('stops looking when a unit is unplugged, and asks outright about the one left', async () => {
+  it('decides nothing before the first look at the running programs', async () => {
+    const b = await bench();
+    b.helm.start();
+    b.plug('a', LEFT);
+    b.plug('b', RIGHT);
+    await settle();
+    b.unplug('b');
+    await settle();
+    expect(b.stored.value).toBeUndefined();
+  });
+
+  it('asks outright about a unit that is on its own', async () => {
     const b = await bench();
     b.helm.start();
     b.helm.azeronChanged(AZERON_CLOSED);
     b.plug('a', LEFT);
-    b.plug('b', RIGHT);
-    await vi.advanceTimersByTimeAsync(700);
-    const kept = b.unit(LEFT);
-    b.unplug('b');
-    await vi.advanceTimersByTimeAsync(300);
+    await settle();
     expect(b.helm.state().question).toEqual({
       kind: 'choose',
       unitId: LEFT,
       prompt: 'Is this your left or right Azeron?',
     });
-    const asked = kept.asked;
-    await vi.advanceTimersByTimeAsync(3000);
-    expect(kept.asked).toBe(asked);
   });
 
   describe('chooseHand', () => {

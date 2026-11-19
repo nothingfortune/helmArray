@@ -25,11 +25,10 @@ The first build that touches hardware. Each part is its own PR, in this order.
    gives the "chip off within a second" of the Done-when).
 3. **Which unit is which hand.** A unit's id (`KEYPAD_DETAILS`, e.g. 49229) is permanent and
    needs nothing written, but nothing a unit reports says which hand it is. So the first time an
-   id is seen, the app asks once: *"Press the profile button on your left Azeron."* The press is
-   attributed by the unit whose running slot moves (no per-device input needed; the app puts it
-   back on its slot), and the id→hand pair is kept in settings, so a unit is never
-   asked about again. **This changes M3's Done-when**: "Left and Right with no click" becomes
-   "with one press per unit, once".
+   id is seen, the app asks once: *"Unplug your left Azeron for a moment, then plug it back in."*
+   The first of the two to disappear is the left one (no per-device input, and nothing sent to
+   a unit), and the id→hand pair is kept in settings, so a unit is never asked about again. **This changes M3's Done-when**: "Left and Right with no click" becomes
+   "with one unplug, once".
 4. **Sync pill and device chips.** In sync / Changes not applied / Units differ, from
    `verify()` of what each unit holds against the last applied plan; never inferred.
 5. **`processes` service.** Is the Azeron app running (`Azeron Software.exe`): writes blocked,
