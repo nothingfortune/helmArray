@@ -185,11 +185,11 @@ describe('resolve is deterministic', () => {
 describe('resolve, behaviour', () => {
   it('carries turbo and latch, and a stick the scheme sets itself', () => {
     const scheme = xboxControllerPreset(game);
-    scheme.behaviour['L.index_2'] = { turbo: true };
+    scheme.behaviour['L.index_2'] = { turbo: { interval: 40 } };
     scheme.behaviour['R.thumb_aux_upper'] = { latch: true };
     scheme.behaviour['R.stick'] = { stick: { mode: 'mouse', sensitivity: 7, invertX: true } };
     const plan = resolve(scheme, game, BUILT_IN_DEVICES);
-    expect(pinOf(plan, 'left', 'index_2')).toMatchObject({ turbo: true, latch: false });
+    expect(pinOf(plan, 'left', 'index_2')).toMatchObject({ turbo: { interval: 40 }, latch: false });
     expect(pinOf(plan, 'right', 'thumb_aux_upper')).toMatchObject({ turbo: false, latch: true });
     expect(plan.units.right.stick).toEqual({
       mode: 'mouse',

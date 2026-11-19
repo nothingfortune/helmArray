@@ -182,7 +182,7 @@ function unitProfile(
         position: p.name,
         pin: p.pin,
         presses,
-        turbo: behaviour.turbo === true,
+        turbo: behaviour.turbo ? { interval: behaviour.turbo.interval } : false,
         latch: behaviour.latch === true,
       };
       if (p.pinTwo !== undefined) pin.pinTwo = p.pinTwo;
