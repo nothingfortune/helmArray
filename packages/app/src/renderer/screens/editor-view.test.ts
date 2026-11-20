@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Scheme } from '@helmarray/core';
 import { assign, acceptFinding, clear, setLatch } from './editor-model';
-import { assignable, editorView, signalText } from './editor-view';
+import { assignable, deviceTabs, editorView, shownTab, signalText } from './editor-view';
 import { game, keysScheme, padGame, padScheme, plan } from './editor-fixture';
 
 const view = (
@@ -47,12 +47,16 @@ describe('unit keys', () => {
   it('labels each key with its action in the current mode, with its role, per hand', () => {
     const ship = view(keysScheme());
     expect(ship.left.keys).toEqual({
-      'L.index_1': { label: 'Boost', role: 'movement' },
-      'L.middle_1': { label: 'Frame shift drive', role: 'travel' },
+      'L.index_1': { label: 'Boost', role: 'movement', action: 'boost' },
+      'L.middle_1': { label: 'Frame shift drive', role: 'travel', action: 'fsd' },
     });
-    expect(ship.right.keys).toEqual({ 'R.index_1': { label: 'Fire', role: 'combat' } });
+    expect(ship.right.keys).toEqual({
+      'R.index_1': { label: 'Fire', role: 'combat', action: 'fire' },
+    });
     const srv = view(keysScheme(), 'srv');
-    expect(srv.left.keys).toEqual({ 'L.index_1': { label: 'Jump', role: 'movement' } });
+    expect(srv.left.keys).toEqual({
+      'L.index_1': { label: 'Jump', role: 'movement', action: 'jump' },
+    });
     expect(srv.right.keys).toEqual({});
   });
 
@@ -66,12 +70,13 @@ describe('unit keys', () => {
     expect(view(scheme).left.keys['L.index_2']).toEqual({
       label: 'Long: Landing gear',
       role: 'travel',
+      action: 'gear',
     });
   });
 
   it('draws an action the game no longer has as its id, with no role', () => {
     const scheme = { ...keysScheme(), map: { ship: { 'L.index_1': { tap: 'gone' } } } };
-    expect(view(scheme).left.keys['L.index_1']).toEqual({ label: 'gone' });
+    expect(view(scheme).left.keys['L.index_1']).toEqual({ label: 'gone', action: 'gone' });
   });
 
   it('labels a key-mode stick by the actions its keys reach, else by the key', () => {
@@ -186,7 +191,7 @@ describe('the side panel', () => {
   it('captions what it sends from the resolved plan, and where that came from', () => {
     const own = view(keysScheme(), 'ship', 'L.index_1').panel;
     expect(own?.sends).toBe('Left Shift');
-    expect(own?.sendsNote).toBe("the game's own key");
+    expect(own?.sendsNote).toBe('as the game ships it');
     const mouse = view(keysScheme(), 'ship', 'R.index_1').panel;
     expect(mouse?.sends).toBe('Left mouse button');
     const pad = view(padScheme(), 'ship', 'L.index_1').panel;
@@ -222,6 +227,236 @@ describe('the side panel', () => {
       presses: [],
       across: [],
       sends: 'Xbox left stick',
+    });
+  });
+});
+
+describe('the setup’s devices', () => {
+  const devices = (over: Partial<Scheme['devices']>): Scheme['devices'] => ({
+    ...keysScheme().devices,
+    ...over,
+  });
+  const withDevices = (over: Partial<Scheme['devices']>, base: Scheme = keysScheme()): Scheme => ({
+    ...base,
+    devices: devices(over),
+  });
+
+  it('are the tabs: Azerons, the keyboard with the mouse, the controller, as the setup has them', () => {
+    expect([
+      deviceTabs(devices({})).map((t) => t.label),
+      deviceTabs(devices({ keyboard: true, mouse: true, controller: true })).map((t) => t.label),
+      deviceTabs(devices({ azerons: 'none', controller: true })).map((t) => t.label),
+      deviceTabs(devices({ azerons: 'none' })),
+    ]).toEqual([['Azerons'], ['Azerons', 'Keyboard', 'Controller'], ['Controller'], []]);
+  });
+
+  it('draw the mouse beside the left unit in a left Azeron + mouse setup, with no tab of its own', () => {
+    const v = view(withDevices({ azerons: 'left', mouse: true }));
+    expect([v.tabs.map((t) => t.id), v.hands, v.mouseBeside, v.mouse]).toEqual([
+      ['azerons'],
+      ['left'],
+      true,
+      true,
+    ]);
+  });
+
+  it('give a mouse with nothing else to draw it a tab of its own', () => {
+    expect(deviceTabs(devices({ azerons: 'none', mouse: true }))).toEqual([
+      { id: 'keyboard', label: 'Mouse' },
+    ]);
+  });
+
+  it('show the tab asked for while the setup has it, else its first', () => {
+    const tabs = deviceTabs(devices({ keyboard: true, mouse: true }));
+    expect([
+      shownTab(tabs, 'keyboard'),
+      shownTab(tabs, 'controller'),
+      shownTab(tabs, undefined),
+      shownTab([], 'keyboard'),
+    ]).toEqual(['keyboard', 'azerons', 'azerons', null]);
+  });
+
+  it('call the keyboard’s controls keys, and every other device’s buttons', () => {
+    const scheme = withDevices({ keyboard: true, mouse: true, controller: true });
+    const word = (tab: 'azerons' | 'keyboard' | 'controller') =>
+      editorView({ scheme, game, plan: plan(scheme), mode: 'ship', tab }).controlWord;
+    expect([
+      word('azerons'),
+      word('keyboard'),
+      word('controller'),
+      editorView({
+        scheme: withDevices({ azerons: 'none', mouse: true }),
+        game,
+        plan: plan(withDevices({ azerons: 'none', mouse: true })),
+        mode: 'ship',
+      }).controlWord,
+    ]).toEqual(['button', 'key', 'button', 'button']);
+  });
+
+  it('offer “Azerons send” only to a setup with Azerons', () => {
+    expect([
+      view(keysScheme()).output,
+      view(padScheme()).output,
+      view(withDevices({ azerons: 'none', keyboard: true, mouse: true })).output,
+    ]).toEqual(['keys', 'pad', null]);
+  });
+});
+
+describe('the keyboard, the mouse and the controller', () => {
+  const kbm: Scheme = {
+    ...keysScheme(),
+    devices: { azerons: 'none', keyboard: true, mouse: true, controller: false },
+    map: { ship: { 'key.J': { tap: 'fsd' }, 'mouse.left': { tap: 'fire' } }, srv: {} },
+  };
+  const tabView = (scheme: Scheme, tab: 'azerons' | 'keyboard' | 'controller', selected?: string) =>
+    editorView({ scheme, game: padGame, plan: plan(scheme, padGame), mode: 'ship', selected, tab });
+
+  it('label their keys and buttons with their actions, like the units', () => {
+    expect(tabView(kbm, 'keyboard').fixed).toEqual({
+      'key.J': { label: 'Frame shift drive', role: 'travel', action: 'fsd' },
+      'mouse.left': { label: 'Fire', role: 'combat', action: 'fire' },
+    });
+  });
+
+  it('label a controller button with what the Azeron button sending its control does', () => {
+    const scheme: Scheme = {
+      ...padScheme(),
+      devices: { ...padScheme().devices, controller: true },
+    };
+    expect(tabView(scheme, 'controller').fixed['pad.RT']).toEqual({
+      label: 'Fire',
+      role: 'combat',
+      action: 'fire',
+    });
+  });
+
+  it('list as not placed the actions on no control of the set the tab is bound through', () => {
+    const both: Scheme = {
+      ...padScheme(),
+      devices: { azerons: 'both', keyboard: true, mouse: true, controller: false },
+      map: { ship: { 'L.index_1': { tap: 'boost' }, 'key.J': { tap: 'fsd' } }, srv: {} },
+    };
+    const azerons = tabView(both, 'azerons').unplaced.map((a) => a.id);
+    const keyboard = tabView(both, 'keyboard').unplaced.map((a) => a.id);
+    expect([
+      azerons.includes('fsd'),
+      azerons.includes('boost'),
+      keyboard.includes('fsd'),
+      keyboard.includes('boost'),
+    ]).toEqual([true, false, false, true]);
+  });
+
+  it('show a key in the side panel: what it is, a tap only, and the key itself as what it sends', () => {
+    const panel = tabView(kbm, 'keyboard', 'key.J').panel;
+    expect([
+      panel?.where,
+      panel?.title,
+      panel?.presses.map((r) => r.available),
+      panel?.behaviour,
+      panel?.unavailable,
+      panel?.padChoice,
+      panel?.sends,
+      panel?.sendsNote,
+    ]).toEqual([
+      'Keyboard · J',
+      'Frame shift drive',
+      [true, false, false],
+      false,
+      'Not on a key',
+      null,
+      'J',
+      'as the game ships it',
+    ]);
+  });
+
+  it('say an action moved to another key is set in the game’s controls', () => {
+    const moved: Scheme = { ...kbm, map: { ship: { 'key.T': { tap: 'fsd' } }, srv: {} } };
+    expect(tabView(moved, 'keyboard', 'key.T').panel?.sendsNote).toBe(
+      "set it in the game's controls",
+    );
+  });
+
+  it('show a mouse button and a controller button by their own names', () => {
+    const scheme: Scheme = { ...kbm, devices: { ...kbm.devices, controller: true } };
+    expect([
+      tabView(scheme, 'keyboard', 'mouse.left').panel?.where,
+      tabView(scheme, 'keyboard', 'mouse.left').panel?.sends,
+      tabView(scheme, 'controller', 'pad.LT').panel?.where,
+      tabView(scheme, 'controller', 'pad.LT').panel?.sends,
+      tabView(scheme, 'controller', 'pad.LT').panel?.unavailable,
+    ]).toEqual([
+      'Mouse · Left button',
+      'Left mouse button',
+      'Controller · LT',
+      'Xbox LT',
+      'Not on a controller',
+    ]);
+  });
+
+  it('show a controller stick as a stick: no presses, its own directions', () => {
+    const scheme: Scheme = { ...kbm, devices: { ...kbm.devices, controller: true } };
+    expect(tabView(scheme, 'controller', 'pad.left_stick').panel).toMatchObject({
+      where: 'Controller · L stick',
+      stick: true,
+      presses: [],
+      sends: 'Xbox left stick',
+    });
+  });
+
+  it('mark a conflict on any device, in the current mode', () => {
+    const base = plan(kbm, padGame);
+    const finding = (control: string, mode: string) => ({
+      rule: 'key-collision',
+      severity: 'error' as const,
+      message: 'Two actions on one key.',
+      control,
+      mode,
+    });
+    const v = editorView({
+      scheme: kbm,
+      game: padGame,
+      plan: { ...base, findings: [finding('key.J', 'ship'), finding('mouse.left', 'srv')] },
+      mode: 'ship',
+    });
+    expect([...v.conflicts]).toEqual(['key.J']);
+  });
+});
+
+describe('the Xbox control an Azeron button sends, in the side panel', () => {
+  const padView = (scheme: Scheme, selected: string) =>
+    editorView({ scheme, game: padGame, plan: plan(scheme, padGame), mode: 'ship', selected });
+
+  it('names the control it sends, and every one it may send instead, with what is on it', () => {
+    const choice = padView(padScheme(), 'L.index_1').panel?.padChoice;
+    expect([
+      choice?.current,
+      choice?.locked,
+      choice?.options.find((o) => o.pad === 'A')?.label,
+      choice?.options.find((o) => o.pad === 'X')?.label,
+      choice?.options.some((o) => o.pad === 'LS_UP' || o.pad === 'RS_LEFT'),
+    ]).toEqual(['RB', false, 'A · Frame shift drive', 'X', false]);
+  });
+
+  it('is there for an empty button too, sending nothing yet', () => {
+    expect(padView(padScheme(), 'L.index_4').panel?.padChoice?.current).toBeNull();
+  });
+
+  it('is not there with key output, nor for the stick', () => {
+    expect([
+      view(keysScheme(), 'ship', 'L.index_1').panel?.padChoice,
+      padView(padScheme(), 'L.stick').panel?.padChoice,
+    ]).toEqual([null, null]);
+  });
+
+  it('is locked on a button sending a stick’s direction for the stick’s action', () => {
+    const scheme: Scheme = {
+      ...padScheme(),
+      padMap: { ...padScheme().padMap, 'L.index_4': 'LS_UP' },
+      map: { ship: { 'L.index_4': { tap: 'boost' } }, srv: {} },
+    };
+    expect(padView(scheme, 'L.index_4').panel?.padChoice).toMatchObject({
+      current: 'LS_UP',
+      locked: true,
     });
   });
 });
@@ -354,9 +589,9 @@ describe('controller output: the game is rebound, and the panel says so', () => 
     ]);
   });
 
-  it("captions a button whose action the game already has on its control as the game's own", () => {
+  it('captions a button whose action the game already has on its control: as the game ships it', () => {
     const panel = padView(padScheme(), 'ship', 'R.index_1').panel;
-    expect([panel?.sends, panel?.sendsNote]).toEqual(['Xbox RT', "the game's own button"]);
+    expect([panel?.sends, panel?.sendsNote]).toEqual(['Xbox RT', 'as the game ships it']);
   });
 
   it('shows a cleared button as empty and sending nothing', () => {

@@ -100,7 +100,7 @@ function doneWords(plan: Plan): string {
   if (hands.length === 2) return 'Both units now run the layout';
   if (hands.length === 1)
     return `The ${hands[0] === 'left' ? 'left' : 'right'} unit now runs the layout`;
-  return 'The setup is applied';
+  return 'The scheme is applied';
 }
 const unitWord = (hand: Hand) => (hand === 'left' ? 'left' : 'right');
 

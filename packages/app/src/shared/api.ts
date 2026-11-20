@@ -17,6 +17,8 @@ export interface LibrarySchemeRef {
   id: string;
   name: string;
   output: Scheme['output'];
+  /** What the setup plays with. */
+  devices: Scheme['devices'];
 }
 
 /**
@@ -39,7 +41,12 @@ export interface LibraryEntry {
    * The scheme of this game applied last and when (ms since 1970), or null when none was. The
    * units hold the layout of the most recent apply over all games.
    */
-  applied: { schemeId: string; at: number } | null;
+  applied: {
+    schemeId: string;
+    at: number;
+    /** How many changes that scheme has had since: 0 when the game holds it as it is. */
+    changes: number;
+  } | null;
   /** True when some action has a key the game ships with: "Game's own keys" can be offered. */
   nativeKeys: boolean;
   /** Whether a portrait cover and a header image can be had for `coverUrl`. */
@@ -225,6 +232,13 @@ export interface HelmApi {
   listSchemes(gameId: string): Promise<Scheme[]>;
   /** Copies a preset into a new scheme of that game, saved at once, and gives it back. */
   createScheme(gameId: string, preset: Preset): Promise<Scheme>;
+  /** *Copy a scheme*: a new scheme of the same game with everything in it, saved at once. */
+  copyScheme(schemeId: string): Promise<Scheme>;
+  /**
+   * Deletes a scheme. A game whose active scheme it was is left with none; what the game holds
+   * (if it was the one applied to it last) is kept.
+   */
+  deleteScheme(schemeId: string): Promise<void>;
   /** Saves an edited scheme. Edits are written a moment later, together; quitting writes them. */
   saveScheme(scheme: Scheme): Promise<void>;
   /**
@@ -254,6 +268,8 @@ export const CHANNELS = {
   getScheme: 'helm:get-scheme',
   listSchemes: 'helm:list-schemes',
   createScheme: 'helm:create-scheme',
+  copyScheme: 'helm:copy-scheme',
+  deleteScheme: 'helm:delete-scheme',
   saveScheme: 'helm:save-scheme',
   setActive: 'helm:set-active',
   listLibrary: 'helm:list-library',

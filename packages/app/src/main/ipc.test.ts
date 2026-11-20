@@ -62,6 +62,8 @@ function setup() {
     getScheme: vi.fn<HelmHandlers['getScheme']>(() => Promise.resolve(SCHEME)),
     listSchemes: vi.fn<HelmHandlers['listSchemes']>(() => Promise.resolve([SCHEME])),
     createScheme: vi.fn<HelmHandlers['createScheme']>(() => Promise.resolve(SCHEME)),
+    copyScheme: vi.fn<HelmHandlers['copyScheme']>(() => Promise.resolve(SCHEME)),
+    deleteScheme: vi.fn<HelmHandlers['deleteScheme']>(() => Promise.resolve()),
     saveScheme: vi.fn<HelmHandlers['saveScheme']>(() => Promise.resolve()),
     setActive: vi.fn<HelmHandlers['setActive']>(() => Promise.resolve()),
     previewApply: vi.fn<HelmHandlers['previewApply']>(() => Promise.resolve(PREVIEW)),
@@ -89,6 +91,8 @@ describe('the IPC channels', () => {
         CHANNELS.getScheme,
         CHANNELS.listSchemes,
         CHANNELS.createScheme,
+        CHANNELS.copyScheme,
+        CHANNELS.deleteScheme,
         CHANNELS.saveScheme,
         CHANNELS.setActive,
         CHANNELS.previewApply,
@@ -196,6 +200,16 @@ describe('the IPC channels', () => {
     expect(handlers.size).toBe(0);
   });
 
+  it('passes the scheme to copy or delete through', async () => {
+    const { call, calls } = setup();
+    expect(await call(CHANNELS.copyScheme, 'skiff-own-keys')).toEqual(SCHEME);
+    await call(CHANNELS.deleteScheme, 'skiff-xbox-1');
+    expect([calls.copyScheme.mock.calls, calls.deleteScheme.mock.calls]).toEqual([
+      [['skiff-own-keys']],
+      [['skiff-xbox-1']],
+    ]);
+  });
+
   it('passes a scheme to be saved through', async () => {
     const { call, calls } = setup();
     await call(CHANNELS.saveScheme, SCHEME);
@@ -211,6 +225,10 @@ describe('the IPC channels', () => {
     ['createScheme', ['skiff', 'mine']],
     ['createScheme', ['skiff']],
     ['createScheme', ['..', 'xbox']],
+    ['copyScheme', ['../x']],
+    ['copyScheme', [undefined]],
+    ['deleteScheme', ['con']],
+    ['deleteScheme', [7]],
     ['saveScheme', [{ id: 'x' }]],
     ['saveScheme', [null]],
     ['saveScheme', [{ ...SCHEME, id: '../escape' }]],

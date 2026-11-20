@@ -21,13 +21,16 @@ export type FlowEvent =
   | { type: 'tile'; entry: LibraryEntry }
   | { type: 'choose'; entry: LibraryEntry; preset: Preset }
   | { type: 'open'; entry: LibraryEntry; schemeId: string }
+  /** Another setup of the game, picked from its list: it opens, and is the game's active one. */
+  | { type: 'pick'; entry: LibraryEntry; schemeId: string }
   | { type: 'dismiss' }
   | { type: 'failed'; message: string }
   | { type: 'finished' };
 
 export type Command =
   | { type: 'open-editor'; schemeId: string }
-  | { type: 'make-and-open'; gameId: string; preset: Preset };
+  | { type: 'make-and-open'; gameId: string; preset: Preset }
+  | { type: 'pick-and-open'; gameId: string; schemeId: string };
 
 export interface Step {
   state: FlowState;
@@ -61,6 +64,19 @@ export function step(state: FlowState, event: FlowEvent): Step {
       return {
         state: { ...state, picking: null, error: null },
         command: { type: 'open-editor', schemeId: event.schemeId },
+      };
+    }
+    case 'pick': {
+      const { entry } = event;
+      if (
+        state.busy ||
+        entry.gameId === null ||
+        !entry.schemes.some((s) => s.id === event.schemeId)
+      )
+        return stay;
+      return {
+        state: { ...state, picking: null, error: null },
+        command: { type: 'pick-and-open', gameId: entry.gameId, schemeId: event.schemeId },
       };
     }
     case 'dismiss':
@@ -101,6 +117,20 @@ export async function runMake(
       message:
         `The scheme was made, but couldn't be set as the current one. ${plainReason(error)}`.trim(),
     };
+  }
+  return { ok: true, schemeId };
+}
+
+/** Makes a setup the game's active one (the one the pill judges and Apply puts on), to open it. */
+export async function runPick(
+  api: Pick<HelmApi, 'setActive'>,
+  gameId: string,
+  schemeId: string,
+): Promise<Outcome> {
+  try {
+    await api.setActive(gameId, schemeId);
+  } catch (error) {
+    return { ok: false, message: `Couldn't switch to that scheme. ${plainReason(error)}`.trim() };
   }
   return { ok: true, schemeId };
 }

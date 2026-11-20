@@ -10,7 +10,7 @@ coverage, and the coverage drift check. If it passes locally it passes in CI.
 
 | Layer              | What it tests                                                                                        | Where                                                  | State     |
 | ------------------ | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------ | --------- |
-| Unit               | Pure modules: core, azeron, games, app's shared and renderer logic                                   | `*.test.ts` beside the source, and root `test/`        | In the gate |
+| Unit               | Pure modules: core, azeron, games, app's shared and renderer logic; the renderer's parts drawn to markup with `react-dom/server` (what each state shows; clicks are e2e's) | `*.test.ts(x)` beside the source, and root `test/`     | In the gate |
 | Integration        | Main-process services wired together, with a fake HID unit and temp folders                          | `test/integration/`, `*.test.ts` in `packages/app/src/main` |  In the gate |
 | End to end         | The real app: Playwright on Electron over fake units, a temp data folder and a fake Steam (the M4 journeys, the keyboard, axe) | `packages/app/e2e/*.spec.ts`, run by `pnpm test:e2e` | Outside the gate |
 | Mutation           | Whether the tests notice when the code is broken: Stryker                                            | Later PR                                               | Coming    |

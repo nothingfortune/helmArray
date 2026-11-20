@@ -2,12 +2,14 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { Finding, Game, Scheme } from '@helmarray/core';
 import {
   AZERONS_ONLY,
+  BUILT_IN_DEVICES,
   CYBORG2_LEFT,
   CYBORG2_RIGHT,
   DEFAULT_TURBO_INTERVAL,
   PAD_CONTROLS,
   helldivers2,
   padSignalOf,
+  resolve,
   xboxControllerPreset,
 } from '@helmarray/core';
 import {
@@ -19,17 +21,25 @@ import {
   assign,
   canRedo,
   canUndo,
+  chooseAzerons,
+  chooseController,
+  chooseKeyboard,
   clear,
   commit,
   fixFor,
   historyAction,
+  hasDevices,
   historyShortcut,
   isAcceptable,
   isTextEntry,
   move,
+  isStick,
   redo,
+  renameScheme,
   setDevices,
   setLatch,
+  setOutput,
+  setPadControl,
   setTurbo,
   shownAction,
   startHistory,
@@ -793,9 +803,251 @@ describe('setDevices', () => {
   });
 });
 
+describe('isStick', () => {
+  it('is true for each unit stick and both controller sticks, and for nothing else', () => {
+    expect(
+      [
+        'L.stick',
+        'R.stick',
+        'pad.left_stick',
+        'pad.right_stick',
+        'L.stick_press',
+        'pad.LS',
+        'key.S',
+      ].filter(isStick),
+    ).toEqual(['L.stick', 'R.stick', 'pad.left_stick', 'pad.right_stick']);
+  });
+
+  it('keeps an action off a controller stick: it has directions, not presses', () => {
+    const scheme = deepFreeze({ ...padScheme(), devices: { ...AZERONS_ONLY, controller: true } });
+    expect(assign(scheme, slot('ship', 'pad.left_stick'), 'gear', padGame)).toBe(scheme);
+  });
+});
+
+describe('setOutput: what the Azerons send', () => {
+  const hd = deepFreeze(xboxControllerPreset(helldivers2));
+  const errors = (scheme: Scheme, g: Game) =>
+    resolve(scheme, g, BUILT_IN_DEVICES)
+      .findings.filter((f) => f.rule === 'key-collision' || f.rule === 'pad-bound-twice')
+      .map((f) => `${f.rule} ${f.control ?? ''}`);
+
+  it('keys to controller: each button keeps its action and sends the Xbox control the game ships it on', () => {
+    const next = setOutput(frozen(), 'pad', padGame);
+    expect([next.output, next.padMap, next.map['ship'], next.map['srv']]).toEqual([
+      'pad',
+      { 'L.index_1': 'RB', 'L.middle_1': 'A', 'R.index_1': 'RT' },
+      { 'L.index_1': { tap: 'boost' }, 'L.middle_1': { tap: 'fsd' }, 'R.index_1': { tap: 'fire' } },
+      { 'L.index_1': { tap: 'jump' } },
+    ]);
+  });
+
+  it('keys to controller: a long press or a double tap comes off, since an Xbox button only taps', () => {
+    const scheme = deepFreeze(
+      assign(keysScheme(), slot('ship', 'L.index_1', 'long'), 'gear', game),
+    );
+    expect(setOutput(scheme, 'pad', padGame).map['ship']?.['L.index_1']).toEqual({ tap: 'boost' });
+  });
+
+  it('keys to controller: each stick becomes its hand’s Xbox stick, and keeps its tuning', () => {
+    const scheme = deepFreeze({
+      ...keysScheme(),
+      behaviour: { 'L.stick': { stick: { mode: 'mouse' as const, deadzone: 12 } } },
+    });
+    const next = setOutput(scheme, 'pad', padGame);
+    expect([next.behaviour['L.stick'], next.behaviour['R.stick']]).toEqual([
+      { stick: { mode: 'pad-left', deadzone: 12 } },
+      { stick: { mode: 'pad-right' } },
+    ]);
+  });
+
+  it('controller to keys: the buttons keep their actions, and send no Xbox control', () => {
+    const next = setOutput(deepFreeze(padScheme()), 'keys', padGame);
+    expect([next.output, next.padMap, next.map]).toEqual(['keys', {}, padScheme().map]);
+  });
+
+  it('controller to keys: a stick sends the keys the game ships its directions’ actions on, else moves the mouse', () => {
+    const next = setOutput(hd, 'keys', helldivers2);
+    expect([next.behaviour['L.stick'], next.behaviour['R.stick']]).toEqual([
+      {
+        stick: {
+          mode: 'keys',
+          directions: {
+            up: { kind: 'key', code: 'W' },
+            down: { kind: 'key', code: 'S' },
+            left: { kind: 'key', code: 'A' },
+            right: { kind: 'key', code: 'D' },
+          },
+        },
+      },
+      { stick: { mode: 'mouse' } },
+    ]);
+  });
+
+  it('there and back on Helldivers 2 leaves no action on two controls, nor two on one', () => {
+    const keys = setOutput(hd, 'keys', helldivers2);
+    const back = setOutput(keys, 'pad', helldivers2);
+    expect([errors(keys, helldivers2), errors(back, helldivers2)]).toEqual([[], []]);
+  });
+
+  it('leaves the controller’s own buttons as they are', () => {
+    const scheme = deepFreeze({
+      ...padScheme(),
+      devices: { ...AZERONS_ONLY, controller: true },
+      map: { ship: { 'pad.Y': { tap: 'hardpoints' }, 'L.index_1': { tap: 'boost' } } },
+    });
+    expect(setOutput(scheme, 'keys', padGame).map['ship']?.['pad.Y']).toEqual({
+      tap: 'hardpoints',
+    });
+  });
+
+  it('controller to keys with a controller in the setup: its buttons keep doing what they did', () => {
+    const both = setDevices(hd, { ...AZERONS_ONLY, controller: true }, helldivers2);
+    // The controller's X shows Reload only by the Azeron button sending X: no entry of its own.
+    expect([both.map['default']?.['pad.X'], shownAction(both, 'default', 'pad.X')?.id]).toEqual([
+      undefined,
+      'reload',
+    ]);
+    const keys = setOutput(both, 'keys', helldivers2);
+    const rows = plan(keys, helldivers2).gameBindings.filter(
+      (b) => b.set === 'controller' && b.action === 'reload',
+    );
+    expect([
+      shownAction(keys, 'default', 'pad.X')?.id,
+      keys.map['default']?.['L.middle_1'],
+      rows.map((b) => b.signal),
+    ]).toEqual(['reload', { tap: 'reload' }, [{ kind: 'pad', control: 'X' }]]);
+  });
+
+  it('keys to controller: a button whose action the controller already has joins its control', () => {
+    const scheme = deepFreeze({
+      ...keysScheme(),
+      devices: { ...AZERONS_ONLY, controller: true },
+      map: { ship: { 'pad.Y': { tap: 'hardpoints' }, 'L.index_1': { tap: 'hardpoints' } } },
+    });
+    const next = setOutput(scheme, 'pad', padGame);
+    expect([next.padMap['L.index_1'], next.map['ship']?.['pad.Y']]).toEqual([
+      'Y',
+      { tap: 'hardpoints' },
+    ]);
+  });
+
+  it('returns the same scheme for the output it already has', () => {
+    expect(setOutput(hd, 'pad', helldivers2)).toBe(hd);
+  });
+});
+
+describe('setPadControl: which Xbox control a button sends', () => {
+  const base = () => deepFreeze(padScheme());
+  const boundTo = (scheme: Scheme, action: string, g: Game = padGame) =>
+    plan(scheme, g)
+      .gameBindings.filter(
+        (b) => b.set === 'controller' && b.mode === 'ship' && b.action === action,
+      )
+      .map((b) => b.signal);
+
+  it('sends the control chosen, and its action goes with it: the game binds the action there', () => {
+    const next = setPadControl(base(), 'L.index_1', 'X', padGame);
+    expect([next.padMap['L.index_1'], boundTo(next, 'boost')]).toEqual([
+      'X',
+      [{ kind: 'pad', control: 'X' }],
+    ]);
+  });
+
+  it('a button already sending it takes the old control in exchange, with its own action', () => {
+    // Left middle 1 sends A, with Frame shift drive.
+    const next = setPadControl(base(), 'L.index_1', 'A', padGame);
+    expect([
+      next.padMap['L.index_1'],
+      next.padMap['L.middle_1'],
+      next.map['ship']?.['L.index_1'],
+      next.map['ship']?.['L.middle_1'],
+      boundTo(next, 'fsd'),
+    ]).toEqual(['A', 'RB', { tap: 'boost' }, { tap: 'fsd' }, [{ kind: 'pad', control: 'RB' }]]);
+  });
+
+  it('what the controller’s own button had on that control comes off it', () => {
+    const scheme = deepFreeze({
+      ...padScheme(),
+      devices: { ...AZERONS_ONLY, controller: true },
+      map: { ship: { 'pad.X': { tap: 'hardpoints' }, 'L.index_1': { tap: 'boost' } } },
+    });
+    const next = setPadControl(scheme, 'L.index_1', 'X', padGame);
+    expect([next.map['ship']?.['pad.X'], shownAction(next, 'ship', 'pad.X')?.id]).toEqual([
+      undefined,
+      'boost',
+    ]);
+  });
+
+  it('an empty button sends the control chosen, and shows what is on it', () => {
+    const next = setPadControl(base(), 'L.index_4', 'A', padGame);
+    expect([next.padMap['L.index_4'], shownAction(next, 'ship', 'L.index_4')?.id]).toEqual([
+      'A',
+      'fsd',
+    ]);
+  });
+
+  it('a button that sent nothing, with an action, takes the control over: what was on it comes off', () => {
+    // Left index 4 carries Landing gear and sends nothing; Left middle 1 sends A, with FSD.
+    const next = setPadControl(
+      deepFreeze({
+        ...padScheme(),
+        map: { ship: { 'L.index_4': { tap: 'gear' }, 'L.middle_1': { tap: 'fsd' } } },
+      }),
+      'L.index_4',
+      'A',
+      padGame,
+    );
+    expect([
+      next.padMap['L.index_4'],
+      next.padMap['L.middle_1'],
+      next.map['ship']?.['L.middle_1'],
+      shownAction(next, 'ship', 'L.middle_1')?.id,
+    ]).toEqual(['A', 'A', undefined, 'gear']);
+  });
+
+  it('never a direction a stick of the setup sends', () => {
+    const scheme = base();
+    expect(setPadControl(scheme, 'L.index_1', 'LS_UP', padGame)).toBe(scheme);
+  });
+
+  it('refuses with key output, on the stick, on a key, and on a unit the setup doesn’t use', () => {
+    const keys = frozen();
+    const pad = base();
+    const leftOnly = deepFreeze({
+      ...padScheme(),
+      devices: { ...AZERONS_ONLY, azerons: 'left' as const },
+    });
+    expect([
+      setPadControl(keys, 'L.index_1', 'X', padGame) === keys,
+      setPadControl(pad, 'L.stick', 'X', padGame) === pad,
+      setPadControl(pad, 'key.J', 'X', padGame) === pad,
+      setPadControl(leftOnly, 'R.index_1', 'X', padGame) === leftOnly,
+    ]).toEqual([true, true, true, true]);
+  });
+
+  it('keeps a button carrying a stick’s action on the stick’s direction', () => {
+    // Move forward dropped on a button makes it send the left stick's up.
+    const hd = deepFreeze(
+      assign(
+        xboxControllerPreset(helldivers2),
+        slot('default', 'L.index_4'),
+        'move_forward',
+        helldivers2,
+      ),
+    );
+    expect(hd.padMap['L.index_4']).toBe('LS_UP');
+    expect(setPadControl(hd, 'L.index_4', 'Y', helldivers2)).toBe(hd);
+  });
+
+  it('returns the same scheme for the control it already sends', () => {
+    const scheme = base();
+    expect(setPadControl(scheme, 'L.index_1', 'RB', padGame)).toBe(scheme);
+  });
+});
+
 describe('controller output: what every control shows is what the game does', () => {
-  // Helldivers 2 from the Xbox controller preset, edited by a long run of drags, clears and
-  // moves. After every edit, on every Xbox control something of the setup sends, the action the
+  // Helldivers 2 from the Xbox controller preset, edited by a long run of drags, clears, moves,
+  // chosen Xbox controls and switches of what the Azerons send. After every edit, on every Xbox control something of the setup sends, the action the
   // controls sending it show is the one the game's controller bindings put on it, and no other
   // (bar the game's own second uses of one button, such as Climb on a held A next to Interact).
   const g = helldivers2;
@@ -817,11 +1069,14 @@ describe('controller output: what every control shows is what the game does', ()
       return x % n;
     };
     for (let i = 0; i < count; i++) {
-      const kind = next(3);
+      // Mostly drags, clears and moves; now and then a button's Xbox control is chosen, or what
+      // the Azerons send is switched.
+      const kind = next(12);
       const control = controls[next(controls.length)] ?? '';
       const other = controls[next(controls.length)] ?? '';
       const action = actions[next(actions.length)] ?? '';
-      yield { kind, control, other, action };
+      const pad = PAD_CONTROLS[next(PAD_CONTROLS.length)] ?? 'A';
+      yield { kind, control, other, action, pad };
     }
   }
 
@@ -895,11 +1150,15 @@ describe('controller output: what every control shows is what the game does', ()
       n++;
       const at = { mode: 'default', control: step.control, press: 'tap' as const };
       scheme =
-        step.kind === 0
+        step.kind < 4
           ? assign(scheme, at, step.action, g)
-          : step.kind === 1
+          : step.kind < 7
             ? clear(scheme, at)
-            : move(scheme, at, { ...at, control: step.other }, g);
+            : step.kind < 10
+              ? move(scheme, at, { ...at, control: step.other }, g)
+              : step.kind === 10
+                ? setPadControl(scheme, step.control, step.pad, g)
+                : setOutput(scheme, scheme.output === 'pad' ? 'keys' : 'pad', g);
       for (const fault of faults(scheme)) found.push(`after edit ${n}: ${fault}`);
     }
     expect(found).toEqual([]);
@@ -960,5 +1219,56 @@ describe('a control or mode named like an Object property', () => {
     expect(actionAt(clear(placed, slot('ship', 'constructor')), slot('ship', 'constructor'))).toBe(
       undefined,
     );
+  });
+});
+
+describe('the device chooser', () => {
+  const both = { ...AZERONS_ONLY };
+
+  it('the left Azeron brings the mouse; both or none keep it only with the keyboard', () => {
+    expect([
+      chooseAzerons(both, 'left'),
+      chooseAzerons(chooseAzerons(both, 'left'), 'both').mouse,
+      chooseAzerons(chooseKeyboard(both, true), 'none'),
+    ]).toEqual([
+      { azerons: 'left', keyboard: false, mouse: true, controller: false },
+      false,
+      { azerons: 'none', keyboard: true, mouse: true, controller: false },
+    ]);
+  });
+
+  it('the keyboard comes with the mouse, and the mouse stays with the left Azeron', () => {
+    expect([
+      chooseKeyboard(both, true),
+      chooseKeyboard(chooseKeyboard(both, true), false).mouse,
+      chooseKeyboard(chooseAzerons(both, 'left'), false).mouse,
+    ]).toEqual([{ azerons: 'both', keyboard: true, mouse: true, controller: false }, false, true]);
+  });
+
+  it('adds and takes away the controller', () => {
+    expect([chooseController(both, true).controller, chooseController(both, false)]).toEqual([
+      true,
+      both,
+    ]);
+  });
+
+  it('knows a setup with nothing in it', () => {
+    expect([
+      hasDevices(both),
+      hasDevices(chooseAzerons(both, 'none')),
+      hasDevices(chooseController(chooseAzerons(both, 'none'), true)),
+    ]).toEqual([true, false, true]);
+  });
+});
+
+describe('renameScheme', () => {
+  it('takes the name trimmed, and keeps the old one for an empty name or the same one', () => {
+    const scheme = frozen();
+    expect([
+      renameScheme(scheme, '  Desk  ').name,
+      renameScheme(scheme, '   ') === scheme,
+      renameScheme(scheme, 'Main') === scheme,
+      renameScheme(scheme, 'x'.repeat(60)).name.length,
+    ]).toEqual(['Desk', true, true, 40]);
   });
 });

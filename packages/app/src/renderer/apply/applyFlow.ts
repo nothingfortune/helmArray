@@ -2,7 +2,15 @@
 // and allows. Pure, so the guards (Apply only when ready, never twice, never closed mid-write)
 // are tested without a window.
 
-import type { AppState, ApplyPreview, ApplyResult, ApplyUnitChange } from '../../shared/api';
+import type {
+  AppState,
+  ApplyGame,
+  ApplyGameRow,
+  ApplyPreview,
+  ApplyResult,
+  ApplyUnitChange,
+} from '../../shared/api';
+import { signalText } from '../screens/editor-view';
 
 export type DrawerState =
   /** `notice`: why it is looking again (the scheme changed under the drawer). */
@@ -105,10 +113,19 @@ export interface UnitSection {
   lines: UnitLine[];
 }
 
+/** The game's half: the bindings Apply changes, grouped by binding set and mode. */
+export interface GameSection {
+  title: string;
+  /** One short line beside the title. */
+  summary: string;
+  /** A label only when there is more than one group. */
+  groups: { label: string | null; lines: string[] }[];
+}
+
 export interface DrawerView {
   title: string;
   subtitle: string;
-  /** "Reading your Azerons…" while the preview is on its way, else null. */
+  /** "Looking at what changes…" while the preview is on its way, else null. */
   loading: string | null;
   /** The preview could not be had, in one sentence, else null. */
   unavailable: string | null;
@@ -116,6 +133,13 @@ export interface DrawerView {
   notice: string | null;
   checks: { ok: boolean; text: string }[];
   sections: UnitSection[];
+  /** The game's bindings that change, before Apply; null when none does. */
+  game: GameSection | null;
+  /**
+   * After an Apply that went through: the bindings still to be set by hand in the game's own
+   * controls (the bind sheet, until helmArray writes the game's file); null when there are none.
+   */
+  sheet: GameSection | null;
   /** Shown while it writes, else null. */
   progress: string | null;
   /** How it ended, once it has. */
@@ -166,15 +190,68 @@ export function unitSection(unit: ApplyUnitChange, azeronOpen: boolean): UnitSec
   return { ...base, summary, lines };
 }
 
+const SET_WORD = { controller: 'Controller', keyboard: 'Keyboard and mouse' } as const;
+
+/** One binding to set, in the words of the game's own controls menu. */
+function rowLine(row: ApplyGameRow): string {
+  if (row.to !== null) return `Set ${row.actionName} to ${signalText(row.to)}`;
+  return row.from === null
+    ? `Leave ${row.actionName} on nothing`
+    : `Take ${row.actionName} off ${signalText(row.from)}`;
+}
+
+/** The game's half, or null when no binding changes. */
+export function gameSection(game: ApplyGame, title?: string): GameSection | null {
+  if (game.rows.length === 0) return null;
+  const sets = new Set(game.rows.map((r) => r.set));
+  const modes = new Set(game.rows.map((r) => r.mode));
+  const groups = new Map<string, { label: string; lines: string[] }>();
+  for (const row of game.rows) {
+    const key = `${row.set}|${row.mode}`;
+    // Only what tells the groups apart: the set when there are two, the mode when there are more.
+    const label = [
+      ...(sets.size > 1 ? [SET_WORD[row.set]] : []),
+      ...(modes.size > 1 ? [row.modeName] : []),
+    ].join(' · ');
+    const group = groups.get(key) ?? { label, lines: [] };
+    group.lines.push(rowLine(row));
+    groups.set(key, group);
+  }
+  const n = game.rows.length;
+  const sheet = game.via === 'sheet';
+  return {
+    title: title ?? (sheet ? "In the game's controls" : 'Game file'),
+    summary: sheet ? `${n} to set by hand` : n === 1 ? '1 binding' : `${n} bindings`,
+    groups: [...groups.values()].map((g) => ({
+      label: groups.size > 1 ? g.label : null,
+      lines: g.lines,
+    })),
+  };
+}
+
+/** What the drawer says while Apply runs: what is being written, for the units the setup uses. */
+function progressWords(preview: ApplyPreview): string {
+  const used = [preview.left, preview.right].filter((u) => u.used).map((u) => u.hand);
+  if (used.length === 0) return 'Applying…';
+  if (used.length === 2)
+    return 'Writing to your Azerons, the left one first. Keep them plugged in and the Azeron app closed.';
+  return `Writing to your ${used[0] === 'left' ? 'left' : 'right'} Azeron. Keep it plugged in and the Azeron app closed.`;
+}
+
 export function drawerView(state: DrawerState): DrawerView {
-  const closed: Pick<DrawerView, 'sections' | 'checks'> = { sections: [], checks: [] };
+  const closed: Pick<DrawerView, 'sections' | 'checks' | 'game' | 'sheet'> = {
+    sections: [],
+    checks: [],
+    game: null,
+    sheet: null,
+  };
   const idle = { progress: null, result: null, loading: null, unavailable: null, notice: null };
   if (state.phase === 'loading') {
     return {
       title: 'Apply',
       subtitle: 'What changes',
       ...idle,
-      loading: 'Reading your Azerons…',
+      loading: 'Looking at what changes…',
       notice: state.notice ?? null,
       ...closed,
       cancel: { label: 'Cancel', disabled: false },
@@ -203,6 +280,7 @@ export function drawerView(state: DrawerState): DrawerView {
   const sections = [preview.left, preview.right]
     .filter((u) => u.used)
     .map((u) => unitSection(u, preview.azeronOpen));
+  const game = gameSection(preview.game);
   if (state.phase === 'ready') {
     return {
       ...head,
@@ -210,6 +288,8 @@ export function drawerView(state: DrawerState): DrawerView {
       notice: state.notice ?? null,
       checks: preview.checks,
       sections,
+      game,
+      sheet: null,
       cancel: { label: 'Cancel', disabled: false },
       apply: { label: 'Apply', disabled: !canApply(state) },
       closable: true,
@@ -219,10 +299,11 @@ export function drawerView(state: DrawerState): DrawerView {
     return {
       ...head,
       ...idle,
-      progress:
-        'Writing to your Azerons, the left one first. Keep them plugged in and the Azeron app closed.',
+      progress: progressWords(preview),
       checks: preview.checks,
       sections,
+      game,
+      sheet: null,
       cancel: { label: 'Cancel', disabled: true },
       apply: { label: 'Applying…', disabled: true },
       closable: false,
@@ -240,6 +321,17 @@ export function drawerView(state: DrawerState): DrawerView {
     },
     checks: [],
     sections: [],
+    game: null,
+    // Rows only the person can now set: the units are done, the game is theirs.
+    sheet:
+      result.ok && preview.game.via === 'sheet'
+        ? gameSection(
+            preview.game,
+            preview.gameName === ''
+              ? "Now, in the game's controls"
+              : `Now, in ${preview.gameName}'s controls`,
+          )
+        : null,
     cancel: { label: 'Close', disabled: false },
     apply: result.ok ? null : { label: 'Try again', disabled: false },
     closable: true,

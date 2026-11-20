@@ -44,6 +44,10 @@ export function createHelmApi(bridge: IpcBridge): HelmApi {
     listSchemes: (gameId) => bridge.invoke(CHANNELS.listSchemes, gameId) as Promise<Scheme[]>,
     createScheme: (gameId, preset) =>
       bridge.invoke(CHANNELS.createScheme, gameId, preset) as Promise<Scheme>,
+    copyScheme: (schemeId) => bridge.invoke(CHANNELS.copyScheme, schemeId) as Promise<Scheme>,
+    deleteScheme: async (schemeId) => {
+      await bridge.invoke(CHANNELS.deleteScheme, schemeId);
+    },
     saveScheme: async (scheme) => {
       await bridge.invoke(CHANNELS.saveScheme, scheme);
     },

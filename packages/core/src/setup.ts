@@ -170,7 +170,7 @@ export const handsOf = (plan: Pick<Plan, 'units'>): Hand[] =>
 /** The plan's profile for one unit. Throws for a unit its setup doesn't use. */
 export function unitOf(plan: Pick<Plan, 'units'>, hand: Hand): UnitProfile {
   const unit = plan.units[hand];
-  if (unit === undefined) throw new Error(`This setup doesn't use the ${hand} unit.`);
+  if (unit === undefined) throw new Error(`This scheme doesn't use the ${hand} unit.`);
   return unit;
 }
 

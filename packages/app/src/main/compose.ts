@@ -32,7 +32,9 @@ import { azeronAppRunning, watchProcesses } from './processes';
 import type { ProcessWatcher } from './processes';
 import { readSteamLibrary } from './steam-library';
 import type { SteamReaders } from './steam-library';
+import { planFor } from './scheme-plan';
 import { DataStore } from './store';
+import { pendingChanges } from './sync-state';
 
 /** The things a test sets to make time deterministic; the app leaves them all alone. */
 export interface ComposeTuning {
@@ -114,6 +116,13 @@ export async function composeServices(options: ComposeOptions): Promise<Services
     onProblem: (problem) => log.write('(app)', `${problem.file}: ${problem.message}`),
   });
 
+  // Apply, and what the pill compares the units with. Both read the store as it is now, edits
+  // not yet written to disk included.
+  const plans = {
+    getScheme: (id: string) => data.getScheme(id),
+    getGame: async (gameId: string) =>
+      (await data.listGames()).find((entry) => entry.game.id === gameId)?.game,
+  };
   // Steam's games and covers. The protocol serves only the files the Steam read returned.
   const library = createLibraryService({
     readSteam: () => readSteamLibrary(options.steam),
@@ -121,6 +130,10 @@ export async function composeServices(options: ComposeOptions): Promise<Services
     listSchemes: (gameId) => data.listSchemes(gameId),
     activeSchemeOf: (gameId) => data.activeSchemeOf(gameId),
     lastApplied: (gameId) => data.lastApplied(gameId),
+    changesOf: async (schemeId) => {
+      const now = await planFor(schemeId, plans);
+      return pendingChanges(await data.getApplied(schemeId), now.ok ? now.plan : null);
+    },
   });
 
   const hid = options.hid;
@@ -133,13 +146,6 @@ export async function composeServices(options: ComposeOptions): Promise<Services
     trace: (path, line) => log.write(path, line),
     ...tuning?.devices,
   });
-  // Apply, and what the pill compares the units with. Both read the store as it is now, edits
-  // not yet written to disk included.
-  const plans = {
-    getScheme: (id: string) => data.getScheme(id),
-    getGame: async (gameId: string) =>
-      (await data.listGames()).find((entry) => entry.game.id === gameId)?.game,
-  };
   const gate = createDevicesGate(devices, (error) => log.write('(app)', String(error)));
   const helm: Coordinator = createCoordinator({
     devices: {
@@ -197,6 +203,12 @@ export async function composeServices(options: ComposeOptions): Promise<Services
       getScheme: (id) => data.getScheme(id),
       listSchemes: (gameId) => data.listSchemes(gameId),
       createScheme: (gameId, preset) => data.createSchemeFromPreset(gameId, preset),
+      copyScheme: (schemeId) => data.copyScheme(schemeId),
+      deleteScheme: async (schemeId) => {
+        await data.deleteScheme(schemeId);
+        // It may have been the active scheme, which the pill judges.
+        await helm.activeChanged();
+      },
       saveScheme: async (scheme) => {
         data.saveScheme(scheme);
         // The pill compares the edit with what was applied, at once; the file follows later.

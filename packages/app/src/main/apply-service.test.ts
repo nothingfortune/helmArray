@@ -832,7 +832,7 @@ describe('Apply for a setup that uses some of the units, or none', () => {
     const before = r.reports();
     const result = await r.service.apply(noUnit.id, fp(noUnit));
     expect([result, r.reports() - before, r.saveApplied.mock.calls.length]).toEqual([
-      { ok: true, message: 'This setup uses no Azeron.', units: [] },
+      { ok: true, message: 'Applied. This scheme uses no Azeron, so none was written.', units: [] },
       0,
       1,
     ]);

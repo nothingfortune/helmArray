@@ -27,7 +27,7 @@ pin an older version of the package rather than adding an exclusion.
 | `pnpm dev`     | Starts the app with hot reload. Close the Azeron app first: helmArray waits while it runs. |
 | `pnpm check`   | The gate: typecheck, lint, format, tests with coverage, coverage drift. CI runs exactly this. |
 | `pnpm test`    | The tests on their own, without coverage.                                               |
-| `pnpm test:e2e` | Builds the app and drives it in a real window over two fake units: the M4 screens (J1, J2, the Azeron app refusal), the keyboard and an axe scan of each. Not part of `pnpm check`. |
+| `pnpm test:e2e` | Builds the app and drives it in a real window over two fake units: the M4 screens (J1, J2, the Azeron app refusal), setups (J1 and J2 as a controller, left Azeron + mouse, keyboard only, switching setups), the keyboard and an axe scan of each. Not part of `pnpm check`. |
 | `pnpm format`  | Rewrites files to the house format (`pnpm check` only reports).                          |
 | `pnpm tokens`  | Rewrites `styles/tokens.css` from `src/shared/tokens.ts` after a token changes.          |
 
