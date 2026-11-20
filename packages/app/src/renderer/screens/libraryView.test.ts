@@ -1,16 +1,75 @@
 import { describe, expect, it } from 'vitest';
 import { entry } from './libraryFixtures';
+import { AZERONS_ONLY } from '@helmarray/core';
+import type { LibrarySchemeRef } from '../../shared/api';
 import {
   chosenScheme,
   currentCard,
   defaultChoices,
   filterEntries,
+  setupWords,
   statusLine,
   summary,
 } from './libraryView';
 
-const XBOX = { id: 'hd2-xbox', name: 'Xbox controller', output: 'pad' as const };
-const KEYS = { id: 'hd2-keys', name: "Game's own keys", output: 'keys' as const };
+const XBOX: LibrarySchemeRef = {
+  id: 'hd2-xbox',
+  name: 'Xbox controller',
+  output: 'pad',
+  devices: { ...AZERONS_ONLY },
+};
+const KEYS: LibrarySchemeRef = {
+  id: 'hd2-keys',
+  name: "Game's own keys",
+  output: 'keys',
+  devices: { ...AZERONS_ONLY },
+};
+const COUCH: LibrarySchemeRef = {
+  id: 'hd2-couch',
+  name: 'Couch',
+  output: 'pad',
+  devices: { azerons: 'none', keyboard: false, mouse: false, controller: true },
+};
+const applied = (schemeId: string, changes = 0, at = 100) => ({ schemeId, at, changes });
+
+describe('what a setup plays with, in a few words', () => {
+  const words = (devices: Partial<LibrarySchemeRef['devices']>, output: 'pad' | 'keys' = 'pad') =>
+    setupWords({ output, devices: { ...AZERONS_ONLY, ...devices } });
+
+  it('both Azerons: what they send, as the canvas says it', () => {
+    expect([words({}), words({}, 'keys'), words({ keyboard: true }, 'keys')]).toEqual([
+      'Controller',
+      'Keys',
+      'Keys',
+    ]);
+  });
+
+  it('the left Azeron, which always brings the mouse', () => {
+    expect(words({ azerons: 'left' })).toBe('Left Azeron + mouse');
+  });
+
+  it('no Azeron: the devices themselves', () => {
+    expect([
+      words({ azerons: 'none', keyboard: true, mouse: true }),
+      words({ azerons: 'none', keyboard: true }),
+      words({ azerons: 'none', controller: true }),
+      words({ azerons: 'none', keyboard: true, mouse: true, controller: true }),
+      words({ azerons: 'none', keyboard: true, controller: true }),
+      words({ azerons: 'none', mouse: true, controller: true }),
+      words({ azerons: 'none', mouse: true }),
+      words({ azerons: 'none' }),
+    ]).toEqual([
+      'Keyboard and mouse',
+      'Keyboard',
+      'Xbox controller',
+      'Keyboard and mouse + controller',
+      'Keyboard + controller',
+      'Mouse + controller',
+      'Mouse',
+      'No devices',
+    ]);
+  });
+});
 
 describe('the status line', () => {
   it('says plainly that a game helmArray has no definition for is not supported yet', () => {
@@ -24,30 +83,57 @@ describe('the status line', () => {
     expect(statusLine(entry(), null)).toEqual({ text: 'Not set up', tone: 'plain' });
   });
 
-  it("names the game's scheme", () => {
-    expect(statusLine(entry({ schemes: [XBOX], activeSchemeId: XBOX.id }), null)).toEqual({
-      text: 'Xbox controller',
-      tone: 'plain',
+  it('a setup applied and unchanged since is Ready, with what it plays with', () => {
+    const line = statusLine(entry({ schemes: [XBOX], applied: applied(XBOX.id) }), null);
+    expect(line).toEqual({ text: 'Ready · Controller', tone: 'ok' });
+  });
+
+  it('a setup changed since it was applied counts the changes', () => {
+    expect([
+      statusLine(entry({ schemes: [KEYS], applied: applied(KEYS.id, 2) }), null),
+      statusLine(entry({ schemes: [KEYS], applied: applied(KEYS.id, 1) }), null).text,
+    ]).toEqual([{ text: '2 changes · Keys', tone: 'warning' }, '1 change · Keys']);
+  });
+
+  it('the game the Azerons hold now is On the units', () => {
+    const e = entry({ schemes: [XBOX], applied: applied(XBOX.id) });
+    expect([statusLine(e, 'helldivers2'), statusLine(e, 'other').text]).toEqual([
+      { text: 'On the units · Controller', tone: 'units' },
+      'Ready · Controller',
+    ]);
+  });
+
+  it('a setup with no Azeron is never On the units: it wrote nothing to them', () => {
+    const e = entry({ schemes: [COUCH], applied: applied(COUCH.id) });
+    expect(statusLine(e, 'helldivers2').text).toBe('Ready · Xbox controller');
+  });
+
+  it('names the setup when the game has several: the name tells them apart', () => {
+    const e = entry({
+      schemes: [COUCH, XBOX],
+      activeSchemeId: XBOX.id,
+      applied: applied(COUCH.id),
     });
+    expect(statusLine(e, null).text).toBe('Ready · Couch');
   });
 
-  it("counts the schemes when there are several, naming the game's own active one", () => {
-    const line = statusLine(entry({ schemes: [XBOX, KEYS], activeSchemeId: KEYS.id }), null);
-    expect(line.text).toBe("Game's own keys · 2 schemes");
+  it('a game never applied names the setup picked, as not applied', () => {
+    expect([
+      statusLine(entry({ schemes: [XBOX], activeSchemeId: XBOX.id }), null).text,
+      statusLine(entry({ schemes: [XBOX, KEYS], activeSchemeId: KEYS.id }), null).text,
+    ]).toEqual(['Not applied · Controller', "Not applied · Game's own keys"]);
   });
 
-  it('marks the current game, and never claims it is on the units or ready', () => {
-    const line = statusLine(entry({ schemes: [XBOX], activeSchemeId: XBOX.id }), {
-      activeGameId: 'helldivers2',
-    });
-    expect(line).toEqual({ text: 'Current · Xbox controller', tone: 'current' });
-    for (const bad of ['units', 'Ready', 'sync'])
-      expect(line.text.toLowerCase()).not.toContain(bad.toLowerCase());
+  it('counts the setups when none is picked and none applied, naming none', () => {
+    expect([
+      statusLine(entry({ schemes: [XBOX, KEYS] }), null),
+      statusLine(entry({ schemes: [XBOX] }), null).text,
+    ]).toEqual([{ text: '2 schemes', tone: 'plain' }, '1 scheme']);
   });
 
-  it('does not mark another game as current', () => {
-    const line = statusLine(entry({ schemes: [XBOX] }), { activeGameId: 'other' });
-    expect(line.tone).toBe('plain');
+  it('an applied setup that is no longer the game’s says nothing about it', () => {
+    const e = entry({ schemes: [KEYS], activeSchemeId: KEYS.id, applied: applied('gone') });
+    expect(statusLine(e, 'helldivers2').text).toBe('Not applied · Keys');
   });
 
   it('opens the first scheme when the game has none active', () => {
@@ -107,21 +193,21 @@ describe('the card of what is current', () => {
       currentCard([entry({ schemes: [XBOX], activeSchemeId: XBOX.id })], {
         activeGameId: 'helldivers2',
       })?.detail,
-    ).toBe('Not applied yet · Controller buttons');
+    ).toBe('Not applied yet · Controller');
   });
 
   describe('once something has been applied', () => {
     const picked = entry({
       schemes: [XBOX, KEYS],
       activeSchemeId: KEYS.id,
-      applied: { schemeId: XBOX.id, at: 100 },
+      applied: applied(XBOX.id),
     });
 
     it('shows the scheme applied, not the one picked since', () => {
       const card = currentCard([picked], { activeGameId: 'helldivers2' });
       expect(card?.scheme).toBe(XBOX);
       expect(card?.applied).toBe(true);
-      expect(card?.detail).toBe('Applied · Controller buttons');
+      expect(card?.detail).toBe('Applied · Controller');
     });
 
     it('shows it with no active game at all', () => {
@@ -134,7 +220,7 @@ describe('the card of what is current', () => {
         name: 'Older',
         schemes: [KEYS],
         activeSchemeId: KEYS.id,
-        applied: { schemeId: KEYS.id, at: 50 },
+        applied: applied(KEYS.id, 0, 50),
       });
       const card = currentCard([older, picked], { activeGameId: 'older' });
       expect(card?.entry.gameId).toBe('helldivers2');
@@ -147,7 +233,7 @@ describe('the card of what is current', () => {
       const lost = entry({
         schemes: [KEYS],
         activeSchemeId: KEYS.id,
-        applied: { schemeId: 'gone', at: 1 },
+        applied: applied('gone', 0, 1),
       });
       const card = currentCard([lost], { activeGameId: 'helldivers2' });
       expect(card?.applied).toBe(false);
@@ -170,16 +256,15 @@ describe('the card of what is current', () => {
     expect(chosenScheme(noneActive)).toBe(XBOX);
   });
 
-  it('does not name a scheme as picked on a tile when none is active', () => {
-    const noneActive = entry({ schemes: [XBOX, KEYS], activeSchemeId: null });
-    expect(statusLine(noneActive, { activeGameId: 'helldivers2' })).toEqual({
-      text: 'Current · No scheme picked',
-      tone: 'current',
+  it('is never a setup with no Azeron: the units still hold what was there before', () => {
+    const keys = entry({ schemes: [KEYS], applied: applied(KEYS.id, 0, 50) });
+    const couch = entry({
+      gameId: 'couch',
+      name: 'Couch game',
+      schemes: [COUCH],
+      applied: applied(COUCH.id, 0, 90),
     });
-    expect(statusLine(noneActive, { activeGameId: 'other' })).toEqual({
-      text: '2 schemes',
-      tone: 'plain',
-    });
-    expect(statusLine(entry({ schemes: [XBOX] }), null).text).toBe('1 scheme');
+    const card = currentCard([couch, keys], null);
+    expect([card?.entry.gameId, card?.detail]).toEqual(['helldivers2', 'Applied · Keys']);
   });
 });

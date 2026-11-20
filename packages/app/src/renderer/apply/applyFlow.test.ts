@@ -1,6 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import type { AppState, ApplyPreview, ApplyResult, ApplyUnitChange } from '../../shared/api';
-import { START, canApply, drawerView, previewKey, reduce, unitSection } from './applyFlow';
+import type {
+  AppState,
+  ApplyGameRow,
+  ApplyPreview,
+  ApplyResult,
+  ApplyUnitChange,
+} from '../../shared/api';
+import {
+  START,
+  canApply,
+  drawerView,
+  gameSection,
+  previewKey,
+  reduce,
+  unitSection,
+} from './applyFlow';
 import type { DrawerState } from './applyFlow';
 
 const unit = (over: Partial<ApplyUnitChange> = {}): ApplyUnitChange => ({
@@ -165,7 +179,7 @@ describe('the Apply drawer flow', () => {
       });
       expect(state).toEqual({ phase: 'loading', notice: CHANGED.message });
       expect(drawerView(state)).toMatchObject({
-        loading: 'Reading your Azerons…',
+        loading: 'Looking at what changes…',
         notice: CHANGED.message,
         result: null,
       });
@@ -226,6 +240,145 @@ describe('the Apply drawer flow', () => {
     ]);
     expect(view.title).toBe('Apply Main');
     expect(view.subtitle).toBe('Skiff · what changes');
+  });
+});
+
+const row = (over: Partial<ApplyGameRow> = {}): ApplyGameRow => ({
+  set: 'controller',
+  mode: 'default',
+  modeName: 'Default',
+  action: 'reload',
+  actionName: 'Reload',
+  to: { kind: 'pad', control: 'Y' },
+  from: { kind: 'pad', control: 'X' },
+  ...over,
+});
+const NO_UNIT = unit({ used: false, connected: false, write: null, deletes: [], inputsChanged: 0 });
+
+describe('the game half of the drawer', () => {
+  it('is a bind sheet: what to set in the game’s own controls, one line per action', () => {
+    expect(gameSection({ via: 'sheet', rows: [row()] })).toEqual({
+      title: "In the game's controls",
+      summary: '1 to set by hand',
+      groups: [{ label: null, lines: ['Set Reload to Xbox Y'] }],
+    });
+  });
+
+  it('says to take an action off what it was on when the setup puts it on nothing', () => {
+    expect(gameSection({ via: 'sheet', rows: [row({ to: null })] })?.groups[0]?.lines).toEqual([
+      'Take Reload off Xbox X',
+    ]);
+  });
+
+  it('groups the rows by the game’s two sets of bindings, and by mode when it has several', () => {
+    const rows = [
+      row(),
+      row({ set: 'keyboard', to: { kind: 'key', code: 'T' }, from: { kind: 'key', code: 'R' } }),
+      row({
+        set: 'keyboard',
+        mode: 'srv',
+        modeName: 'SRV',
+        action: 'jump',
+        actionName: 'Jump',
+        to: { kind: 'key', code: 'J' },
+        from: null,
+      }),
+    ];
+    expect(gameSection({ via: 'sheet', rows })).toEqual({
+      title: "In the game's controls",
+      summary: '3 to set by hand',
+      groups: [
+        { label: 'Controller · Default', lines: ['Set Reload to Xbox Y'] },
+        { label: 'Keyboard and mouse · Default', lines: ['Set Reload to T'] },
+        { label: 'Keyboard and mouse · SRV', lines: ['Set Jump to J'] },
+      ],
+    });
+  });
+
+  it('names only what tells the groups apart: the two sets of a game with one mode', () => {
+    const rows = [row(), row({ set: 'keyboard', to: { kind: 'key', code: 'T' } })];
+    expect(gameSection({ via: 'sheet', rows })?.groups.map((g) => g.label)).toEqual([
+      'Controller',
+      'Keyboard and mouse',
+    ]);
+  });
+
+  it('is the game file once helmArray writes it', () => {
+    expect(gameSection({ via: 'file', rows: [row(), row({ action: 'x' })] })).toMatchObject({
+      title: 'Game file',
+      summary: '2 bindings',
+    });
+  });
+
+  it('is not there when no binding changes', () => {
+    expect(gameSection({ via: 'sheet', rows: [] })).toBeNull();
+  });
+
+  it('shows in the drawer beside the unit sections, before Apply', () => {
+    const view = drawerView(ready({ game: { via: 'sheet', rows: [row()] } }));
+    expect([view.sections.map((s) => s.hand), view.game?.groups[0]?.lines]).toEqual([
+      ['left', 'right'],
+      ['Set Reload to Xbox Y'],
+    ]);
+  });
+
+  it('stays after Apply as what is left to do by hand: the bind sheet', () => {
+    const done = reduce(
+      reduce(ready({ game: { via: 'sheet', rows: [row()] } }), { type: 'apply' }),
+      {
+        type: 'applied',
+        result: OK,
+      },
+    );
+    expect(drawerView(done).sheet).toEqual({
+      title: "Now, in Skiff's controls",
+      summary: '1 to set by hand',
+      groups: [{ label: null, lines: ['Set Reload to Xbox Y'] }],
+    });
+  });
+
+  it('is no bind sheet after an apply that failed: nothing is to be set yet', () => {
+    const done = reduce(
+      reduce(ready({ game: { via: 'sheet', rows: [row()] } }), { type: 'apply' }),
+      {
+        type: 'applied',
+        result: FAILED,
+      },
+    );
+    expect(drawerView(done).sheet).toBeNull();
+  });
+});
+
+describe('a setup with no Azeron, or the left one only', () => {
+  it('has no unit section, a game half, and Apply allowed: applying is setting the game', () => {
+    const view = drawerView(
+      ready({
+        left: NO_UNIT,
+        right: { ...NO_UNIT, hand: 'right' },
+        anyChange: false,
+        checks: [{ ok: true, text: 'The scheme has no errors.' }],
+        game: { via: 'sheet', rows: [row({ set: 'keyboard', to: { kind: 'key', code: 'T' } })] },
+      }),
+    );
+    expect([view.sections, view.game?.groups[0]?.lines, view.apply]).toEqual([
+      [],
+      ['Set Reload to T'],
+      { label: 'Apply', disabled: false },
+    ]);
+  });
+
+  it('says what it does while it applies: no Azeron, the left one, or both', () => {
+    const progress = (over: Partial<ApplyPreview>) =>
+      drawerView(reduce(ready(over), { type: 'apply' })).progress;
+    expect([
+      progress({ left: NO_UNIT, right: { ...NO_UNIT, hand: 'right' } }),
+      progress({ right: { ...NO_UNIT, hand: 'right' } }),
+      progress({}),
+    ]).toEqual([
+      'Applying…',
+      'Writing to your left Azeron. Keep it plugged in and the Azeron app closed.',
+      'Writing to your Azerons, the left one first. Keep them plugged in and the Azeron app closed.',
+    ]);
   });
 });
 

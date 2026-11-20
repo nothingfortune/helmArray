@@ -955,7 +955,10 @@ describe('a setup with no Azeron', () => {
     expect([
       result,
       [left.received.length - (before[0] ?? 0), right.received.length - (before[1] ?? 0)],
-    ]).toEqual([{ ok: true, units: [], message: 'This setup uses no Azeron.' }, [0, 0]]);
+    ]).toEqual([
+      { ok: true, units: [], message: 'Applied. This setup uses no Azeron, so none was written.' },
+      [0, 0],
+    ]);
   });
 
   it('previews no change on either unit', async () => {
