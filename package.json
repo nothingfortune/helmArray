@@ -8,7 +8,7 @@
   },
   "scripts": {
     "check": "node --run typecheck && node --run lint && node --run format:check && node --run test:coverage && node --run coverage:drift",
-    "typecheck": "tsc -p tsconfig.json && tsc -p packages/core && tsc -p packages/azeron && tsc -p packages/games && tsc -p packages/app/tsconfig.node.json && tsc -p packages/app/tsconfig.web.json",
+    "typecheck": "tsc -p tsconfig.json && tsc -p packages/core && tsc -p packages/azeron && tsc -p packages/games && tsc -p packages/app/tsconfig.node.json && tsc -p packages/app/tsconfig.web.json && tsc -p packages/app/tsconfig.e2e.json",
     "lint": "eslint --max-warnings=0 .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -16,7 +16,8 @@
     "test:coverage": "vitest run --coverage",
     "coverage:drift": "node scripts/check-coverage-drift.ts",
     "dev": "cd packages/app && node --run dev",
-    "tokens": "cd packages/app && node --run tokens"
+    "tokens": "cd packages/app && node --run tokens",
+    "test:e2e": "cd packages/app && node --run test:e2e"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

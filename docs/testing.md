@@ -12,7 +12,7 @@ coverage, and the coverage drift check. If it passes locally it passes in CI.
 | ------------------ | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------ | --------- |
 | Unit               | Pure modules: core, azeron, games, app's shared and renderer logic                                   | `*.test.ts` beside the source, and root `test/`        | In the gate |
 | Integration        | Main-process services wired together, with a fake HID unit and temp folders                          | `test/integration/`, `*.test.ts` in `packages/app/src/main` |  In the gate |
-| End to end         | The real app: Playwright on Electron, with fake devices                                              | Not built yet                                          | Coming    |
+| End to end         | The real app: Playwright on Electron over fake units, a temp data folder and a fake Steam (the M4 journeys, the keyboard, axe) | `packages/app/e2e/*.spec.ts`, run by `pnpm test:e2e` | Outside the gate |
 | Mutation           | Whether the tests notice when the code is broken: Stryker                                            | Later PR                                               | Coming    |
 | Hardware checklist | The real units, pedals and a game, run by hand                                                       | [`hardware-checklist.md`](hardware-checklist.md)       | Manual    |
 
@@ -22,8 +22,10 @@ game file or the owner's data: fakes and temp folders only. Never send the pedal
 
 Vitest tests never import `electron` (it downloads its binary on first use). Main-process logic
 lives in pure modules beside `src/main/index.ts` and is tested there. The Electron glue itself,
-`src/main/index.ts` and `src/preload/index.ts`, is what the end-to-end suite covers, and is the
-only code left out of coverage for that reason.
+`src/main/index.ts` and `src/preload/index.ts`, is what the end-to-end suite (`pnpm test:e2e`) covers, and is the
+only code left out of coverage for that reason. The e2e switch itself (`e2e-seam.ts`, `e2e-fakes.ts`,
+the guard in `hid-backend.ts`) is counted and has vitest tests: a run with `HELM_E2E=1` can never
+reach a real HID device.
 
 ## Integration tests
 

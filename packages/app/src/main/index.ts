@@ -1,4 +1,6 @@
+import { realpathSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { BrowserWindow, Menu, Tray, app, ipcMain, nativeImage, protocol, shell } from 'electron';
 import { CHANNELS } from '../shared/api';
@@ -6,6 +8,7 @@ import { COVER_SCHEME } from '../shared/cover';
 import { BUILT_IN_GAMES } from './built-in-games';
 import { composeServices } from './compose';
 import { answerCover } from './cover-protocol';
+import { E2E_CONTROL_GLOBAL, chooseBackends, e2eConfig } from './e2e-seam';
 import { nodeHidBackend } from './hid-backend';
 import { registerHelmIpc } from './ipc';
 import { listProcesses } from './process-list';
@@ -14,6 +17,22 @@ import { trayIconBitmap } from './tray-icon';
 import { startupWindows } from './startup';
 import { trayMenu } from './tray';
 import { mainWindowOptions, playWindowOptions } from './windows';
+
+// A test run (HELM_E2E=1, see e2e-seam.ts) keeps its files in a temp folder and uses fakes for
+// everything outside the app. Read before anything else, and before the single-instance lock
+// (which is per data folder); a half-set switch stops the app.
+const e2e = e2eConfig(process.env, {
+  platform: process.platform,
+  realpath: (path) => realpathSync.native(path),
+  home: homedir(),
+  // Where Electron would keep the app's data, read before anything moves it.
+  userData: app.getPath('userData'),
+});
+if (e2e) {
+  app.setPath('userData', e2e.dataDir);
+  app.setPath('sessionData', join(e2e.dataDir, 'session'));
+  app.setPath('logs', join(e2e.dataDir, 'logs'));
+}
 
 // Must be said before the app is ready: the windows' pages may then load `helm-cover://` images.
 protocol.registerSchemesAsPrivileged([
@@ -44,7 +63,8 @@ function openMainWindow(): void {
     return;
   }
   mainWindow = new BrowserWindow(mainWindowOptions(preloadPath()));
-  mainWindow.once('ready-to-show', () => mainWindow?.show());
+  // A test run doesn't take the keyboard focus from whoever is at the machine.
+  mainWindow.once('ready-to-show', () => (e2e ? mainWindow?.showInactive() : mainWindow?.show()));
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
@@ -89,13 +109,21 @@ function broadcast(state: unknown): void {
 /** Starts everything behind the windows. Returns how to let go of the units on the way out. */
 async function startServices(): Promise<() => Promise<void>> {
   const logDir = app.getPath('logs');
+  // Everything outside the app: real ones, or under a test run the fakes and never the real.
+  const outside = await chooseBackends(e2e, {
+    real: () => ({ hid: nodeHidBackend(), listProcesses, steam: steamReaders }),
+    fake: async (config) => (await import('./e2e-fakes')).fakeBackends(config),
+  });
+  if (outside.control !== undefined) {
+    (globalThis as Record<string, unknown>)[E2E_CONTROL_GLOBAL] = outside.control;
+  }
   // How the services are put together is compose.ts: it is what the integration tests run too.
   const services = await composeServices({
     dataDir: app.getPath('userData'),
     logDir,
-    hid: nodeHidBackend(),
-    listProcesses,
-    steam: steamReaders,
+    hid: outside.hid,
+    listProcesses: outside.listProcesses,
+    steam: outside.steam,
     builtInGames: BUILT_IN_GAMES,
     broadcast,
     processPollMs: PROCESS_POLL_MS,
