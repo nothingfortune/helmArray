@@ -121,6 +121,19 @@ describe('ids that are also names on every object', () => {
     expect((await openStore([gameOf(id), SKIFF])).data.active().schemeId).toBe(scheme.id);
   });
 
+  it('answers for any game which scheme is its own active one, not only the active game', async () => {
+    const { data } = await openStore();
+    const skiff = await data.createSchemeFromPreset('skiff', 'xbox');
+    const grove = await data.createSchemeFromPreset('arboretum', 'xbox');
+    await data.setActive('skiff', skiff.id);
+    await data.setActive('arboretum', grove.id);
+    expect(data.active().gameId).toBe('arboretum');
+    expect(data.activeSchemeOf('skiff')).toBe(skiff.id);
+    expect(data.activeSchemeOf('arboretum')).toBe(grove.id);
+    expect(data.activeSchemeOf('nothing')).toBeNull();
+    expect(data.activeSchemeOf('__proto__')).toBeNull();
+  });
+
   it('refuses __proto__ as a game or a scheme, writing nothing', async () => {
     const { data } = await openStore();
     await expect(data.setActive('__proto__', null)).rejects.toThrow(StoreError);

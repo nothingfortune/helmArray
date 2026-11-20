@@ -3,7 +3,7 @@
 // checked here, because a window's page is not trusted.
 
 import type { Scheme } from '@helmarray/core';
-import type { AppState, GameEntry, Hand, Preset } from '../shared/api';
+import type { AppState, GameEntry, Hand, LibraryEntry, Preset } from '../shared/api';
 import { CHANNELS } from '../shared/api';
 import { isSafeId, isScheme } from './store';
 
@@ -19,6 +19,7 @@ export interface HelmHandlers {
   recentLog(lines: number): Promise<string[]>;
   openLogFolder(): Promise<void>;
   listGames(): Promise<GameEntry[]>;
+  listLibrary(refresh: boolean): Promise<LibraryEntry[]>;
   getScheme(id: string): Promise<Scheme | null>;
   listSchemes(gameId: string): Promise<Scheme[]>;
   createScheme(gameId: string, preset: Preset): Promise<Scheme>;
@@ -52,6 +53,7 @@ export function registerHelmIpc(ipc: IpcRegistry, handlers: HelmHandlers): () =>
   });
   ipc.handle(CHANNELS.openLogFolder, () => handlers.openLogFolder());
   ipc.handle(CHANNELS.listGames, () => handlers.listGames());
+  ipc.handle(CHANNELS.listLibrary, (_event, refresh) => handlers.listLibrary(refresh === true));
   ipc.handle(CHANNELS.getScheme, (_event, id) => handlers.getScheme(idArg('getScheme', id)));
   ipc.handle(CHANNELS.listSchemes, (_event, gameId) =>
     handlers.listSchemes(idArg('listSchemes', gameId)),
@@ -77,6 +79,7 @@ export function registerHelmIpc(ipc: IpcRegistry, handlers: HelmHandlers): () =>
       CHANNELS.recentLog,
       CHANNELS.openLogFolder,
       CHANNELS.listGames,
+      CHANNELS.listLibrary,
       CHANNELS.getScheme,
       CHANNELS.listSchemes,
       CHANNELS.createScheme,

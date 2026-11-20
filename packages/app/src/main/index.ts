@@ -1,7 +1,10 @@
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { BrowserWindow, Menu, Tray, app, ipcMain, nativeImage, shell } from 'electron';
+import { BrowserWindow, Menu, Tray, app, ipcMain, nativeImage, protocol, shell } from 'electron';
 import { CHANNELS } from '../shared/api';
+import { COVER_SCHEME } from '../shared/cover';
 import { BUILT_IN_GAMES } from './built-in-games';
+import { answerCover } from './cover-protocol';
 import { createCoordinator } from './coordinator';
 import type { Coordinator } from './coordinator';
 import { Devices } from './devices';
@@ -12,13 +15,21 @@ import type { HandStore } from './hands';
 import { nodeHidBackend } from './hid-backend';
 import { findUnits, openUnit } from './hid-transport';
 import { registerHelmIpc } from './ipc';
+import { createLibraryService } from './library';
 import { listProcesses } from './process-list';
 import { watchProcesses } from './processes';
+import { readSteamLibrary } from './steam-library';
+import { steamReaders } from './steam-readers';
 import { DataStore } from './store';
 import { trayIconBitmap } from './tray-icon';
 import { startupWindows } from './startup';
 import { trayMenu } from './tray';
 import { mainWindowOptions, playWindowOptions } from './windows';
+
+// Must be said before the app is ready: the windows' pages may then load `helm-cover://` images.
+protocol.registerSchemesAsPrivileged([
+  { scheme: COVER_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true } },
+]);
 
 let mainWindow: BrowserWindow | null = null;
 let playWindow: BrowserWindow | null = null;
@@ -111,6 +122,22 @@ async function startServices(): Promise<() => Promise<void>> {
     onProblem: (problem) => log.write('(app)', `${problem.file}: ${problem.message}`),
   });
 
+  // Steam's games and covers. The protocol serves only the files the Steam read returned.
+  const library = createLibraryService({
+    readSteam: () => readSteamLibrary(steamReaders),
+    games: () => data.listGames(),
+    listSchemes: (gameId) => data.listSchemes(gameId),
+    activeSchemeOf: (gameId) => data.activeSchemeOf(gameId),
+  });
+  protocol.handle(COVER_SCHEME, async (request) => {
+    const answer = await answerCover(request.url, await library.coverFiles(), (path) =>
+      readFile(path),
+    );
+    return answer.status === 200
+      ? new Response(answer.body, { headers: { 'content-type': answer.mime } })
+      : new Response(null, { status: 404 });
+  });
+
   const hid = nodeHidBackend();
   const devices = new Devices({
     findUnits: () => findUnits(hid),
@@ -140,6 +167,7 @@ async function startServices(): Promise<() => Promise<void>> {
       if (problem) log.write('(app)', `couldn't open the log folder: ${problem}`);
     },
     listGames: () => data.listGames(),
+    listLibrary: (refresh) => library.list(refresh),
     getScheme: (id) => data.getScheme(id),
     listSchemes: (gameId) => data.listSchemes(gameId),
     createScheme: (gameId, preset) => data.createSchemeFromPreset(gameId, preset),

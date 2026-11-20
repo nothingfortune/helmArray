@@ -34,6 +34,7 @@ function setup() {
     recentLog: vi.fn((lines: number) => Promise.resolve([`${lines}`])),
     openLogFolder: vi.fn(() => Promise.resolve()),
     listGames: vi.fn(() => Promise.resolve([{ game: GAME, builtIn: true }])),
+    listLibrary: vi.fn<HelmHandlers['listLibrary']>(() => Promise.resolve([])),
     getScheme: vi.fn<HelmHandlers['getScheme']>(() => Promise.resolve(SCHEME)),
     listSchemes: vi.fn<HelmHandlers['listSchemes']>(() => Promise.resolve([SCHEME])),
     createScheme: vi.fn<HelmHandlers['createScheme']>(() => Promise.resolve(SCHEME)),
@@ -56,6 +57,7 @@ describe('the IPC channels', () => {
         CHANNELS.recentLog,
         CHANNELS.openLogFolder,
         CHANNELS.listGames,
+        CHANNELS.listLibrary,
         CHANNELS.getScheme,
         CHANNELS.listSchemes,
         CHANNELS.createScheme,
@@ -110,6 +112,15 @@ describe('the IPC channels', () => {
 
   it('lists the games', async () => {
     expect(await setup().call(CHANNELS.listGames)).toEqual([{ game: GAME, builtIn: true }]);
+  });
+
+  it('lists the library, asking for a fresh read only when told to with `true`', async () => {
+    const { call, calls } = setup();
+    expect(await call(CHANNELS.listLibrary)).toEqual([]);
+    await call(CHANNELS.listLibrary, true);
+    await call(CHANNELS.listLibrary, 'yes');
+    await call(CHANNELS.listLibrary, 1);
+    expect(calls.listLibrary.mock.calls).toEqual([[false], [true], [false], [false]]);
   });
 
   it('passes ids and presets through', async () => {

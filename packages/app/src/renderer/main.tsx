@@ -4,6 +4,8 @@ import { Tooltip } from 'radix-ui';
 import './styles/tokens.css';
 import './styles/base.css';
 import './styles/chrome.css';
+import './styles/library.css';
+import { App } from './App';
 import { Header } from './header/Header';
 import { HandQuestion } from './header/HandQuestion';
 import { WriteBlockLine } from './header/WriteBlockLine';
@@ -23,6 +25,7 @@ function MainWindow() {
           onChoose={(unitId, hand) => void window.helm.chooseHand(unitId, hand)}
         />
       )}
+      <App state={state} />
     </>
   );
 }

@@ -12,6 +12,36 @@ export interface GameEntry {
   builtIn: boolean;
 }
 
+/** One scheme of a game, as the Library lists it. */
+export interface LibrarySchemeRef {
+  id: string;
+  name: string;
+  output: Scheme['output'];
+}
+
+/**
+ * One game in the Library: an installed Steam game, a game helmArray knows that Steam doesn't
+ * list (not installed, or added by hand), or both in one entry (matched on the Steam app id).
+ * Plain data: no file paths ever reach a window; covers are fetched by `coverUrl`.
+ */
+export interface LibraryEntry {
+  /** Steam's name for the game, or the known game's own name when Steam doesn't list it. */
+  name: string;
+  /** The Steam app id, or null for a game added by hand that isn't on Steam. */
+  appId: string | null;
+  /** The id of helmArray's game definition, or null when helmArray doesn't know the game. */
+  gameId: string | null;
+  /** The game's schemes, each by name. Empty for an unknown game. */
+  schemes: LibrarySchemeRef[];
+  /** This game's own active scheme (not only the active game's), or null. */
+  activeSchemeId: string | null;
+  /** True when some action has a key the game ships with: "Game's own keys" can be offered. */
+  nativeKeys: boolean;
+  /** Whether a portrait cover and a header image can be had for `coverUrl`. */
+  hasCover: boolean;
+  hasHeader: boolean;
+}
+
 /** The starting points a new scheme is copied from. Using one never edits it. */
 export type Preset = 'xbox' | 'keys';
 
@@ -78,6 +108,11 @@ export interface HelmApi {
   createScheme(gameId: string, preset: Preset): Promise<Scheme>;
   /** Saves an edited scheme. Edits are written a moment later, together; quitting writes them. */
   saveScheme(scheme: Scheme): Promise<void>;
+  /**
+   * The Steam games merged with the games helmArray knows, unknown games included. Steam is read
+   * once and kept; `refresh` reads it again. Schemes are read fresh each time.
+   */
+  listLibrary(refresh?: boolean): Promise<LibraryEntry[]>;
   /** Makes this the active game and scheme (null: the game has no active scheme). */
   setActive(gameId: string, schemeId: string | null): Promise<void>;
 }
@@ -95,4 +130,5 @@ export const CHANNELS = {
   createScheme: 'helm:create-scheme',
   saveScheme: 'helm:save-scheme',
   setActive: 'helm:set-active',
+  listLibrary: 'helm:list-library',
 } as const;
