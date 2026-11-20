@@ -580,6 +580,18 @@ describe('controller output: the pad rule', () => {
     ]).toEqual(['hardpoints', undefined, [pad('RB')]]);
   });
 
+  it('rule 2: an action a stick sends for makes the button send the same stick direction, as with keys', () => {
+    // Helldivers 2's left stick sends Move forward (up). Left middle 2 sends Y with nothing on it.
+    const preset = deepFreeze(xboxControllerPreset(helldivers2));
+    const next = assign(preset, slot('default', 'L.middle_2'), 'move_forward', helldivers2);
+    const p = plan(next, helldivers2);
+    expect([
+      next.padMap['L.middle_2'],
+      p.findings,
+      p.gameBindings.find((b) => b.action === 'move_forward')?.signal,
+    ]).toEqual(['LS_UP', [], pad('LS_UP')]);
+  });
+
   it('rule 2: a button sending nothing gets the control the game ships the action on, when free', () => {
     const next = assign(base(), slot('ship', 'L.index_4'), 'hardpoints', padGame);
     expect([next.padMap['L.index_4'], boundTo(next, 'hardpoints')]).toEqual(['Y', [pad('Y')]]);
@@ -600,26 +612,7 @@ describe('controller output: the pad rule', () => {
     expect([next.padMap['L.index_4'], 'L.index_2' in next.padMap]).toEqual(['Y', false]);
   });
 
-  it('rule 2: never a stick direction a stick of the setup sends', () => {
-    const g: Game = {
-      ...padGame,
-      actions: [
-        ...padGame.actions,
-        {
-          id: 'walk',
-          name: 'Walk',
-          mode: 'ship',
-          role: 'movement',
-          required: false,
-          native: { pad: 'LS_UP' },
-        },
-      ],
-    };
-    const next = assign(base(), slot('ship', 'L.index_4'), 'walk', g);
-    expect(next.padMap['L.index_4']).toBe('B');
-  });
-
-  it('rule 2: with no control free the button sends nothing, and core says so', () => {
+  it('rule 2: with no control free the button sends nothing, and core says so: the directions the sticks send are never free', () => {
     const controls = PAD_CONTROLS.filter((c) => !/^[LR]S_/.test(c));
     const g: Game = {
       id: 'many',

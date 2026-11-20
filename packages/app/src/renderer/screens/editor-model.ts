@@ -97,7 +97,9 @@ export const actionAt = (scheme: Scheme, slot: Slot): ActionId | undefined =>
  *    it is free, else the first free one in PAD_CONTROLS order. Free: no control of the setup
  *    sending it carries an action in any mode, and no stick of the setup sends it. An Azeron button
  *    sending it with nothing on it gives it up. None free: the button sends nothing, and core's
- *    `sends-nothing` says so.
+ *    `sends-nothing` says so. An action a stick of the setup sends for (Move forward, on the left
+ *    stick's up) is the exception: the button sends that same direction, whatever it sent, so the
+ *    stick keeps it (STICK DIRECTION KEYS rule 3 in core, for an Xbox stick).
  * 3. Clearing the tap of a control sending P takes the action off P: off every slot in the mode
  *    whose control sends P. An Azeron button left with no action in any mode stops sending (its
  *    pad map entry goes), so it does nothing; the controller's own button can't stop, and the
@@ -172,14 +174,23 @@ function padFree(scheme: Scheme, pad: PadControl, sticks: ReadonlySet<PadControl
   );
 }
 
-/** THE PAD RULE, rule 2: gives an Azeron button that sends nothing a free pad control. */
+/**
+ * THE PAD RULE, rule 2: gives an Azeron button that sends nothing a free pad control, and one that
+ * gets an action a stick sends for that stick direction.
+ */
 function givePad(scheme: Scheme, control: ControlId, action: ActionId, game: Game): Scheme {
   const setup = setupOf(scheme.devices);
   const azeron = control.startsWith('L.') || control.startsWith('R.');
   if (scheme.output !== 'pad' || !azeron || !inSetup(setup, control)) return scheme;
-  if (padSignalOf(scheme, control) !== undefined) return scheme;
   const sticks = stickPads(scheme);
   const own = game.actions.find((a) => a.id === action)?.native?.pad;
+  if (own !== undefined && sticks.has(own)) {
+    // A stick of the setup sends it: the button sends the same direction, a second way to do it,
+    // as a button may send the key a key stick sends for its action. The game binding stays.
+    if (scheme.padMap[control] === own) return scheme;
+    return { ...scheme, padMap: { ...scheme.padMap, [control]: own } };
+  }
+  if (padSignalOf(scheme, control) !== undefined) return scheme;
   const pick = [...(own === undefined ? [] : [own]), ...PAD_CONTROLS].find((pad) =>
     padFree(scheme, pad, sticks),
   );

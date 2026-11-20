@@ -87,6 +87,10 @@ describe('left Azeron + mouse: Apply writes only the left unit', () => {
     ]).toEqual([true, 1, false, null]);
   });
 
+  it('the preview lists no game binding to set: the mouse keeps Fire and Aim, as the game ships them', () => {
+    expect(preview.game.rows).toEqual([]);
+  });
+
   it('Apply says the left unit runs the layout, and names no other', () => {
     expect([result.ok, result.message, result.units.map((u) => u.hand)]).toEqual([
       true,

@@ -350,3 +350,24 @@ describe('mixed-input, for a setup', () => {
     ).toEqual([]);
   });
 });
+
+describe('the keyboard and Azerons sending keys share the keyboard set', () => {
+  // Throw grenade is on the keyboard's R, where the game ships Reload. Reload is on an Azeron button
+  // with the game's own keys: its own key is taken, so the button gets one of the pool's.
+  const plan = run({
+    ...gameKeysPreset(helldivers2),
+    devices: devices({ keyboard: true }),
+    map: { default: { 'key.R': { tap: 'grenade' }, 'L.index_1': { tap: 'reload' } } },
+  });
+
+  it('gives the Azeron button a key of the pool, not the key the keyboard does something with', () => {
+    expect([
+      plan.units.left?.pins.find((p) => p.control === 'L.index_1')?.presses.tap,
+      on(plan, 'keyboard', 'reload'),
+    ]).toEqual([key('Insert'), [key('Insert')]]);
+  });
+
+  it('leaves no two actions on one key', () => {
+    expect(plan.findings.filter((f) => f.rule === 'key-collision')).toEqual([]);
+  });
+});
