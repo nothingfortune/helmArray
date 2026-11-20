@@ -72,6 +72,8 @@ async function rig(
     saveApplied?: ApplyServiceDeps['saveApplied'];
     setActive?: ApplyServiceDeps['setActive'];
     saveScheme?: ApplyServiceDeps['saveScheme'];
+    trace?: (line: string) => void;
+    settled?: () => void | Promise<void>;
   } = {},
 ) {
   const units = new Map<string, FakeUnit>([
@@ -119,7 +121,7 @@ async function rig(
   look.fn = over.azeron ?? (() => Promise.resolve(false));
   const saveApplied = vi.fn(over.saveApplied ?? (() => Promise.resolve()));
   const setActive = vi.fn(over.setActive ?? (() => Promise.resolve()));
-  const settled = vi.fn();
+  const settled = vi.fn(over.settled);
   // The store, as far as Apply sees it: the scheme as saved, which a save replaces.
   const store = { scheme: over.scheme ?? scheme };
   const saveScheme = vi.fn(
@@ -140,6 +142,7 @@ async function rig(
     setActive,
     saveScheme,
     settled,
+    ...(over.trace ? { trace: over.trace } : {}),
   });
   const reports = () => [...units.values()].reduce((n, u) => n + u.received.length, 0);
   return {
@@ -757,5 +760,70 @@ describe('Apply as the windows ask for it', () => {
     ]);
     expect(applied.ok).toBe(true);
     expect(preview.schemeName).toBe('Main');
+  });
+});
+
+describe('Apply says what it did, to the log', () => {
+  let r: Awaited<ReturnType<typeof rig>> | undefined;
+  beforeEach(() => void vi.useFakeTimers());
+  afterEach(async () => {
+    await r?.devices.stop();
+    r = undefined;
+    vi.useRealTimers();
+  });
+
+  it('prefixes what the units flow says with apply:, so the log shows whose line it is', async () => {
+    const lines: string[] = [];
+    r = await rig({ trace: (line) => lines.push(line) });
+    await r.service.apply(scheme.id, fp(scheme));
+    expect(lines).toContain('apply: left: writing the layout into slot 1');
+  });
+
+  it('says when the keys it was dealt were not kept, because the scheme was edited meanwhile', async () => {
+    const lines: string[] = [];
+    const held: { rig?: Awaited<ReturnType<typeof rig>> } = {};
+    const edited: Scheme = {
+      ...scheme,
+      map: { ship: { ...scheme.map['ship'], 'R.index_1': { tap: 'boost' } } },
+    };
+    r = await rig({
+      trace: (line) => lines.push(line),
+      saveApplied: () => {
+        if (held.rig) held.rig.store.scheme = edited;
+        return Promise.resolve();
+      },
+    });
+    held.rig = r;
+    await r.service.apply(scheme.id, fp(scheme));
+    expect(lines).toContain(
+      "ledger: Both units now run the layout, but the scheme was edited meanwhile, so the keys it was given weren't kept: apply again.",
+    );
+  });
+
+  it('says nothing of the ledger when the keys were kept', async () => {
+    const lines: string[] = [];
+    r = await rig({ trace: (line) => lines.push(line) });
+    await r.service.apply(scheme.id, fp(scheme));
+    expect(lines.filter((line) => line.startsWith('ledger:'))).toEqual([]);
+  });
+
+  it('survives what is to run after an apply failing, and says so', async () => {
+    const lines: string[] = [];
+    r = await rig({
+      trace: (line) => lines.push(line),
+      settled: () => Promise.reject(new Error('state could not be worked out')),
+    });
+    const result = await r.service.apply(scheme.id, fp(scheme));
+    expect(result.ok).toBe(true);
+    expect(lines).toContain('after an apply: state could not be worked out');
+  });
+
+  it('survives a log that throws', async () => {
+    r = await rig({
+      trace: () => {
+        throw new Error('the log is full');
+      },
+    });
+    expect((await r.service.apply(scheme.id, fp(scheme))).ok).toBe(true);
   });
 });
