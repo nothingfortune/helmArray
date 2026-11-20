@@ -1,7 +1,7 @@
 import { gameKeysPreset } from '@helmarray/core';
 import type { Game } from '@helmarray/core';
 import { describe, expect, it, vi } from 'vitest';
-import type { AppState } from '../shared/api';
+import type { AppState, ApplyPreview, ApplyUnitChange } from '../shared/api';
 import { CHANNELS } from '../shared/api';
 import { MAX_LOG_LINES, registerHelmIpc } from './ipc';
 import type { HelmHandlers, IpcRegistry } from './ipc';
@@ -22,6 +22,28 @@ const GAME: Game = {
   actions: [],
 };
 const SCHEME = gameKeysPreset(GAME);
+const UNIT: Omit<ApplyUnitChange, 'hand'> = {
+  connected: true,
+  differs: false,
+  inputsChanged: 0,
+  write: null,
+  deletes: [],
+  changes: [],
+  problem: null,
+};
+const PREVIEW: ApplyPreview = {
+  schemeId: SCHEME.id,
+  schemeName: 'Skiff',
+  gameName: 'Skiff',
+  fingerprint: 'abc',
+  ready: true,
+  azeronOpen: false,
+  busy: false,
+  checks: [],
+  anyChange: false,
+  left: { hand: 'left', ...UNIT },
+  right: { hand: 'right', ...UNIT },
+};
 
 function setup() {
   const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>();
@@ -40,6 +62,10 @@ function setup() {
     createScheme: vi.fn<HelmHandlers['createScheme']>(() => Promise.resolve(SCHEME)),
     saveScheme: vi.fn<HelmHandlers['saveScheme']>(() => Promise.resolve()),
     setActive: vi.fn<HelmHandlers['setActive']>(() => Promise.resolve()),
+    previewApply: vi.fn<HelmHandlers['previewApply']>(() => Promise.resolve(PREVIEW)),
+    apply: vi.fn<HelmHandlers['apply']>(() =>
+      Promise.resolve({ ok: true, message: 'Done.', units: [] }),
+    ),
   };
   const off = registerHelmIpc(registry, { state: () => STATE, ...calls });
   const call = (channel: string, ...args: unknown[]) =>
@@ -63,6 +89,8 @@ describe('the IPC channels', () => {
         CHANNELS.createScheme,
         CHANNELS.saveScheme,
         CHANNELS.setActive,
+        CHANNELS.previewApply,
+        CHANNELS.apply,
       ].sort(),
     );
   });
@@ -141,6 +169,29 @@ describe('the IPC channels', () => {
       ['skiff', 'skiff-own-keys'],
       ['skiff', null],
     ]);
+  });
+
+  it('passes a scheme id to Apply and its preview, and refuses what is not an id', async () => {
+    const { call, calls } = setup();
+    expect(await call(CHANNELS.previewApply, 'skiff-own-keys')).toEqual(PREVIEW);
+    expect(await call(CHANNELS.apply, 'skiff-own-keys', 'abc')).toEqual({
+      ok: true,
+      message: 'Done.',
+      units: [],
+    });
+    expect(calls.previewApply).toHaveBeenCalledWith('skiff-own-keys');
+    expect(calls.apply).toHaveBeenCalledWith('skiff-own-keys', 'abc');
+    await expect(call(CHANNELS.apply, '../x', 'abc')).rejects.toThrow(TypeError);
+    await expect(call(CHANNELS.apply, 'skiff-own-keys')).rejects.toThrow(TypeError);
+    await expect(call(CHANNELS.apply, 'skiff-own-keys', 7)).rejects.toThrow(TypeError);
+    await expect(call(CHANNELS.previewApply, 42)).rejects.toThrow(TypeError);
+    expect(calls.apply).toHaveBeenCalledTimes(1);
+  });
+
+  it('takes the Apply channels off with the rest', () => {
+    const { handlers, off } = setup();
+    off();
+    expect(handlers.size).toBe(0);
   });
 
   it('passes a scheme to be saved through', async () => {

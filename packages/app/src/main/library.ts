@@ -14,6 +14,8 @@ export interface LibraryInput {
   games: readonly GameEntry[];
   schemes: ReadonlyMap<string, readonly Scheme[]>;
   activeSchemeOf(gameId: string): string | null;
+  /** The scheme of the game applied last, and when; null when none was. */
+  appliedOf?(gameId: string): { schemeId: string; at: number } | null;
 }
 
 const refOf = (scheme: Scheme): LibrarySchemeRef => ({
@@ -41,12 +43,18 @@ export function mergeLibrary(input: LibraryInput): LibraryEntry[] {
     const appId = steam?.appId ?? (game?.steamAppId !== undefined ? String(game.steamAppId) : null);
     const schemes = game ? (input.schemes.get(game.id) ?? []).map(refOf) : [];
     const active = game ? input.activeSchemeOf(game.id) : null;
+    const appliedIn = (g: Game | undefined, list: LibrarySchemeRef[]) => {
+      const applied = g ? input.appliedOf?.(g.id) : null;
+      // A scheme that is no longer there is not on the units by name: nothing is claimed.
+      return applied && list.some((s) => s.id === applied.schemeId) ? applied : null;
+    };
     return {
       name: steam?.name ?? game?.name ?? '',
       appId,
       gameId: game?.id ?? null,
       schemes,
       activeSchemeId: active !== null && schemes.some((s) => s.id === active) ? active : null,
+      applied: appliedIn(game, schemes),
       nativeKeys: game ? hasNativeKeys(game) : false,
       hasCover: steam?.cover !== undefined,
       hasHeader: steam?.header !== undefined,
@@ -93,6 +101,7 @@ export interface LibraryDeps {
   games(): Promise<GameEntry[]>;
   listSchemes(gameId: string): Promise<Scheme[]>;
   activeSchemeOf(gameId: string): string | null;
+  lastApplied(gameId: string): Promise<{ schemeId: string; at: number } | null>;
 }
 
 export interface LibraryService {
@@ -121,12 +130,18 @@ export function createLibraryService(deps: LibraryDeps): LibraryService {
       const library = await steam(refresh);
       const games = await deps.games();
       const schemes = new Map<string, readonly Scheme[]>();
-      for (const { game } of games) schemes.set(game.id, await deps.listSchemes(game.id));
+      const applied = new Map<string, { schemeId: string; at: number }>();
+      for (const { game } of games) {
+        schemes.set(game.id, await deps.listSchemes(game.id));
+        const last = await deps.lastApplied(game.id);
+        if (last) applied.set(game.id, last);
+      }
       return mergeLibrary({
         steam: library.games,
         games,
         schemes,
         activeSchemeOf: deps.activeSchemeOf,
+        appliedOf: (gameId) => applied.get(gameId) ?? null,
       });
     },
     async coverFiles() {

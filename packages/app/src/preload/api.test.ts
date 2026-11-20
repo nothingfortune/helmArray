@@ -126,6 +126,8 @@ describe('window.helm', () => {
       await api.saveScheme(scheme);
       await api.setActive('skiff', 'skiff-own-keys');
       await api.setActive('skiff', null);
+      await api.previewApply('skiff-own-keys');
+      await api.apply('skiff-own-keys', 'abc');
       expect(b.invoked).toEqual([
         [CHANNELS.listGames, []],
         [CHANNELS.getScheme, ['skiff-own-keys']],
@@ -134,6 +136,8 @@ describe('window.helm', () => {
         [CHANNELS.saveScheme, [scheme]],
         [CHANNELS.setActive, ['skiff', 'skiff-own-keys']],
         [CHANNELS.setActive, ['skiff', null]],
+        [CHANNELS.previewApply, ['skiff-own-keys']],
+        [CHANNELS.apply, ['skiff-own-keys', 'abc']],
       ]);
     });
 

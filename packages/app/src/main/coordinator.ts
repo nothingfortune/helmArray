@@ -3,6 +3,7 @@
 // service in step. Pure: everything it touches is handed in, so tests run it over fakes.
 
 import type { AppState, Hand } from '../shared/api';
+import type { ActivePlans } from './active-plans';
 import { composeAppState, pendingAsk } from './app-state';
 import type { DevicesGate } from './devices-gate';
 import type { DevicesSnapshot } from './devices';
@@ -22,6 +23,24 @@ export interface CoordinatorDeps {
   readLog(lines: number): Promise<string[]>;
   /** The active game and scheme, read afresh each time the state is worked out. */
   active?(): { gameId: string | null; schemeId: string | null };
+  /**
+   * The active scheme's applied plan and what it resolves to now, read afresh each time the
+   * state is worked out. Without it the pill has nothing to compare the units with.
+   */
+  plans?(): Promise<ActivePlans>;
+  /**
+   * True while something is writing to the units (an Apply): the state is not worked out then,
+   * so the pill never shows a half-done write. Whoever was writing asks for it afterwards
+   * (`plansChanged`).
+   */
+  suspended?(): boolean;
+  /** The clock, in milliseconds. Defaults to `Date.now`. */
+  now?(): number;
+  /**
+   * How often the state is worked out again though nothing happened, so a reading that has grown
+   * too old stops the pill saying In sync. Defaults to `RECHECK_MS`; 0 turns it off.
+   */
+  recheckMs?: number;
   trace?(unit: string, line: string): void;
 }
 
@@ -34,6 +53,8 @@ export interface Coordinator {
   chooseHand(unitId: number, hand: Hand): Promise<void>;
   /** The active game or scheme was changed: works out the state again and tells the listeners. */
   activeChanged(): Promise<void>;
+  /** A scheme was edited or applied: works out the pill again and tells the listeners. */
+  plansChanged(): Promise<void>;
   recentLog(lines: number): Promise<string[]>;
   /** Starts following the devices service. */
   start(): void;
@@ -41,6 +62,8 @@ export interface Coordinator {
 }
 
 const LOG = '(app)';
+/** See `CoordinatorDeps.recheckMs`. Short enough that a stale reading shows within seconds. */
+export const RECHECK_MS = 3000;
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
@@ -63,6 +86,7 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
   let azeronKnown = false;
   let writeBlock: string | null = null;
   let stopListening: (() => void) | null = null;
+  let recheck: ReturnType<typeof setTimeout> | null = null;
   let current = composeAppState({
     devices: devices.snapshot(),
     hands: handsFor(idsOf(devices.snapshot()), store),
@@ -71,6 +95,8 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
   });
   let currentJson = JSON.stringify(current);
   let queue: Promise<void> = Promise.resolve();
+  /** A recomputation asked for and not yet begun: further asks join it. */
+  let waiting: Promise<void> | null = null;
 
   const finder = createHandFinder({
     // One unplug settles both units; the state is worked out once, when both are saved.
@@ -88,6 +114,14 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
   const blocked = () => !azeronKnown || writeBlock !== null;
 
   const compute = async (): Promise<void> => {
+    if (deps.suspended?.()) return;
+    let plans: ActivePlans | undefined;
+    try {
+      plans = await deps.plans?.();
+    } catch (error) {
+      // Without the plans the pill can't compare: it says it hasn't checked, and the log why.
+      trace(`reading the plans failed: ${messageOf(error)}`);
+    }
     const snapshot = devices.snapshot();
     const ids = idsOf(snapshot);
     let hands: HandsResult;
@@ -101,7 +135,14 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
     // A unit unplugged for the question settles both hands: the state worked out here would
     // show the one left behind as asked about for a moment, so the next one is announced instead.
     if (finder.update(pendingAsk(snapshot, hands), blocked(), ids)) return;
-    const next = composeAppState({ devices: snapshot, hands, writeBlock, active: deps.active?.() });
+    const next = composeAppState({
+      devices: snapshot,
+      hands,
+      writeBlock,
+      active: deps.active?.(),
+      plans,
+      now: (deps.now ?? Date.now)(),
+    });
     const json = JSON.stringify(next);
     if (json === currentJson) return;
     current = next;
@@ -115,12 +156,23 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
     }
   };
 
-  /** One recomputation at a time, in the order asked. */
+  /**
+   * One recomputation at a time, in the order asked. Asks that arrive while one is waiting its
+   * turn join it: it reads everything when it runs, so a run of edits works the state out once.
+   */
   function refresh(): Promise<void> {
-    queue = queue.then(compute).catch((error: unknown) => {
-      trace(`working out the state failed: ${messageOf(error)}`);
-    });
-    return queue;
+    if (waiting) return waiting;
+    const run: Promise<void> = queue
+      .then(() => {
+        if (waiting === run) waiting = null;
+        return compute();
+      })
+      .catch((error: unknown) => {
+        trace(`working out the state failed: ${messageOf(error)}`);
+      });
+    waiting = run;
+    queue = run;
+    return run;
   }
 
   return {
@@ -147,12 +199,23 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
       await refresh();
     },
     activeChanged: () => refresh(),
+    plansChanged: () => refresh(),
     recentLog: (lines) => deps.readLog(lines),
     start: () => {
       stopListening ??= devices.onChange(() => void refresh());
       void refresh();
+      const every = deps.recheckMs ?? RECHECK_MS;
+      if (every > 0 && recheck === null) {
+        const again = () => {
+          void refresh();
+          recheck = setTimeout(again, every);
+        };
+        recheck = setTimeout(again, every);
+      }
     },
     stop: () => {
+      if (recheck !== null) clearTimeout(recheck);
+      recheck = null;
       stopListening?.();
       stopListening = null;
       finder.stop();

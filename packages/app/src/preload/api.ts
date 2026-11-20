@@ -2,7 +2,14 @@
 // `ipcRenderer` directly, so it can be tested without Electron.
 
 import type { Scheme } from '@helmarray/core';
-import type { AppState, GameEntry, HelmApi, LibraryEntry } from '../shared/api';
+import type {
+  AppState,
+  ApplyPreview,
+  ApplyResult,
+  GameEntry,
+  HelmApi,
+  LibraryEntry,
+} from '../shared/api';
 import { CHANNELS } from '../shared/api';
 
 type Listener = (event: unknown, ...args: unknown[]) => void;
@@ -43,5 +50,9 @@ export function createHelmApi(bridge: IpcBridge): HelmApi {
     setActive: async (gameId, schemeId) => {
       await bridge.invoke(CHANNELS.setActive, gameId, schemeId);
     },
+    previewApply: (schemeId) =>
+      bridge.invoke(CHANNELS.previewApply, schemeId) as Promise<ApplyPreview>,
+    apply: (schemeId, fingerprint) =>
+      bridge.invoke(CHANNELS.apply, schemeId, fingerprint) as Promise<ApplyResult>,
   };
 }

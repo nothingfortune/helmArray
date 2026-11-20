@@ -5,6 +5,8 @@
 
 import type { StoredSlot, Transport, UnitIdentity } from '@helmarray/azeron';
 import { UnitSession } from '@helmarray/azeron';
+import { gatedSession, isGateRefusal } from './gated-session';
+import type { UnitOps } from './gated-session';
 
 /** A transport that can be let go. The service closes every one it opens. */
 export type ClosableTransport = Transport & { close(): Promise<void> };
@@ -19,9 +21,25 @@ export interface DeviceDeps {
   schedule?(fn: () => void, ms: number): () => void;
   /** Time between the end of one poll and the start of the next. Defaults to `POLL_MS`. */
   pollMs?: number;
+  /** The clock, in milliseconds. Defaults to `Date.now`. */
+  now?(): number;
+  /** Time between asks of each unit for the slot it runs. Defaults to `RUNNING_MS`. */
+  runningMs?: number;
+  /**
+   * A fresh look at whether the Azeron app is running, every call; a look that fails throws.
+   * Every session the service has (and hands out) asks it before each operation: anything but a
+   * plain "no" and the operation is refused before a report is sent (see gated-session.ts).
+   * Without it, nothing is asked.
+   */
+  azeronAppRunning?(): Promise<boolean>;
 }
 
 export const POLL_MS = 1000;
+/**
+ * How often each ready unit is asked which slot it runs. The profile button moves it without a
+ * word, and what the pill says rests on it.
+ */
+export const RUNNING_MS = 3000;
 
 export type UnitState = 'connecting' | 'ready' | 'failed';
 
@@ -31,7 +49,16 @@ export interface UnitSnapshot {
   state: UnitState;
   /** Known once the unit has answered; also on a unit that then failed to read its slots. */
   identity?: UnitIdentity;
-  /** Known once ready. */
+  /**
+   * When (ms since 1970) the slots and the slot it runs were last read from the unit: the slot it
+   * runs is asked about every few seconds. Gone with the slots when the unit could not be asked.
+   */
+  readAt?: number;
+  /**
+   * What the unit held when last read. Known once ready, but gone again when the unit could not
+   * be looked at since (the Azeron app was open, or could not be ruled out): nothing is then
+   * known of what it holds.
+   */
   slots?: StoredSlot[];
   /** Why a unit failed, in the unit session's own words. */
   error?: string;
@@ -49,13 +76,25 @@ interface Entry {
   identity?: UnitIdentity;
   slots?: StoredSlot[];
   error?: string;
-  session?: UnitSession;
+  /** Only ever the gated form: no raw session leaves this service, or is kept in it. */
+  session?: UnitOps;
   transport?: ClosableTransport;
   closing?: Promise<void>;
   /** Settles when `openUnit` has finished, opened or not: stop waits on it to close the unit. */
   opening?: Promise<void>;
   /** Unplugged (or the service stopped) while it was being set up: nothing more is done to it. */
   dropped: boolean;
+  /** When the slots and the running slot were last read from the unit. */
+  readAt?: number;
+}
+
+/** What a job holding the service is handed. */
+export interface HoldTools {
+  /**
+   * Reads every ready unit again (who it is, its slots, the slot it runs), skipping a unit read
+   * within the last `olderThanMs`. Tells the listeners once, if any unit was read.
+   */
+  refresh(olderThanMs?: number): Promise<void>;
 }
 
 const LOG = '(devices)';
@@ -69,8 +108,13 @@ export class Devices {
   /** Bumped by every start and stop, so a poll that was in flight across one is ignored. */
   private generation = 0;
   private cancelNext: (() => void) | null = null;
+  private cancelAsk: (() => void) | null = null;
   /** Counts notices, so a nested one supersedes the one it interrupted. */
   private emitted = 0;
+  /** Jobs holding the service (see `exclusive`), those waiting for their turn included. */
+  private holding = 0;
+  /** Settles when the last job to ask for the service has let go of it. */
+  private holdTail: Promise<void> = Promise.resolve();
 
   constructor(private readonly deps: DeviceDeps) {}
 
@@ -80,6 +124,7 @@ export class Devices {
     this.running = true;
     const generation = ++this.generation;
     void this.tick(generation);
+    this.scheduleAsk(generation);
   }
 
   /** Stops polling and closes every unit. The listeners stay subscribed. */
@@ -88,6 +133,13 @@ export class Devices {
     this.generation++;
     this.cancelNext?.();
     this.cancelNext = null;
+    this.cancelAsk?.();
+    this.cancelAsk = null;
+    // A job writing to the units is never cut off by the units being let go: it is waited for.
+    // Its own checks stop it at the next step if the Azeron app has opened meanwhile.
+    while (this.holding > 0) await this.holdTail;
+    // Started again while waiting: that start supersedes this stop.
+    if (this.running) return;
     // Every unit let go is tracked until its open and close have finished, so a second stop
     // waits for them too and a restart can't open a path still being let go.
     const hadUnits = this.entries.size > 0;
@@ -108,11 +160,150 @@ export class Devices {
   }
 
   /** The session of a ready unit, for writing to it. Undefined for a unit that isn't ready. */
-  session(deviceId: number): UnitSession | undefined {
+  session(deviceId: number): UnitOps | undefined {
     for (const entry of this.entries.values()) {
       if (entry.state === 'ready' && entry.identity?.deviceId === deviceId) return entry.session;
     }
     return undefined;
+  }
+
+  /**
+   * Holds the service for `job`: while it runs nothing else reads from a unit or lists them.
+   * Polling is skipped (the next one comes at its usual time after the job), a unit newly seen
+   * is not opened, none is closed because a listing missed it, and `stop` waits. Jobs run one
+   * at a time, in the order asked. The hold is let go of when the job ends, however it ends.
+   *
+   * What the job itself does to the units goes through `session()`; to put what the service
+   * knows of them right afterwards, it uses `tools.refresh()`.
+   */
+  async exclusive<T>(job: (tools: HoldTools) => Promise<T>): Promise<T> {
+    // Claimed now, not when the turn comes: a poll between the call and the turn is skipped too.
+    this.holding++;
+    const earlier = this.holdTail;
+    let release!: () => void;
+    this.holdTail = new Promise<void>((resolve) => (release = resolve));
+    try {
+      await earlier;
+      return await job({ refresh: (olderThanMs) => this.readAgain(olderThanMs) });
+    } finally {
+      this.holding--;
+      release();
+    }
+  }
+
+  /** Reads the ready units again, unless read within `olderThanMs`. One job at a time. */
+  refresh(options: { olderThanMs?: number } = {}): Promise<void> {
+    return this.exclusive((tools) => tools.refresh(options.olderThanMs));
+  }
+
+  private async readAgain(olderThanMs?: number): Promise<void> {
+    const now = this.deps.now ?? Date.now;
+    let changed = false;
+    for (const entry of [...this.entries.values()]) {
+      if (entry.state !== 'ready' || entry.dropped || !entry.session) continue;
+      if (olderThanMs !== undefined && now() - (entry.readAt ?? 0) < olderThanMs) continue;
+      changed = true;
+      await this.readEntry(entry, now);
+    }
+    if (changed) this.emit();
+  }
+
+  /** Reads one unit's identity, slots and running slot again. A unit that can't be read fails. */
+  private async readEntry(entry: Entry, now: () => number): Promise<void> {
+    const { session } = entry;
+    if (!session) return;
+    try {
+      const identity = await session.identify();
+      const slots = await session.readSlots();
+      const running = await session.runningSlot();
+      if (entry.dropped) return;
+      entry.identity = { ...identity, runningSlot: running };
+      entry.slots = slots;
+      entry.readAt = now();
+    } catch (error) {
+      if (entry.dropped) return;
+      // The gate refused (the Azeron app is open, or could not be ruled out): the unit was not
+      // spoken to, it is not at fault, and the next look reads it.
+      if (isGateRefusal(error)) {
+        this.forget(entry);
+        return;
+      }
+      // What the unit holds is not known now: it is no longer offered as ready or as read.
+      entry.state = 'failed';
+      entry.error = messageOf(error);
+      delete entry.session;
+      delete entry.slots;
+      this.trace(entry.path, `reading it again failed: ${entry.error}`);
+      await this.close(entry);
+    }
+  }
+
+  // The slot each unit runs ------------------------------------------------------------------
+
+  private scheduleAsk(generation: number): void {
+    const schedule = this.deps.schedule ?? defaultSchedule;
+    this.cancelAsk = schedule(() => {
+      this.cancelAsk = null;
+      void this.ask(generation);
+    }, this.deps.runningMs ?? RUNNING_MS);
+  }
+
+  /**
+   * Asks every ready unit which slot it runs, one at a time, then again after the interval. Not
+   * while a job holds the service (an Apply is writing, or a read is under way): that tick is
+   * skipped, not queued. Every question goes through the gated session, so none is sent while the
+   * Azeron app runs.
+   */
+  private async ask(generation: number): Promise<void> {
+    try {
+      if (generation === this.generation && this.holding === 0) {
+        await this.exclusive(() => this.askRunning(generation));
+      }
+    } catch (error) {
+      this.trace(LOG, `asking the units failed: ${messageOf(error)}`);
+    }
+    if (generation === this.generation && this.running) this.scheduleAsk(generation);
+  }
+
+  private async askRunning(generation: number): Promise<void> {
+    const now = this.deps.now ?? Date.now;
+    let changed = false;
+    for (const entry of [...this.entries.values()]) {
+      if (generation !== this.generation) break;
+      if (entry.state !== 'ready' || entry.dropped || !entry.session) continue;
+      // A unit not read (a failed ask, a refused one): read afresh, slots and all.
+      if (!entry.slots || !entry.identity) {
+        await this.readEntry(entry, now);
+        changed = true;
+        continue;
+      }
+      try {
+        const running = await entry.session.runningSlot();
+        if (entry.dropped) continue;
+        if (!entry.slots.some((slot) => slot.slot === running)) {
+          // It runs a slot the cache has not got: the slots changed too.
+          this.trace(entry.path, `runs slot ${running}, which was not read: reading it again`);
+          await this.readEntry(entry, now);
+          changed = true;
+          continue;
+        }
+        if (running !== entry.identity.runningSlot) {
+          entry.identity = { ...entry.identity, runningSlot: running };
+          changed = true;
+        }
+        entry.readAt = now();
+      } catch (error) {
+        if (entry.dropped) continue;
+        // Not asked, or not answered: what it ran is not known, so the unit is not said to match
+        // anything until it has been read again. (A refusal by the gate has already said so.)
+        if (!isGateRefusal(error)) {
+          this.trace(entry.path, `asking which slot it runs failed: ${messageOf(error)}`);
+        }
+        this.forget(entry);
+        changed = true;
+      }
+    }
+    if (changed) this.emit();
   }
 
   /** One poll, then the next after the interval: never two at once. */
@@ -127,6 +318,8 @@ export class Devices {
   }
 
   private async poll(generation: number): Promise<void> {
+    // A job holds the service: not even a listing is asked for. The next poll is on time.
+    if (this.holding > 0) return;
     let paths: string[];
     try {
       paths = (await this.deps.findUnits()).map((unit) => unit.path);
@@ -136,6 +329,8 @@ export class Devices {
       return;
     }
     if (generation !== this.generation) return;
+    // A hold began while the listing was out: it is dropped, so no unit is opened or closed.
+    if (this.holding > 0) return;
     this.reconcile(new Set(paths));
   }
 
@@ -178,7 +373,11 @@ export class Devices {
       }
       entry.transport = transport;
       if (entry.dropped) return void (await this.close(entry));
-      const session = new UnitSession(transport, (line) => this.trace(path, line));
+      const session = gatedSession(new UnitSession(transport, (line) => this.trace(path, line)), {
+        look: () => this.deps.azeronAppRunning?.() ?? Promise.resolve(false),
+        stale: () => this.forget(entry),
+        trace: (line) => this.trace(path, line),
+      });
       const identity = await session.identify();
       if (entry.dropped) return;
       entry.identity = identity;
@@ -187,16 +386,33 @@ export class Devices {
       if (entry.dropped) return;
       entry.session = session;
       entry.slots = slots;
+      entry.readAt = (this.deps.now ?? Date.now)();
       entry.state = 'ready';
       this.emit();
     } catch (error) {
       if (entry.dropped) return;
+      // Refused by the gate: the unit was not spoken to. It is let go and a later poll tries it.
+      if (isGateRefusal(error)) return this.giveUp(entry);
       entry.state = 'failed';
       entry.error = messageOf(error);
       this.trace(path, `failed: ${entry.error}`);
       this.emit();
       await this.close(entry);
     }
+  }
+
+  /** What is cached of a unit is not to be trusted any more: it is not said to be read. */
+  private forget(entry: Entry): void {
+    delete entry.slots;
+    delete entry.readAt;
+  }
+
+  /** Lets a unit go that was not to be talked to; a later poll tries it again. */
+  private giveUp(entry: Entry): void {
+    if (entry.dropped) return;
+    if (this.entries.get(entry.path) === entry) this.entries.delete(entry.path);
+    this.cleanUp(entry.path, entry);
+    this.emit();
   }
 
   private cleanUp(path: string, entry: Entry): void {
@@ -254,6 +470,7 @@ const snapshotOf = (entry: Entry): UnitSnapshot => ({
   state: entry.state,
   ...(entry.identity && { identity: { ...entry.identity } }),
   ...(entry.slots && { slots: structuredClone(entry.slots) }),
+  ...(entry.readAt !== undefined && { readAt: entry.readAt }),
   ...(entry.error !== undefined && { error: entry.error }),
 });
 

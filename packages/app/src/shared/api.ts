@@ -35,6 +35,11 @@ export interface LibraryEntry {
   schemes: LibrarySchemeRef[];
   /** This game's own active scheme (not only the active game's), or null. */
   activeSchemeId: string | null;
+  /**
+   * The scheme of this game applied last and when (ms since 1970), or null when none was. The
+   * units hold the layout of the most recent apply over all games.
+   */
+  applied: { schemeId: string; at: number } | null;
   /** True when some action has a key the game ships with: "Game's own keys" can be offered. */
   nativeKeys: boolean;
   /** Whether a portrait cover and a header image can be had for `coverUrl`. */
@@ -56,6 +61,13 @@ export interface DeviceChip {
   firmware: number | null;
   /** Why it failed, in one plain sentence. */
   error: string | null;
+  /**
+   * What the unit holds is known: it was read, and not given up since (the Azeron app was open, or
+   * a question went unanswered). Not whether it is in sync.
+   */
+  read: boolean;
+  /** The slot it runs as last asked (the profile button moves it), or null when not read. */
+  running: number | null;
 }
 
 export type SyncTone = 'ok' | 'warning' | 'error';
@@ -64,6 +76,8 @@ export type SyncTone = 'ok' | 'warning' | 'error';
 export interface SyncPill {
   label: string;
   tone: SyncTone;
+  /** When a unit differs: which, and how much of it. For a tooltip. */
+  detail?: string;
 }
 
 /** A question the app must ask to tell the hands apart, or null. */
@@ -85,6 +99,76 @@ export interface AppState {
   activeGameId: string | null;
   /** The active scheme of that game, or null when it has none. */
   activeSchemeId: string | null;
+}
+
+/** One line of "what's ready" in the Apply drawer: a check or a cross, with one sentence. */
+export interface ReadyCheck {
+  ok: boolean;
+  text: string;
+}
+
+/** What Apply would do to one unit. */
+export interface ApplyUnitChange {
+  hand: Hand;
+  /** Ready to be written: plugged in, read, and known by hand. */
+  connected: boolean;
+  /** The layout differs from what the unit runs now. */
+  differs: boolean;
+  /** How many of the unit's inputs differ. */
+  inputsChanged: number;
+  /** The slot written, or null when the unit already holds the layout. */
+  write: { slot: number; name: string; overwrites: { slot: number; name: string } | null } | null;
+  /** The slots deleted afterwards, each by name (empty when the unit has no other). */
+  deletes: { slot: number; name: string }[];
+  /** The above in words, one line each. */
+  changes: string[];
+  /** Why this unit can't be done at all, in one sentence, or null. */
+  problem: string | null;
+}
+
+/** What the Apply drawer shows before anything is written. */
+export interface ApplyPreview {
+  schemeId: string;
+  schemeName: string;
+  gameName: string;
+  /**
+   * Stands for the layout this preview is of. `apply` takes it back and writes only that layout:
+   * if the scheme has changed since, it refuses. Empty when the scheme could not be worked out.
+   */
+  fingerprint: string;
+  /** Every check passes: Apply may be pressed. */
+  ready: boolean;
+  /** The Azeron app is open (so the units were not looked at). */
+  azeronOpen: boolean;
+  /** Another apply is running. */
+  busy: boolean;
+  checks: ReadyCheck[];
+  /** Either unit has anything to write or delete. */
+  anyChange: boolean;
+  left: ApplyUnitChange;
+  right: ApplyUnitChange;
+}
+
+export type ApplyUnitStatus = 'applied' | 'unchanged' | 'failed' | 'not-attempted';
+
+export interface ApplyUnitResult {
+  hand: Hand;
+  status: ApplyUnitStatus;
+  /** One sentence: what happened, or what failed and what is left as it was. */
+  message: string;
+  /** The slot the layout is in, once known. */
+  slot: number | null;
+}
+
+/** How an Apply ended. A refusal and a failure are both `ok: false` with a sentence. */
+export interface ApplyResult {
+  ok: boolean;
+  /** One plain sentence; on failure, what failed and what is left as it was. */
+  message: string;
+  /** Refused because the scheme changed since the preview: nothing was written; look again. */
+  changed?: boolean;
+  /** Left, then right; empty when nothing was attempted. */
+  units: ApplyUnitResult[];
 }
 
 export interface HelmApi {
@@ -115,6 +199,13 @@ export interface HelmApi {
   listLibrary(refresh?: boolean): Promise<LibraryEntry[]>;
   /** Makes this the active game and scheme (null: the game has no active scheme). */
   setActive(gameId: string, schemeId: string | null): Promise<void>;
+  /** What Apply would do for this scheme, and whether it is ready. Writes nothing. */
+  previewApply(schemeId: string): Promise<ApplyPreview>;
+  /**
+   * Writes the scheme to the units, exactly the layout the preview showed (its `fingerprint`).
+   * Never rejects for a refusal: the result says why.
+   */
+  apply(schemeId: string, fingerprint: string): Promise<ApplyResult>;
 }
 
 /** IPC channel names, shared by main and preload. */
@@ -131,4 +222,6 @@ export const CHANNELS = {
   saveScheme: 'helm:save-scheme',
   setActive: 'helm:set-active',
   listLibrary: 'helm:list-library',
+  previewApply: 'helm:preview-apply',
+  apply: 'helm:apply',
 } as const;

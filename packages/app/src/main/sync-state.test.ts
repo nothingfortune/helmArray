@@ -1,6 +1,6 @@
 import type { Verdict } from '@helmarray/azeron';
 import { describe, expect, it } from 'vitest';
-import { syncState, type HandSync } from './sync-state';
+import { pendingChanges, syncDetail, syncState, type HandSync } from './sync-state';
 
 const clean: Verdict = { differences: [], unchecked: [] };
 const differing: Verdict = {
@@ -120,5 +120,67 @@ describe('syncState', () => {
 
   it.each([-3, Number.NaN, 0.4])('treats %s pending changes as none', (pendingChanges) => {
     expect(syncState({ left: matching, right: matching, pendingChanges }).kind).toBe('in-sync');
+  });
+});
+
+describe('syncState with nothing applied', () => {
+  it('says nothing has been applied, when both units are there and nothing is pending', () => {
+    expect(
+      syncState({ left: unread, right: unread, pendingChanges: 0, nothingApplied: true }),
+    ).toEqual({
+      kind: 'unknown',
+      reason: 'nothing-applied',
+      hands: ['left', 'right'],
+      label: 'Nothing applied yet',
+      tone: 'warning',
+    });
+  });
+
+  it('puts a unit that is not connected, and edits waiting, before it', () => {
+    expect(
+      syncState({ left: unread, right: away, pendingChanges: 0, nothingApplied: true }).label,
+    ).toBe('Right unit not connected');
+    expect(
+      syncState({ left: unread, right: unread, pendingChanges: 4, nothingApplied: true }).label,
+    ).toBe('4 changes not applied');
+  });
+});
+
+describe('syncDetail', () => {
+  it('says which unit and how many inputs, counting an input once', () => {
+    const both: Verdict = {
+      differences: [
+        { id: 3, what: 'tap keys', meant: '[4]', stored: '[5]' },
+        { id: 3, what: 'turbo', meant: '0', stored: '1' },
+      ],
+      unchecked: [{ id: 9, raw: new Uint8Array([1]) }],
+    };
+    expect(
+      syncDetail({
+        left: matching,
+        right: { connected: true, verdict: both },
+        pendingChanges: 0,
+      }),
+    ).toBe('Right unit: 2 inputs not as applied.');
+    expect(syncDetail({ left: wrong, right: matching, pendingChanges: 0 })).toBe(
+      'Left unit: 1 input not as applied.',
+    );
+  });
+
+  it('has nothing to say when no unit differs, or the one that does is not connected', () => {
+    expect(syncDetail({ left: matching, right: matching, pendingChanges: 3 })).toBeUndefined();
+    expect(
+      syncDetail({
+        left: matching,
+        right: { connected: false, verdict: differing },
+        pendingChanges: 0,
+      }),
+    ).toBeUndefined();
+  });
+});
+
+describe('pendingChanges', () => {
+  it('counts one change for a scheme that did not resolve', () => {
+    expect(pendingChanges(null, null)).toBe(1);
   });
 });

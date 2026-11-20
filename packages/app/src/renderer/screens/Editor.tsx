@@ -18,7 +18,8 @@ import {
   canUndo,
   clear,
   commit,
-  historyShortcut,
+  adoptLedger,
+  historyAction,
   isStick,
   isTextEntry,
   redo,
@@ -40,6 +41,17 @@ export interface EditorProps {
   onBack(): void;
   /** Opens the Apply drawer. Without it the Apply button is shown, disabled, with a reason. */
   onApply?(): void;
+  /**
+   * Turns the Ctrl+Z / Ctrl+Y history shortcuts off. Set while something is over the editor (the
+   * Apply drawer): an undo underneath would change the scheme being applied.
+   */
+  historyOff?: boolean;
+  /**
+   * Counts the applies that wrote the scheme's keys. When it changes the editor reads the scheme
+   * again and takes its ledger: otherwise its next autosave would put the old, shorter one back
+   * and a later edit would give buttons other keys.
+   */
+  keysKept?: number;
 }
 
 type Load =
@@ -86,7 +98,7 @@ function BackLink({ onBack }: { onBack(): void }) {
 }
 
 /** Loads the scheme and its game, then hands them to the editor. Keyed by scheme id. */
-function EditorLoader({ schemeId, onBack, onApply }: EditorProps) {
+function EditorLoader({ schemeId, onBack, onApply, historyOff, keysKept }: EditorProps) {
   const [load, setLoad] = useState<Load>({ kind: 'loading' });
 
   useEffect(() => {
@@ -112,7 +124,16 @@ function EditorLoader({ schemeId, onBack, onApply }: EditorProps) {
   }, [schemeId]);
 
   if (load.kind === 'ready') {
-    return <EditorBody scheme={load.scheme} game={load.game} onBack={onBack} onApply={onApply} />;
+    return (
+      <EditorBody
+        scheme={load.scheme}
+        game={load.game}
+        onBack={onBack}
+        onApply={onApply}
+        historyOff={historyOff === true}
+        keysKept={keysKept ?? 0}
+      />
+    );
   }
   const words: Record<Exclude<Load['kind'], 'ready'>, string> = {
     loading: 'Opening the scheme…',
@@ -150,9 +171,11 @@ interface BodyProps {
   game: Game;
   onBack(): void;
   onApply: (() => void) | undefined;
+  historyOff: boolean;
+  keysKept: number;
 }
 
-function EditorBody({ scheme: loaded, game, onBack, onApply }: BodyProps) {
+function EditorBody({ scheme: loaded, game, onBack, onApply, historyOff, keysKept }: BodyProps) {
   const [history, setHistory] = useState<History<Scheme>>(() => startHistory(loaded));
   const historyRef = useRef(history);
   const [mode, setMode] = useState(() => game.modes[0]?.id ?? 'default');
@@ -180,14 +203,35 @@ function EditorBody({ scheme: loaded, game, onBack, onApply }: BodyProps) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLElement && isTextEntry(e.target)) return;
-      const wanted = historyShortcut(e);
+      const wanted = historyAction(e, !historyOff);
       if (wanted === null) return;
       e.preventDefault();
       change(wanted === 'undo' ? undo : redo);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [change]);
+  }, [change, historyOff]);
+
+  // An apply wrote the keys it dealt into the saved scheme: take them (never saved from here).
+  const firstKeys = useRef(keysKept);
+  useEffect(() => {
+    if (keysKept === firstKeys.current) return;
+    firstKeys.current = keysKept;
+    let current = true;
+    window.helm.getScheme(loaded.id).then(
+      (saved) => {
+        if (!current || saved === null) return;
+        const next = adoptLedger(historyRef.current, saved.ledger);
+        if (next === historyRef.current) return;
+        historyRef.current = next;
+        setHistory(next);
+      },
+      () => undefined,
+    );
+    return () => {
+      current = false;
+    };
+  }, [keysKept, loaded.id]);
 
   const scheme = history.present;
   const planned = useMemo((): { plan: Plan } | { error: string } => {

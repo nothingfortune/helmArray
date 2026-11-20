@@ -79,6 +79,32 @@ describe('the app state', () => {
       state: 'ready',
       firmware: 112,
       error: null,
+      read: false, // this unit was handed over with no slots read
+      running: null,
+    });
+  });
+
+  it('says whether a unit is read, and the slot it runs, and nothing of readAt', () => {
+    const read = (running: number, readAt: number) =>
+      unit('a', LEFT, {
+        slots: [],
+        readAt,
+        identity: { firmware: 112, deviceId: LEFT, slotLimit: 8, runningSlot: running },
+      });
+    const chip = compose([read(2, 1000)], { [LEFT]: 'left' }).devices[0];
+    expect(chip).toMatchObject({ read: true, running: 2 });
+    // A unit asked again with the same answer is the same state: nothing is told to a window.
+    expect(compose([read(2, 4000)], { [LEFT]: 'left' })).toEqual(
+      compose([read(2, 1000)], { [LEFT]: 'left' }),
+    );
+    expect(compose([read(3, 1000)], { [LEFT]: 'left' }).devices[0]?.running).toBe(3);
+    // Given up (no slots): not read, and the slot it ran is not claimed.
+    const unread = unit('a', LEFT, {
+      identity: { firmware: 112, deviceId: LEFT, slotLimit: 8, runningSlot: 2 },
+    });
+    expect(compose([unread], { [LEFT]: 'left' }).devices[0]).toMatchObject({
+      read: false,
+      running: null,
     });
   });
 
@@ -90,6 +116,8 @@ describe('the app state', () => {
       state: 'connecting',
       firmware: null,
       error: null,
+      read: false,
+      running: null,
     });
   });
 

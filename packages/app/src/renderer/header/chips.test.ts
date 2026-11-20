@@ -8,6 +8,8 @@ const chip = (over: Partial<DeviceChip> = {}): DeviceChip => ({
   state: 'ready',
   firmware: 3,
   error: null,
+  read: true,
+  running: 1,
   ...over,
 });
 

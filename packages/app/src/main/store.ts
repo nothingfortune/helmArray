@@ -17,7 +17,7 @@
 //   its other edits; `flush()` writes whatever is waiting and is called on quit.
 
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import type { AppSettings, Game, Plan, Scheme, StoredKind, StoredKinds } from '@helmarray/core';
 import {
@@ -562,5 +562,25 @@ export class DataStore {
     if (!isSafeId(schemeId)) return null;
     const found = await this.read('applied', `applied/${schemeId}.json`);
     return found.status === 'ok' ? found.value : null;
+  }
+
+  /**
+   * Which of this game's schemes was applied last, and when (milliseconds since 1970), or null
+   * when none was. The units hold one layout, so this is the layout they hold; the order is the
+   * time each applied plan's file was written, which only a successful apply does.
+   */
+  async lastApplied(gameId: string): Promise<{ schemeId: string; at: number } | null> {
+    let best: { schemeId: string; at: number } | null = null;
+    for (const scheme of await this.listSchemes(gameId)) {
+      if ((await this.getApplied(scheme.id)) === null) continue;
+      let at: number;
+      try {
+        at = (await stat(join(this.root, 'applied', `${scheme.id}.json`))).mtimeMs;
+      } catch {
+        continue;
+      }
+      if (best === null || at > best.at) best = { schemeId: scheme.id, at };
+    }
+    return best;
   }
 }

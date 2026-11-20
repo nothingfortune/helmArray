@@ -14,7 +14,7 @@
 // The first failure stops everything and says, in one sentence, what failed, on which unit, and
 // what is left as it was. The units' profile button is never part of any of it.
 
-import type { StoredSlot, UnitSession, Verdict } from '@helmarray/azeron';
+import type { StoredSlot, Verdict } from '@helmarray/azeron';
 import {
   MAX_PROFILE_NAME,
   UnitError,
@@ -25,6 +25,7 @@ import {
 } from '@helmarray/azeron';
 import type { UnitRecord } from '@helmarray/azeron';
 import type { Hand, Plan } from '@helmarray/core';
+import type { UnitOps } from './gated-session';
 import { CYBORG2_LEFT, CYBORG2_RIGHT } from '@helmarray/core';
 
 const HANDS: readonly Hand[] = ['left', 'right'];
@@ -252,7 +253,7 @@ export interface UnitsDeps {
   /** A fresh look at the running programs, every call. Never a cached poll. */
   azeronAppRunning(): Promise<boolean>;
   /** The connected unit that is this hand, with the id it is expected to report. */
-  unit(hand: Hand): { session: UnitSession; deviceId: number } | undefined;
+  unit(hand: Hand): { session: UnitOps; deviceId: number } | undefined;
   /** The slot's name on the unit. */
   name?: string;
   trace?(line: string): void;
@@ -423,6 +424,8 @@ async function applyUnit(
     outcome.slot = slot;
 
     // Every other slot, read afresh: only now, with the layout read back clean and running.
+    // A read is traffic to the unit too: the Azeron app is looked for again before it.
+    await guard();
     let others: StoredSlot[];
     try {
       others = (await session.readSlots()).filter((s) => s.slot !== slot);
@@ -456,6 +459,7 @@ async function applyUnit(
 
     // Read every slot back and compare what the unit runs with the plan.
     left = 'the other slots are deleted';
+    await guard();
     let finalVerdict: Verdict;
     try {
       const after = await session.readSlots();

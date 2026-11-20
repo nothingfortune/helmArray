@@ -8,13 +8,14 @@
 //                   because it says the units aren't what the person thinks they are.
 //   2. not-applied  Edits in the editor haven't been applied. True whatever the units show.
 //   3. unknown      Nothing above, but the pill can't promise anything: a unit isn't
-//                   connected, or hasn't been read against an applied layout. A disconnected
-//                   unit can't be in sync, and what it last held is stale, so it is ignored
-//                   in step 1.
+//                   connected, hasn't been read, or nothing was ever applied for the scheme
+//                   to compare it with. A disconnected unit can't be in sync, and what it
+//                   last held is stale, so it is ignored in step 1.
 //   4. in-sync      Both units connected, both read, both match, nothing pending.
 
 import type { Verdict } from '@helmarray/azeron';
-import type { Hand } from '@helmarray/core';
+import type { Hand, Plan } from '@helmarray/core';
+import { canonical } from './plan-fingerprint';
 
 export interface HandSync {
   connected: boolean;
@@ -30,6 +31,8 @@ export interface SyncInput {
   right: HandSync;
   /** Edits in the editor not yet applied. */
   pendingChanges: number;
+  /** A scheme is active but nothing was ever applied for it: there is nothing to compare with. */
+  nothingApplied?: boolean;
 }
 
 export type SyncTone = 'ok' | 'warning' | 'error';
@@ -38,7 +41,7 @@ export type SyncKind =
   | { kind: 'in-sync' }
   | { kind: 'not-applied'; count: number }
   | { kind: 'differs'; hands: Hand[] }
-  | { kind: 'unknown'; reason: 'not-connected' | 'not-read'; hands: Hand[] };
+  | { kind: 'unknown'; reason: 'not-connected' | 'not-read' | 'nothing-applied'; hands: Hand[] };
 
 export type SyncState = SyncKind & { label: string; tone: SyncTone };
 
@@ -81,6 +84,15 @@ export function syncState(input: SyncInput): SyncState {
       tone: 'warning',
     };
   }
+  if (input.nothingApplied === true) {
+    return {
+      kind: 'unknown',
+      reason: 'nothing-applied',
+      hands: [...HANDS],
+      label: 'Nothing applied yet',
+      tone: 'warning',
+    };
+  }
   const unread = HANDS.filter((hand) => input[hand].verdict === null);
   if (unread.length > 0) {
     return {
@@ -93,4 +105,65 @@ export function syncState(input: SyncInput): SyncState {
   }
 
   return { kind: 'in-sync', label: 'In sync', tone: 'ok' };
+}
+
+// ------------------------------------------------------------------- what the pill is built from
+
+const distinctInputs = (verdict: Verdict): number =>
+  new Set([...verdict.differences.map((d) => d.id), ...verdict.unchecked.map((u) => u.id)]).size;
+
+const inputs = (count: number) => (count === 1 ? '1 input' : `${count} inputs`);
+
+/**
+ * The words behind the label when a unit differs: which unit, and how much of it. For a tooltip.
+ * Undefined for every other state.
+ */
+export function syncDetail(input: SyncInput): string | undefined {
+  const lines = HANDS.filter((hand) => differs(input[hand])).map((hand) => {
+    const verdict = input[hand].verdict;
+    return `${name(hand)} unit: ${inputs(verdict ? distinctInputs(verdict) : 0)} not as applied.`;
+  });
+  return lines.length > 0 ? lines.join(' ') : undefined;
+}
+
+const STICK = { left: 'L.stick', right: 'R.stick' } as const;
+
+/** Every position (and stick) a plan says something about, by control id, with what it says. */
+function says(plan: Plan | null): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  const add = (control: string, what: unknown) =>
+    out.set(control, [...(out.get(control) ?? []), canonical(what)]);
+  if (plan === null) return out;
+  for (const hand of HANDS) {
+    const { pins, stick } = plan.units[hand];
+    for (const pin of pins) if (Object.keys(pin.presses).length > 0) add(pin.control, pin);
+    add(STICK[hand], stick);
+  }
+  for (const binding of plan.bindings) add(binding.control, binding);
+  return out;
+}
+
+/**
+ * How many buttons (a stick counts as one) the scheme now says differently from the plan last
+ * applied: its positions on the units and what the game is told they do, each button once. With
+ * nothing applied yet, it is how many say anything at all. A scheme that did not resolve
+ * (`current` null) counts as one change: whatever it says, it can't be said to be applied.
+ *
+ * What the game's file will hold is part of the plan; writing it is not part of Apply yet.
+ */
+export function pendingChanges(applied: Plan | null, current: Plan | null): number {
+  if (current === null) return 1;
+  const before = says(applied);
+  const now = says(current);
+  let count = 0;
+  for (const control of new Set([...before.keys(), ...now.keys()])) {
+    const a = (before.get(control) ?? []).join('|');
+    const b = (now.get(control) ?? []).join('|');
+    if (a === b) continue;
+    // Nothing applied: only what the scheme puts on a button counts, not a stick's default
+    // behaviour, so a scheme with nothing on it has nothing to apply.
+    if (applied === null && control.endsWith('.stick')) continue;
+    count++;
+  }
+  return count;
 }

@@ -3,7 +3,15 @@
 // checked here, because a window's page is not trusted.
 
 import type { Scheme } from '@helmarray/core';
-import type { AppState, GameEntry, Hand, LibraryEntry, Preset } from '../shared/api';
+import type {
+  AppState,
+  ApplyPreview,
+  ApplyResult,
+  GameEntry,
+  Hand,
+  LibraryEntry,
+  Preset,
+} from '../shared/api';
 import { CHANNELS } from '../shared/api';
 import { isSafeId, isScheme } from './store';
 
@@ -25,6 +33,8 @@ export interface HelmHandlers {
   createScheme(gameId: string, preset: Preset): Promise<Scheme>;
   saveScheme(scheme: Scheme): Promise<void>;
   setActive(gameId: string, schemeId: string | null): Promise<void>;
+  previewApply(schemeId: string): Promise<ApplyPreview>;
+  apply(schemeId: string, fingerprint: string): Promise<ApplyResult>;
 }
 
 const PRESETS: readonly string[] = ['xbox', 'keys'] satisfies Preset[];
@@ -72,6 +82,14 @@ export function registerHelmIpc(ipc: IpcRegistry, handlers: HelmHandlers): () =>
     const game = idArg('setActive', gameId);
     return handlers.setActive(game, schemeId === null ? null : idArg('setActive', schemeId));
   });
+  ipc.handle(CHANNELS.previewApply, (_event, schemeId) =>
+    handlers.previewApply(idArg('previewApply', schemeId)),
+  );
+  ipc.handle(CHANNELS.apply, (_event, schemeId, fingerprint) => {
+    if (typeof fingerprint !== 'string')
+      throw new TypeError('apply: the fingerprint must be text.');
+    return handlers.apply(idArg('apply', schemeId), fingerprint);
+  });
   return () => {
     for (const channel of [
       CHANNELS.state,
@@ -85,6 +103,8 @@ export function registerHelmIpc(ipc: IpcRegistry, handlers: HelmHandlers): () =>
       CHANNELS.createScheme,
       CHANNELS.saveScheme,
       CHANNELS.setActive,
+      CHANNELS.previewApply,
+      CHANNELS.apply,
     ]) {
       ipc.removeHandler(channel);
     }
