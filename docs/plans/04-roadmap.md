@@ -117,12 +117,41 @@ responsiveness is the stick's mouse speed in the side panel.
 **Done when** J1 takes 2 clicks and J2 is a drag plus Apply on Helldivers 2, verified with the
 hardware checklist **[local]**.
 
+### M4.5 · Setups, the owner's model (M)
+
+The owner corrected the model on 2026-11-19 (01-features.md, *Setups*). M4 shipped the Azerons as
+a controller whose game bindings were fixed, always both units, with no keyboard. This milestone
+brings the built app to the model before game files are written.
+
+- `Scheme.devices`: keyboard, mouse, controller, both Azerons or the **left** Azeron with the
+  mouse. Apply writes only the units the setup uses; the sync pill judges only those.
+- The *Scheme* picker in the editor and the Library: several setups per game, new from a
+  default, rename, delete; Apply puts the picked one on.
+- The device toggle (*Azerons*, *Keyboard*, *Controller*) and *Azerons send: Keys | Controller*,
+  as drawn.
+- Controller output: putting an action on a button sets the button's Xbox control **and** the
+  game's controller binding for that action. The label-only drag and the `pad-mismatch` and
+  `pad-default-unknown` findings go. Until M5 writes a game's file, the game's half shows as bind
+  sheet rows in the Apply drawer.
+- The keyboard edits the game's keyboard bindings the same way.
+- The test layers for all of it: unit, integration, e2e on the real window, and mutation on the
+  core rules.
+
+**Done when** on Helldivers 2, J1 is 2 clicks for *Azerons as controller*, J2 moves an action and
+the drawer lists both the unit write and the game binding, and a *left Azeron + mouse* setup
+writes the left unit only.
+
+**Then a UI audit** against the canvas, screen by screen: what's drawn against what's built,
+wording, and clicks per journey, as a list of gaps with fixes.
+
 ### M5 · Game files, modes and pedals (L)
 
 Key mode, and the two games you fly. **This is the cutover point.**
 
 - `games` adapters: Unreal `Input.ini` (Everspace 2) and Elite `.binds` + `StartPreset`. Each
-  has harvest, preview and write, a backup first, and a refusal while the game runs. Golden files
+  has harvest, preview and write (keyboard and controller bindings both), a backup first, and a
+  refusal while the game runs. Helldivers 2: find where it keeps rebound controls (the survey
+  found none in `user_settings.config`, which may only mean none were rebound). Golden files
   come from [reference/game-files](../../reference/README.md): untouched lines stay identical and
   CRLF is kept.
 - Harvesting fills each game's defaults and the *game's own keys* preset.

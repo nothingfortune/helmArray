@@ -7,6 +7,34 @@
 A desktop app that holds how you want to control each game, and makes your devices and the
 game agree with it. Two Azeron keypads first; keyboard, mouse and Xbox controller alongside.
 
+## Setups (the owner's correction, 2026-11-19)
+
+M3 and M4 were built on a misreading; this section is the model, and the rest of this file is
+read through it.
+
+- **helmArray holds several setups per game; the game holds one.** A game's own settings can only
+  hold one set of bindings at a time. The app keeps as many setups as you like for each game
+  (the Editor's *Scheme* picker on the canvas) and **Apply** puts one of them onto the devices
+  and into the game. Switching setup is picking another and applying it.
+- **A setup says what you play with:** keyboard and mouse, two Azerons, the **left** Azeron and
+  the mouse, an Xbox controller, or a mix.
+- **The Azerons act as a controller or as a keyboard.** *Controller*: each button sends an Xbox
+  button, trigger or stick. *Keys*: each button sends a key.
+- **Putting an action on a control rebinds the game, for every device.** On the keyboard, or on an
+  Azeron sending keys, the game's keyboard binding for that action changes. On an Azeron acting as
+  a controller, or on the controller itself, the game's controller binding changes. The game's
+  shipped bindings are only where a new setup starts; nothing in a setup is fixed to them.
+- **The keyboard and the Azerons work the same way** in the editor: drag an action onto a key or
+  a button. Only the Azerons are also written (what each button sends).
+- **Worked example, Helldivers 2.** *Desk: Azerons as controller*: drag Reload onto Left index 1;
+  the unit is written to send an Xbox button and the game's controller binding for Reload becomes
+  that button. *Couch: controller*: drag Reload onto X; the game's controller binding changes,
+  nothing is written to a unit. Apply on either writes what that setup needs and nothing else.
+- **Left Azeron + mouse** writes the left unit only. The right unit is not written, and the sync
+  pill doesn't judge it.
+- Where the game has no file the app can write, the game's half of Apply is a **bind sheet**:
+  what to set in the game's own menu.
+
 ## Decided
 
 - **Desktop app.** Owns its data. No git, no files to hand-edit, no code, no AI needed.
@@ -14,7 +42,8 @@ game agree with it. Two Azeron keypads first; keyboard, mouse and Xbox controlle
   the game's own config. No game file, no remap. No virtual controller driver.
 - **The Azerons are the flexible part.** They can send keys, mouse buttons, scroll, Xbox
   buttons, triggers and sticks, and the app writes them directly.
-- **Start from defaults.** The basic one: two Azerons as one Xbox controller.
+- **Start from defaults.** The basic one: two Azerons as one Xbox controller, starting from the
+  game's own controller bindings.
 - **You never touch the Azeron's profile button.** Each unit holds one profile, the app's. The
   app writes, overwrites and activates it whenever it needs to; nothing else lives on the unit.
 - **Two Cyborg IIs only.** Their pin maps are known and built in. Re-mapping a unit is a repair
@@ -102,7 +131,9 @@ themselves. Nothing from the previous UI is kept.
 
 | Feature                                                                                   | When |
 | ----------------------------------------------------------------------------------------- | ---- |
-| One scheme per game (more allowed): per mode, button → action, plus behaviour             | v1   |
+| Several setups per game (the app holds them; Apply puts one on the devices and the game)  | v1   |
+| A setup's devices: keyboard + mouse, two Azerons, left Azeron + mouse, controller, a mix   | v1   |
+| Per mode, control → action for every device in the setup, plus behaviour                  | v1   |
 | Defaults: *Xbox controller* (two Azerons = one pad), *game's own keys*, *copy a scheme*   | v1   |
 | Keys we choose stay out of the game's way and never move once given                       | v1   |
 | Checks from real play (below), with "accept, because…"                                    | v1   |
@@ -155,10 +186,13 @@ resolve(Scheme, Game, Devices) → Plan → each target: preview · apply · ver
 
 - **One signal per control per scheme.** A button sends the same thing in every mode; the
   game's file binds it per mode. That is J4.
-- **Pad mode vs key mode** is a property of a scheme. Pad mode: the Azerons are an Xbox
-  controller, and the game's pad bindings apply; works in any game with pad support. Key
-  mode: the Azerons send keys; we pick them and write the game's file, or send the game's own
-  keys when we can't.
+- **Controller vs keys** is a property of a setup's Azerons. Controller: the Azerons are an Xbox
+  controller, and the game's **controller** bindings are rewritten to the setup's. Keys: the
+  Azerons send keys we pick, and the game's **keyboard** bindings are rewritten to the setup's.
+  Either way the game is rebound; where its file can't be written, a bind sheet says what to set.
+  (Corrected 2026-11-19: this used to say the game's pad bindings apply as shipped.)
 - **Apply is one button** and always says what it will touch (units, game file) before it does.
+- **A setup** is the scheme plus which devices it uses. The app keeps many per game; the game and
+  the units hold the one applied.
 
 Phase 2: [02-architecture.md](02-architecture.md).

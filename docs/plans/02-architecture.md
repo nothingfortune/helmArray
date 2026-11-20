@@ -58,9 +58,15 @@ interface Action {
   native?: { key?: Signal; pad?: PadControl };        // what the game ships with
 }
 
-interface Scheme {
+interface Scheme {                  // a setup: the app keeps several per game
   id: string; gameId: string; name: string;
-  output: "pad" | "keys";
+  devices: {
+    azerons: "both" | "left" | "none";               // "left": the left unit and the mouse
+    keyboard: boolean; mouse: boolean; controller: boolean;
+  };
+  output: "pad" | "keys";                            // what the Azerons send
+  // pad output: which Xbox control each Azeron button sends (edited, not fixed)
+  padMap: Record<ControlId, PadControl>;
   // per mode, per control, per press: which action
   map: Record<ModeId, Record<ControlId, Partial<Record<Press, ActionId>>>>;
   behaviour: Record<ControlId, Behaviour>;            // turbo, latch, stick mode + tuning
@@ -88,8 +94,13 @@ Plan = {
 
 How each control-press gets its signal, in order:
 
-1. **Pad output.** The signal is the pad control from the preset's Azeron→pad map. Actions
-   attach through the game's file where writable, otherwise through the game's own pad layout.
+1. **Pad output.** The signal is the pad control from the scheme's Azeron→pad map. The game's
+   **controller bindings** are rewritten so each pad control does the action the scheme put on
+   it: through the game's file where writable, otherwise as bind sheet rows. The controller, when
+   the setup has one, edits the same controller bindings (the game can't tell it from the
+   Azerons), so the two can't disagree.
+   Keyboard and mouse controls in the setup attach the same way through the **keyboard
+   bindings**: the action's key becomes the key the scheme put it on.
 2. **Keys, game file writable.** Ledger first; otherwise the next free key from the pool
    (navigation, numpad operators, punctuation, then F13–F24 where the format can name them). The
    file then binds that key to the action in **every mode** the control is mapped in.
@@ -129,8 +140,8 @@ interface Target<P> {
 
 | Target      | apply                                                                                  | verify                         | Refuses when                       |
 | ----------- | -------------------------------------------------------------------------------------- | ------------------------------ | ---------------------------------- |
-| Units       | write the one slot, switch to it, delete every other slot                              | read every slot back           | Azeron app running; unknown unit   |
-| Game file   | back up, write the whole file                                                          | re-read, compare               | game running                       |
+| Units       | write the one slot, switch to it, delete every other slot; only the units the setup uses (left only for *left Azeron + mouse*) | read every slot back           | Azeron app running; unknown unit   |
+| Game file   | back up, write the whole file: keyboard **and** controller bindings for the setup      | re-read, compare               | game running                       |
 | Bind sheet  | nothing to write; shown and printable                                                  | —                              | —                                  |
 | Helper (v2) | load the macro program                                                                 | —                              | game not opted in                  |
 
