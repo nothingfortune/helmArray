@@ -102,14 +102,38 @@ describe('the card of what is current', () => {
     const card = currentCard(entries, { activeGameId: 'helldivers2' });
     expect(card?.scheme).toBe(KEYS);
     expect(card?.detail).toBe('Keys');
-    expect(currentCard([entry({ schemes: [XBOX] })], { activeGameId: 'helldivers2' })?.detail).toBe(
-      'Controller buttons',
-    );
+    expect(
+      currentCard([entry({ schemes: [XBOX], activeSchemeId: XBOX.id })], {
+        activeGameId: 'helldivers2',
+      })?.detail,
+    ).toBe('Controller buttons');
   });
 
   it('says what to do when the active game has no scheme', () => {
     const card = currentCard([entry()], { activeGameId: 'helldivers2' });
     expect(card?.scheme).toBeNull();
-    expect(card?.detail).toBe('No scheme yet. Pick a default below.');
+    expect(card?.detail).toBe('No scheme picked');
+  });
+
+  it('shows no scheme when the game has schemes but none is active, though a click opens the first', () => {
+    const noneActive = entry({ schemes: [XBOX, KEYS], activeSchemeId: null });
+    const card = currentCard([noneActive], { activeGameId: 'helldivers2' });
+    expect(card?.scheme).toBeNull();
+    expect(card?.detail).toBe('No scheme picked');
+    expect(card?.entry.name).toBe('Helldivers 2');
+    expect(chosenScheme(noneActive)).toBe(XBOX);
+  });
+
+  it('does not name a scheme as picked on a tile when none is active', () => {
+    const noneActive = entry({ schemes: [XBOX, KEYS], activeSchemeId: null });
+    expect(statusLine(noneActive, { activeGameId: 'helldivers2' })).toEqual({
+      text: 'Current · No scheme picked',
+      tone: 'current',
+    });
+    expect(statusLine(noneActive, { activeGameId: 'other' })).toEqual({
+      text: '2 schemes',
+      tone: 'plain',
+    });
+    expect(statusLine(entry({ schemes: [XBOX] }), null).text).toBe('1 scheme');
   });
 });

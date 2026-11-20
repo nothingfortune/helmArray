@@ -9,28 +9,43 @@ export interface StatusLine {
   tone: StatusTone;
 }
 
-/** The scheme a click on the game opens: its own active one, else the first by name. */
+/**
+ * The scheme the game really has active, or null. What the status line and the card say; never
+ * the fallback below, which would show a scheme as picked when none is.
+ */
+export function activeScheme(entry: LibraryEntry): LibrarySchemeRef | null {
+  return entry.schemes.find((s) => s.id === entry.activeSchemeId) ?? null;
+}
+
+/**
+ * The scheme a click on the game opens: its active one, else the first by name. Only for what
+ * a click opens; it is not what is active.
+ */
 export function chosenScheme(entry: LibraryEntry): LibrarySchemeRef | null {
   return entry.schemes.find((s) => s.id === entry.activeSchemeId) ?? entry.schemes[0] ?? null;
 }
 
 /**
  * One line under a cover. It says only what is known: nothing has been applied to the units
- * yet, so it never says a game is ready or on them, only which scheme it has and which game is
- * the current one.
+ * yet, so it never says a game is ready or on them, only which scheme it has active and which
+ * game is the current one. A game with schemes but none active says so rather than naming one.
  */
 export function statusLine(
   entry: LibraryEntry,
   state: Pick<AppState, 'activeGameId'> | null,
 ): StatusLine {
   if (entry.gameId === null) return { text: 'Not supported yet', tone: 'unsupported' };
-  const scheme = chosenScheme(entry);
-  if (scheme === null) return { text: 'Not set up', tone: 'plain' };
-  const more = entry.schemes.length > 1 ? ` · ${entry.schemes.length} schemes` : '';
-  const text = `${scheme.name}${more}`;
-  return state?.activeGameId === entry.gameId
-    ? { text: `Current · ${text}`, tone: 'current' }
-    : { text, tone: 'plain' };
+  const current = state?.activeGameId === entry.gameId;
+  const count = entry.schemes.length;
+  if (count === 0) return { text: 'Not set up', tone: 'plain' };
+  const scheme = activeScheme(entry);
+  if (scheme === null) {
+    return current
+      ? { text: 'Current · No scheme picked', tone: 'current' }
+      : { text: count === 1 ? '1 scheme' : `${count} schemes`, tone: 'plain' };
+  }
+  const text = `${scheme.name}${count > 1 ? ` · ${count} schemes` : ''}`;
+  return current ? { text: `Current · ${text}`, tone: 'current' } : { text, tone: 'plain' };
 }
 
 /** What to start a new scheme from. "Game's own keys" only for a game that has its own keys. */
@@ -73,12 +88,9 @@ export function currentCard(
   if (gameId === null) return null;
   const entry = entries.find((e) => e.gameId === gameId);
   if (!entry) return null;
-  const scheme = chosenScheme(entry);
+  // The active scheme only: with none picked the card says so, whatever a click would open.
+  const scheme = activeScheme(entry);
   const detail =
-    scheme === null
-      ? 'No scheme yet. Pick a default below.'
-      : scheme.output === 'pad'
-        ? 'Controller buttons'
-        : 'Keys';
+    scheme === null ? 'No scheme picked' : scheme.output === 'pad' ? 'Controller buttons' : 'Keys';
   return { entry, scheme, detail };
 }
