@@ -30,6 +30,7 @@ import {
   own,
   padSignalOf,
   setupOf,
+  stickPadsOf,
   withOwn,
 } from '@helmarray/core';
 
@@ -145,30 +146,6 @@ export function shownAction(
   return undefined;
 }
 
-/** The pad controls a stick of the setup sends: never free for a button. */
-function stickPads(scheme: Scheme): Set<PadControl> {
-  const out = new Set<PadControl>();
-  const setup = setupOf(scheme.devices);
-  const left: PadControl[] = ['LS_UP', 'LS_DOWN', 'LS_LEFT', 'LS_RIGHT'];
-  const right: PadControl[] = ['RS_UP', 'RS_DOWN', 'RS_LEFT', 'RS_RIGHT'];
-  const add = (mode: string | undefined) => {
-    if (mode === 'pad-left') left.forEach((c) => out.add(c));
-    if (mode === 'pad-right') right.forEach((c) => out.add(c));
-  };
-  for (const hand of setup.hands) {
-    const prefix = hand === 'left' ? 'L' : 'R';
-    // A stick with no behaviour of its own is an Xbox stick with pad output (core's default).
-    add(
-      scheme.behaviour[`${prefix}.stick`]?.stick?.mode ??
-        (hand === 'left' ? 'pad-left' : 'pad-right'),
-    );
-  }
-  if (setup.controller) {
-    add('pad-left');
-    add('pad-right');
-  }
-  return out;
-}
 
 /** A copy of the pad map without these buttons. */
 const without = (padMap: Scheme['padMap'], controls: readonly ControlId[]): Scheme['padMap'] =>
@@ -184,7 +161,7 @@ const without = (padMap: Scheme['padMap'], controls: readonly ControlId[]): Sche
  */
 function dropStrayStickPads(scheme: Scheme, game: Game): Scheme {
   if (scheme.output !== 'pad') return scheme;
-  const sticks = stickPads(scheme);
+  const sticks = stickPadsOf(scheme);
   const stray = Object.entries(scheme.padMap)
     .filter(([control, pad]) => {
       if (!sticks.has(pad) || padSignalOf(scheme, control) === undefined) return false;
@@ -216,7 +193,7 @@ function givePad(scheme: Scheme, control: ControlId, action: ActionId, game: Gam
   const setup = setupOf(scheme.devices);
   const azeron = control.startsWith('L.') || control.startsWith('R.');
   if (scheme.output !== 'pad' || !azeron || !inSetup(setup, control)) return scheme;
-  const sticks = stickPads(scheme);
+  const sticks = stickPadsOf(scheme);
   const ownPad = game.actions.find((a) => a.id === action)?.native?.pad;
   if (ownPad !== undefined && sticks.has(ownPad)) {
     // A stick of the setup sends it: the button sends the same direction, a second way to do it,

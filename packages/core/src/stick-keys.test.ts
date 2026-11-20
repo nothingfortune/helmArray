@@ -212,8 +212,10 @@ describe('stick keys, rule 1: a stick not in key mode sends nothing', () => {
   });
 
   it('does not count towards required actions', () => {
+    // A mouse stick: its old directions send nothing. (An Xbox stick does reach the moves, on the
+    // stick directions the game ships them on: the controller set counts it.)
     const scheme = ownKeys(helldivers2, {
-      behaviour: { 'L.stick': { stick: { mode: 'pad-left', directions: WASD } } },
+      behaviour: { 'L.stick': { stick: { mode: 'mouse', directions: WASD } } },
       map: { default: { 'L.index_1': { tap: 'fire_primary' }, 'L.index_2': { tap: 'stratagem' } } },
     });
     const missing = found(run(scheme, helldivers2), 'missing-required').map((f) => f.action);

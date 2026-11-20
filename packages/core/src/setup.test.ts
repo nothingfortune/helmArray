@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import type { Scheme, SetupDevices } from './model';
 import { AZERONS_ONLY } from './model';
-import { bindingSetOf, controlSet, inSetup, padSignalOf, setsUsed, setupOf } from './setup';
+import {
+  bindingSetOf,
+  controlSet,
+  inSetup,
+  padSignalOf,
+  setsUsed,
+  setupOf,
+  setupSends,
+} from './setup';
 
 const devices = (over: Partial<SetupDevices>): SetupDevices => ({ ...AZERONS_ONLY, ...over });
 
@@ -138,5 +146,61 @@ describe('controlSet', () => {
     ['pedal.rudder', 'pad', undefined],
   ] as const)('binds %s through the %s output’s set: %s', (control, output, expected) => {
     expect(controlSet(scheme({ output }), control)).toBe(expected);
+  });
+});
+
+describe('the binding sets count what the sticks send', () => {
+  const wasd = {
+    up: { kind: 'key', code: 'W' },
+    down: { kind: 'key', code: 'S' },
+    left: { kind: 'key', code: 'A' },
+    right: { kind: 'key', code: 'D' },
+  } as const;
+
+  it('adds the keyboard set for a stick sending keys beside buttons sending Xbox controls', () => {
+    expect(
+      setsUsed(scheme({ behaviour: { 'L.stick': { stick: { mode: 'keys', directions: wasd } } } })),
+    ).toEqual(['keyboard', 'controller']);
+  });
+
+  it('adds the keyboard set for a stick moving the mouse', () => {
+    expect(setsUsed(scheme({ behaviour: { 'R.stick': { stick: { mode: 'mouse' } } } }))).toEqual([
+      'keyboard',
+      'controller',
+    ]);
+  });
+
+  it('adds the controller set for an Xbox stick beside buttons sending keys', () => {
+    expect(
+      setsUsed(
+        scheme({ output: 'keys', behaviour: { 'L.stick': { stick: { mode: 'pad-left' } } } }),
+      ),
+    ).toEqual(['keyboard', 'controller']);
+  });
+
+  it('ignores the stick of a unit the setup does not use', () => {
+    expect(
+      setsUsed(
+        scheme({
+          devices: devices({ azerons: 'left', mouse: false }),
+          output: 'keys',
+          behaviour: {
+            'L.stick': { stick: { mode: 'keys' } },
+            'R.stick': { stick: { mode: 'pad-right' } },
+          },
+        }),
+      ),
+    ).toEqual(['keyboard']);
+  });
+
+  it('says which part of the setup sends into each set', () => {
+    expect(
+      setupSends(
+        scheme({
+          devices: devices({ mouse: true }),
+          behaviour: { 'L.stick': { stick: { mode: 'keys', directions: wasd } } },
+        }),
+      ),
+    ).toEqual({ keyboard: ['L.stick', 'mouse'], controller: ['buttons', 'R.stick'] });
   });
 });

@@ -2,9 +2,11 @@
 // which of the game's two binding sets it rebinds, and what pad control a control sends. The
 // resolver, the checks and the editor all read a setup through these, so they never disagree.
 
-import type { ControlId, Hand, PadControl, Scheme, SetupDevices, Signal } from './model';
+import type { ControlId, Hand, PadControl, Scheme, SetupDevices, Signal, StickMode } from './model';
 import { PAD_CONTROLS, STICK_DIRECTIONS } from './model';
+import { own } from './own';
 import type { BindingSet, Plan, UnitProfile } from './plan';
+import { BINDING_SETS } from './plan';
 import { signalId } from './signal';
 
 export interface Setup {
@@ -74,14 +76,44 @@ export function padSignalOf(scheme: Scheme, control: ControlId): PadControl | un
 export const bindingSetOf = (signal: Signal): BindingSet =>
   signal.kind === 'pad' ? 'controller' : 'keyboard';
 
-/** The binding sets a scheme rebinds, keyboard first: only those its devices send into. */
-export function setsUsed(scheme: Scheme): BindingSet[] {
+/** What a unit's stick does: what the scheme sets, else what its output makes it (core's default). */
+export function stickModeOf(scheme: Scheme, hand: Hand): StickMode {
+  const set = own(scheme.behaviour, `${hand === 'left' ? 'L' : 'R'}.stick`)?.stick?.mode;
+  if (set !== undefined) return set;
+  if (scheme.output === 'pad') return hand === 'left' ? 'pad-left' : 'pad-right';
+  return 'keys';
+}
+
+/** A part of a setup that sends something: the units' buttons, a unit's stick, a fixed device. */
+export type Sender = 'buttons' | 'L.stick' | 'R.stick' | 'keyboard' | 'mouse' | 'controller';
+
+/**
+ * THE ONE PLACE that says what a setup sends into each of the game's binding sets: the units'
+ * buttons by their output, each unit's stick by its mode (keys and the mouse into the keyboard set,
+ * an Xbox stick into the controller set), and every fixed device the setup names. Only the units
+ * and devices the setup uses count. Everything that asks which sets a setup uses asks this.
+ */
+export function setupSends(scheme: Scheme): Record<BindingSet, Sender[]> {
   const setup = setupOf(scheme.devices);
-  const azerons = setup.hands.length > 0;
-  const out: BindingSet[] = [];
-  if (setup.keyboard || setup.mouse || (azerons && scheme.output === 'keys')) out.push('keyboard');
-  if (setup.controller || (azerons && scheme.output === 'pad')) out.push('controller');
+  const out: Record<BindingSet, Sender[]> = { keyboard: [], controller: [] };
+  if (setup.hands.length > 0)
+    out[scheme.output === 'pad' ? 'controller' : 'keyboard'].push('buttons');
+  for (const hand of setup.hands) {
+    const mode = stickModeOf(scheme, hand);
+    out[mode === 'pad-left' || mode === 'pad-right' ? 'controller' : 'keyboard'].push(
+      hand === 'left' ? 'L.stick' : 'R.stick',
+    );
+  }
+  if (setup.keyboard) out.keyboard.push('keyboard');
+  if (setup.mouse) out.keyboard.push('mouse');
+  if (setup.controller) out.controller.push('controller');
   return out;
+}
+
+/** The binding sets a scheme rebinds, keyboard first: those something of the setup sends into. */
+export function setsUsed(scheme: Scheme): BindingSet[] {
+  const sends = setupSends(scheme);
+  return BINDING_SETS.filter((set) => sends[set].length > 0);
 }
 
 const STICK_PADS: Record<'pad-left' | 'pad-right', readonly PadControl[]> = {
@@ -91,25 +123,26 @@ const STICK_PADS: Record<'pad-left' | 'pad-right', readonly PadControl[]> = {
 
 /**
  * What the setup's sticks send, by signal id, with the stick's name: an Azeron stick's direction
- * keys (key mode) or an Xbox stick's directions, and the controller's two sticks. A stick reaches
- * the actions the game ships on what it sends (STICK DIRECTION KEYS, rule 3).
+ * keys (key mode) or its Xbox directions, and the controller's two sticks. A stick reaches the
+ * actions the game ships on what it sends (STICK DIRECTION KEYS, rule 3).
  */
-export function stickSends(plan: Pick<Plan, 'units'>, setup: Setup): Map<string, string> {
+export function stickSends(scheme: Scheme): Map<string, string> {
+  const setup = setupOf(scheme.devices);
   const out = new Map<string, string>();
   const add = (signal: Signal, who: string) => {
     if (!out.has(signalId(signal))) out.set(signalId(signal), who);
   };
-  for (const hand of ['left', 'right'] as const) {
-    const stick = plan.units[hand]?.stick;
-    if (!stick) continue;
-    if (stick.mode === 'keys') {
+  for (const hand of setup.hands) {
+    const mode = stickModeOf(scheme, hand);
+    if (mode === 'keys') {
+      const directions = own(scheme.behaviour, `${hand === 'left' ? 'L' : 'R'}.stick`)?.stick
+        ?.directions;
       for (const direction of STICK_DIRECTIONS) {
-        const signal = stick.directions?.[direction];
+        const signal = directions?.[direction];
         if (signal) add(signal, `the ${hand} stick`);
       }
-    } else if (stick.mode === 'pad-left' || stick.mode === 'pad-right') {
-      for (const control of STICK_PADS[stick.mode])
-        add({ kind: 'pad', control }, `the ${hand} stick`);
+    } else if (mode === 'pad-left' || mode === 'pad-right') {
+      for (const control of STICK_PADS[mode]) add({ kind: 'pad', control }, `the ${hand} stick`);
     }
   }
   if (setup.controller) {
@@ -117,6 +150,15 @@ export function stickSends(plan: Pick<Plan, 'units'>, setup: Setup): Map<string,
       add({ kind: 'pad', control }, "the controller's left stick");
     for (const control of STICK_PADS['pad-right'])
       add({ kind: 'pad', control }, "the controller's right stick");
+  }
+  return out;
+}
+
+/** The Xbox controls the setup's sticks send: never a button's to take. */
+export function stickPadsOf(scheme: Scheme): Set<PadControl> {
+  const out = new Set<PadControl>();
+  for (const id of stickSends(scheme).keys()) {
+    if (id.startsWith('pad:')) out.add(id.slice(4) as PadControl);
   }
   return out;
 }

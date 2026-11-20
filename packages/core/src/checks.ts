@@ -17,7 +17,7 @@ import { PRESSES, STICK_DIRECTIONS } from './model';
 import type { Finding, GameBinding, PinPlan, Plan, UnitProfile } from './plan';
 import { signalId } from './signal';
 import type { Setup } from './setup';
-import { inSetup, setsUsed, setupOf, stickSends } from './setup';
+import { inSetup, setsUsed, setupOf, setupSends, stickModeOf, stickSends } from './setup';
 
 /** Every check, in the order its findings are listed. */
 export const CHECK_RULES = [
@@ -334,7 +334,7 @@ function missingRequired(ctx: Context): Finding[] {
     if (inSetup(ctx.setup, p.control)) onButton.add(`${p.mode}|${p.action}`);
   }
   const used = setsUsed(ctx.scheme);
-  const stickSent = stickSends(ctx.plan, ctx.setup);
+  const stickSent = stickSends(ctx.scheme);
   const reached = (signal: Signal | undefined) =>
     signal !== undefined && stickSent.has(signalId(signal));
   const out: Finding[] = [];
@@ -430,7 +430,11 @@ function holdOnMovement(ctx: Context): Finding[] {
  */
 function mixedInput(ctx: Context): Finding[] {
   const out: Finding[] = [];
-  if (setsUsed(ctx.scheme).length === 2) {
+  // The setup's own mix: what isn't a stick sends into both sets. A stick's own mix is said below.
+  const sends = setupSends(ctx.scheme);
+  const notSticks = (set: 'keyboard' | 'controller') =>
+    sends[set].some((s) => !s.endsWith('.stick'));
+  if (notSticks('keyboard') && notSticks('controller')) {
     out.push({
       rule: 'mixed-input',
       severity: 'warning',
@@ -438,17 +442,22 @@ function mixedInput(ctx: Context): Finding[] {
         'This setup mixes an Xbox controller with keyboard and mouse. Some games stutter switching between the two.',
     });
   }
-  for (const [control, stick] of sticks(ctx.plan)) {
-    const padStick = stick.mode === 'pad-left' || stick.mode === 'pad-right';
-    if ((ctx.scheme.output === 'pad') === padStick) continue;
-    out.push({
-      rule: 'mixed-input',
-      severity: 'warning',
-      control,
-      message: padStick
-        ? 'This stick is an Xbox stick while the buttons send keys. Some games stutter switching between the two.'
-        : `This stick sends ${stick.mode === 'mouse' ? 'the mouse' : 'keys'} while the buttons are an Xbox controller. Some games stutter switching between the two.`,
-    });
+  // A stick sending into the other set from the units' buttons (`setupSends`, the one place).
+  const buttons = sends.controller.includes('buttons') ? 'controller' : 'keyboard';
+  const other = buttons === 'controller' ? 'keyboard' : 'controller';
+  if (sends[buttons].includes('buttons')) {
+    for (const control of sends[other].filter((s) => s.endsWith('.stick'))) {
+      const mode = stickModeOf(ctx.scheme, control.startsWith('L.') ? 'left' : 'right');
+      out.push({
+        rule: 'mixed-input',
+        severity: 'warning',
+        control,
+        message:
+          other === 'controller'
+            ? 'This stick is an Xbox stick while the buttons send keys. Some games stutter switching between the two.'
+            : `This stick sends ${mode === 'mouse' ? 'the mouse' : 'keys'} while the buttons are an Xbox controller. Some games stutter switching between the two.`,
+      });
+    }
   }
   return out;
 }

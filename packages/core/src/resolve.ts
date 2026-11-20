@@ -10,7 +10,6 @@ import type {
   Press,
   Scheme,
   Signal,
-  StickBehaviour,
 } from './model';
 import { PRESSES, STICK_DIRECTIONS } from './model';
 import type {
@@ -28,7 +27,7 @@ import { KEY_POOL, formatCanName } from './pool';
 import { signalId } from './signal';
 import { runChecks } from './checks';
 import type { Setup } from './setup';
-import { bindingSetOf, inSetup, setsUsed, setupOf, stickSends } from './setup';
+import { bindingSetOf, inSetup, setsUsed, setupOf, stickModeOf, stickSends } from './setup';
 
 export { signalId };
 
@@ -215,11 +214,6 @@ function dealKeys(
   return { signals, ledger, findings };
 }
 
-function defaultStick(scheme: Scheme, unit: AzeronDevice): StickBehaviour {
-  if (scheme.output === 'pad') return { mode: unit.hand === 'left' ? 'pad-left' : 'pad-right' };
-  return { mode: 'keys' };
-}
-
 function unitProfile(
   scheme: Scheme,
   unit: AzeronDevice,
@@ -247,7 +241,9 @@ function unitProfile(
       if (p.pinTwo !== undefined) pin.pinTwo = p.pinTwo;
       return pin;
     });
-  const stickBehaviour = scheme.behaviour[`${prefix}.stick`]?.stick ?? defaultStick(scheme, unit);
+  const stickBehaviour = scheme.behaviour[`${prefix}.stick`]?.stick ?? {
+    mode: stickModeOf(scheme, unit.hand),
+  };
   // Rule 1: directions belong to key mode only.
   const { directions, ...rest } = stickBehaviour;
   return {
@@ -452,7 +448,7 @@ export function resolve(scheme: Scheme, game: Game, devices: readonly Device[]):
   const profiles: Partial<Record<Hand, UnitProfile>> = {};
   for (const unit of units) profiles[unit.hand] = unitProfile(scheme, unit, dealt.signals);
   const bound = bindings(scheme, game, controls, dealt.signals, fixed);
-  const rebound = gameBindings(scheme, game, bound, stickSends({ units: profiles }, setup), fixed, [
+  const rebound = gameBindings(scheme, game, bound, stickSends(scheme), fixed, [
     ...(profiles.left?.pins ?? []),
     ...(profiles.right?.pins ?? []),
   ]);

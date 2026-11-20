@@ -406,3 +406,54 @@ describe('two actions resolved onto one live signal are a collision, from a stic
     ).toEqual([]);
   });
 });
+
+describe('a stick sending W, A, S and D beside buttons sending Xbox controls', () => {
+  const wasd = {
+    up: key('W'),
+    down: key('S'),
+    left: key('A'),
+    right: key('D'),
+  };
+  const plan = run({
+    ...xboxControllerPreset(helldivers2),
+    behaviour: {
+      ...xboxControllerPreset(helldivers2).behaviour,
+      'L.stick': { stick: { mode: 'keys', directions: wasd } },
+    },
+  });
+
+  it('reaches the four moves on the keys the game ships them on: none is missing', () => {
+    expect(plan.findings.filter((f) => f.rule === 'missing-required')).toEqual([]);
+  });
+
+  it('keeps the moves on those keys in the game’s keyboard set', () => {
+    expect(
+      ['move_forward', 'move_back', 'strafe_left', 'strafe_right'].map((a) =>
+        on(plan, 'keyboard', a),
+      ),
+    ).toEqual([[key('W')], [key('S')], [key('A')], [key('D')]]);
+  });
+
+  it('warns of the mix once, on the stick', () => {
+    expect(plan.findings.filter((f) => f.rule === 'mixed-input').map((f) => f.control)).toEqual([
+      'L.stick',
+    ]);
+  });
+});
+
+describe('an Xbox stick beside buttons sending keys', () => {
+  it('reaches the moves on the stick directions the game ships them on', () => {
+    const plan = run({
+      ...gameKeysPreset(helldivers2),
+      behaviour: {
+        'L.stick': { stick: { mode: 'pad-left' } },
+        'R.stick': { stick: { mode: 'mouse' } },
+      },
+      map: { default: { 'L.index_1': { tap: 'fire_primary' }, 'L.index_2': { tap: 'stratagem' } } },
+    });
+    expect([
+      plan.findings.filter((f) => f.rule === 'missing-required'),
+      on(plan, 'controller', 'move_forward'),
+    ]).toEqual([[], [pad('LS_UP')]]);
+  });
+});
