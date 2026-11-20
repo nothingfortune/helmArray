@@ -15,7 +15,7 @@
     "test": "vitest run",
     "dev": "cd packages/app && node --run dev",
     "tokens": "cd packages/app && node --run tokens",
-    "e2e": "cd packages/app && node --run e2e"
+    "test:e2e": "cd packages/app && node --run test:e2e"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

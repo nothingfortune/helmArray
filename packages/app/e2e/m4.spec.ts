@@ -3,40 +3,21 @@
 // own, into the page: no OS-level keyboard or mouse input is ever sent.
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './helm';
+import {
+  AZERON_APP,
+  CLOSE_AZERON_FIRST,
+  applyInDrawer,
+  drawer,
+  helldivers,
+  keepEveryCheck,
+  pill,
+  schemeFiles,
+  startFrom,
+} from './screens';
 
 /** The unit's code for the W key: 0xF000 | its HID usage (packages/azeron `UNIT_KEY_CODES`). */
 const KEY_W = 0xf01a;
-const AZERON_APP = 'Azeron Software.exe';
-const CLOSE_AZERON_FIRST = 'Close the Azeron app first: it talks to the units too.';
-
-const pill = (page: Page): Locator => page.locator('.pill');
-const drawer = (page: Page): Locator => page.getByRole('dialog', { name: /^Apply/ });
-const applyInDrawer = (page: Page): Locator => drawer(page).getByRole('button', { name: 'Apply' });
-const helldivers = (page: Page): Locator => page.getByRole('button', { name: /^HELLDIVERS/ });
-
-/** Opens Helldivers 2 from the Library: the game, then what to start from. */
-async function startFrom(page: Page, preset: 'Xbox controller' | "Game's own keys") {
-  await helldivers(page).click();
-  await page.getByRole('button', { name: preset }).click();
-  await expect(page.getByRole('heading', { name: 'Helldivers 2' })).toBeVisible();
-}
-
-/** "Keep, I know" on every check that is still flagged. Returns how many were kept. */
-async function keepEveryCheck(page: Page): Promise<number> {
-  const keep = page.getByRole('button', { name: 'Keep, I know' });
-  let kept = 0;
-  while ((await keep.count()) > 0) {
-    await keep.first().click();
-    kept++;
-  }
-  return kept;
-}
-
-async function schemeFiles(dataDir: string): Promise<string[]> {
-  return (await readdir(join(dataDir, 'schemes'))).filter((name) => name.endsWith('.json'));
-}
 
 test.describe('the M4 screens', () => {
   test('the Library lists the Steam games from the temp folder, with a cover that loads', async ({

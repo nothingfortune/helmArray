@@ -9,7 +9,7 @@
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "tokens": "node scripts/write-tokens.ts",
-    "e2e": "electron-vite build && playwright test"
+    "test:e2e": "electron-vite build && playwright test"
   },
   "dependencies": {
     "@helmarray/azeron": "workspace:*",
@@ -21,6 +21,7 @@
     "react-dom": "19.3.1"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
     "@playwright/test": "1.64.1",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",

@@ -27,7 +27,7 @@ pin an older version of the package rather than adding an exclusion.
 | `pnpm dev`     | Starts the app with hot reload. Close the Azeron app first: helmArray waits while it runs. |
 | `pnpm check`   | The gate: typecheck, lint, format and tests. CI runs exactly this.                      |
 | `pnpm test`    | The tests on their own.                                                                 |
-| `pnpm e2e`     | Builds the app and drives it in a real window over two fake units, the M4 screens (J1, J2, the Azeron app refusal). Not part of `pnpm check`. |
+| `pnpm test:e2e`     | Builds the app and drives it in a real window over two fake units, the M4 screens (J1, J2, the Azeron app refusal). Not part of `pnpm check`. |
 | `pnpm format`  | Rewrites files to the house format (`pnpm check` only reports).                          |
 | `pnpm tokens`  | Rewrites `styles/tokens.css` from `src/shared/tokens.ts` after a token changes.          |
 
@@ -35,7 +35,7 @@ The built app takes `--play` to open Play view beside the main window, for a sho
 starts straight into play.
 
 No test talks to a real unit, game file or your settings, so `pnpm check` is safe with
-everything plugged in. The same goes for `pnpm e2e`: it sets `HELM_E2E=1` and `HELM_E2E_DIR` (a
+everything plugged in. The same goes for `pnpm test:e2e`: it sets `HELM_E2E=1` and `HELM_E2E_DIR` (a
 temp folder), which swap in fake units, a fake list of running programs, a Steam folder inside the
 temp folder and that folder for the app's files. With the switch set the real HID backend throws
 if anything reaches it. It opens a window for a few seconds without taking the keyboard focus, and

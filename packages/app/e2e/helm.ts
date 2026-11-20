@@ -1,6 +1,7 @@
 // Starts the built app for a test: a temp data folder, a fake Steam folder inside it, the two
 // fake units already told apart, and HELM_E2E=1 so real HID can't be reached (the seam is
 // src/main/e2e-seam.ts). Every launched app is closed, and its folder removed, when the test ends.
+import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -71,27 +72,36 @@ async function launch(): Promise<{ helm: Helm; close(): Promise<void> }> {
   env['HELM_E2E'] = '1';
   env['HELM_E2E_DIR'] = dataDir;
 
-  let app: ElectronApplication | undefined;
+  const launched = await electron
+    .launch({
+      executablePath: electronBinary,
+      args: [APP_DIR],
+      cwd: APP_DIR,
+      env,
+      // The page's language, so the words asserted on are the ones asserted on everywhere.
+      locale: 'en-US',
+      timeout: 30_000,
+    })
+    .catch(async (error: unknown) => {
+      await rm(dataDir, { recursive: true, force: true }).catch(() => undefined);
+      throw error;
+    });
+  const pid = launched.process().pid;
+  // If the worker is killed (a hung test), the app must not outlive it.
+  const reap = () => {
+    if (pid !== undefined && launched.process().exitCode === null) killTree(pid);
+  };
+  process.once('exit', reap);
   const close = async () => {
-    try {
-      await app?.close();
-    } catch {
-      // Already gone.
-    }
+    await shutDown(launched, pid);
+    process.off('exit', reap);
     await rm(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }).catch(
       () => undefined,
     );
   };
   try {
-    const launched = await electron.launch({
-      executablePath: electronBinary,
-      args: [APP_DIR],
-      cwd: APP_DIR,
-      env,
-      timeout: 30_000,
-    });
-    app = launched;
     const page = await launched.firstWindow();
+    await launched.context().tracing.start({ screenshots: true, snapshots: true });
     // The page-less side of the fakes, kept on a global of the main process (e2e-fakes.ts). The
     // functions run in that process, so they can't use anything from here: the global's name
     // (`helmE2E`, E2E_CONTROL_GLOBAL) is written out in them.
@@ -119,15 +129,76 @@ async function launch(): Promise<{ helm: Helm; close(): Promise<void> }> {
   }
 }
 
+const CLOSE_MS = 10_000;
+/** What a failed test's evidence may take: it never holds up the closing of the app. */
+const EVIDENCE_MS = 8000;
+
+const within = <T>(work: Promise<T>, ms: number): Promise<T | undefined> =>
+  Promise.race([
+    work.catch(() => undefined),
+    new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), ms)),
+  ]);
+
+/**
+ * Closes the app, and makes sure no Electron process is left: if closing doesn't finish in time,
+ * or the process is still there afterwards, its whole tree is killed by PID.
+ */
+async function shutDown(app: ElectronApplication, pid: number | undefined): Promise<void> {
+  const child = app.process();
+  const closed = app.close().then(
+    () => true,
+    () => true,
+  );
+  const timedOut = new Promise<false>((resolve) => setTimeout(() => resolve(false), CLOSE_MS));
+  const clean = await Promise.race([closed, timedOut]);
+  if (clean && child.exitCode !== null) return;
+  if (pid !== undefined) killTree(pid);
+  await Promise.race([closed, new Promise((resolve) => setTimeout(resolve, 3000))]);
+}
+
+function killTree(pid: number): void {
+  try {
+    if (process.platform === 'win32') {
+      execFileSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore' });
+    } else {
+      process.kill(pid, 'SIGKILL');
+    }
+  } catch {
+    // Already gone.
+  }
+}
+
 export const test = base.extend<{ helm: Helm }>({
   // Playwright wants the fixtures argument destructured, even with nothing to take from it.
   // eslint-disable-next-line no-empty-pattern
-  helm: async ({}, use) => {
+  helm: async ({}, use, testInfo) => {
     const { helm, close } = await launch();
     try {
       await use(helm);
     } finally {
-      await close();
+      try {
+        // What a failed test leaves to look at: its trace and a screenshot of the window. (No
+        // video: Playwright's recorder needs ffmpeg, which comes with its browser download.)
+        // A test that is meant to fail (`test.fail`) counts as passing. Each step is bounded, so
+        // nothing here can keep the app from being closed below.
+        const tracing = helm.app.context().tracing;
+        if (testInfo.status !== testInfo.expectedStatus) {
+          const trace = testInfo.outputPath('trace.zip');
+          await within(tracing.stop({ path: trace }), EVIDENCE_MS);
+          await testInfo
+            .attach('trace', { path: trace, contentType: 'application/zip' })
+            .catch(() => undefined);
+          const png = testInfo.outputPath('window.png');
+          await within(helm.page.screenshot({ path: png }), EVIDENCE_MS);
+          await testInfo
+            .attach('window', { path: png, contentType: 'image/png' })
+            .catch(() => undefined);
+        } else {
+          await within(tracing.stop(), EVIDENCE_MS);
+        }
+      } finally {
+        await close();
+      }
     }
   },
 });
