@@ -221,11 +221,31 @@
   height: 7px;
   background: var(--color-muted);
 }
-.status.tone-current {
+/* The canvas's dots: amber on the units now, green ready, yellow changed since. */
+.status.tone-units {
   color: var(--color-text);
 }
-.status.tone-current .dot {
+.status.tone-units .dot {
   background: var(--color-accent);
+}
+.status.tone-ok .dot {
+  background: var(--color-ok);
+}
+.status.tone-warning .dot {
+  background: var(--color-warning);
+}
+.choices .btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-12);
+}
+.choice-note {
+  color: var(--color-secondary);
+  font-weight: 500;
+}
+.choices .btn[aria-current='true'] {
+  box-shadow: inset 2px 0 0 var(--color-accent);
 }
 
 .popover {

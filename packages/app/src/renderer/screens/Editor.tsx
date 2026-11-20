@@ -4,26 +4,46 @@
 // scheme id and a way back. Edits are pure functions in ./editor-model, what is drawn is worked
 // out in ./editor-view, and both are tested without a DOM.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
-import { Tooltip } from 'radix-ui';
+import { Popover, Tooltip } from 'radix-ui';
 import { BUILT_IN_DEVICES, resolve } from '@helmarray/core';
-import type { ControlId, Game, Plan, Press, Role, Scheme } from '@helmarray/core';
+import type {
+  AzeronUse,
+  ControlId,
+  Game,
+  PadControl,
+  Plan,
+  Press,
+  Role,
+  Scheme,
+} from '@helmarray/core';
+import type { Preset } from '../../shared/api';
+import { Controller, Keyboard, Mouse } from '../devices/Devices';
+import { dragAction } from '../devices/drag';
 import { Unit } from '../unit/Unit';
 import type { UnitProps } from '../unit/Unit';
-import { ACTION_DRAG_TYPE } from '../unit/layout';
 import {
+  NAME_LIMIT,
   acceptFinding,
   assign,
   canRedo,
   canUndo,
+  chooseAzerons,
+  chooseController,
+  chooseKeyboard,
   clear,
   commit,
   adoptLedger,
+  hasDevices,
   historyAction,
   isStick,
   isTextEntry,
+  move,
   redo,
+  renameScheme,
+  setDevices,
   setLatch,
+  setOutput,
+  setPadControl,
   setTurbo,
   startHistory,
   undo,
@@ -31,7 +51,9 @@ import {
 } from './editor-model';
 import type { History } from './editor-model';
 import { assignable, editorView } from './editor-view';
-import type { EditorView, FindingRow, PanelView, UnitSide } from './editor-view';
+import type { DeviceTabId, EditorView, FindingRow, PanelView, UnitSide } from './editor-view';
+import { runMake, runPick } from './libraryFlow';
+import { runCopy, runDelete } from './schemeFlow';
 import './editor.css';
 
 export interface EditorProps {
@@ -39,6 +61,11 @@ export interface EditorProps {
   schemeId: string;
   /** The way back to the library. */
   onBack(): void;
+  /**
+   * Opens another setup of the game (switched to, made, or what is left after a delete). Without it
+   * the Scheme picker only names the setup open.
+   */
+  onOpenScheme?(schemeId: string): void;
   /** Opens the Apply drawer. Without it the Apply button is shown, disabled, with a reason. */
   onApply?(): void;
   /**
@@ -66,26 +93,6 @@ const PRESS_WORD: Record<Press, string> = { tap: 'tap', long: 'long press', doub
 const roleColour = (role: Role | undefined): string =>
   role === undefined ? 'var(--color-muted)' : `var(--color-${role})`;
 
-/** A tooltip around something that may be disabled: the span takes hover and focus for it. */
-function Tip({ text, children }: { text: string; children: ReactNode }) {
-  return (
-    <Tooltip.Provider>
-      <Tooltip.Root>
-        <Tooltip.Trigger asChild>
-          <span className="ed-tip" tabIndex={0}>
-            {children}
-          </span>
-        </Tooltip.Trigger>
-        <Tooltip.Portal>
-          <Tooltip.Content className="tooltip" side="bottom" sideOffset={8}>
-            {text}
-          </Tooltip.Content>
-        </Tooltip.Portal>
-      </Tooltip.Root>
-    </Tooltip.Provider>
-  );
-}
-
 function BackLink({ onBack }: { onBack(): void }) {
   return (
     <button type="button" className="btn ghost ed-back" onClick={onBack}>
@@ -98,7 +105,14 @@ function BackLink({ onBack }: { onBack(): void }) {
 }
 
 /** Loads the scheme and its game, then hands them to the editor. Keyed by scheme id. */
-function EditorLoader({ schemeId, onBack, onApply, historyOff, keysKept }: EditorProps) {
+function EditorLoader({
+  schemeId,
+  onBack,
+  onOpenScheme,
+  onApply,
+  historyOff,
+  keysKept,
+}: EditorProps) {
   const [load, setLoad] = useState<Load>({ kind: 'loading' });
 
   useEffect(() => {
@@ -129,6 +143,7 @@ function EditorLoader({ schemeId, onBack, onApply, historyOff, keysKept }: Edito
         scheme={load.scheme}
         game={load.game}
         onBack={onBack}
+        onOpenScheme={onOpenScheme}
         onApply={onApply}
         historyOff={historyOff === true}
         keysKept={keysKept ?? 0}
@@ -170,18 +185,29 @@ interface BodyProps {
   scheme: Scheme;
   game: Game;
   onBack(): void;
+  onOpenScheme: ((schemeId: string) => void) | undefined;
   onApply: (() => void) | undefined;
   historyOff: boolean;
   keysKept: number;
 }
 
-function EditorBody({ scheme: loaded, game, onBack, onApply, historyOff, keysKept }: BodyProps) {
+function EditorBody({
+  scheme: loaded,
+  game,
+  onBack,
+  onOpenScheme,
+  onApply,
+  historyOff,
+  keysKept,
+}: BodyProps) {
   const [history, setHistory] = useState<History<Scheme>>(() => startHistory(loaded));
   const historyRef = useRef(history);
   const [mode, setMode] = useState(() => game.modes[0]?.id ?? 'default');
   const [selected, setSelected] = useState<ControlId | undefined>(undefined);
   const [press, setPress] = useState<Press>('tap');
+  const [tab, setTab] = useState<DeviceTabId | undefined>(undefined);
   const [saveFailed, setSaveFailed] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
 
   /** Applies a change to the history and saves the scheme if it changed. Never inside an updater. */
   const change = useCallback((next: (h: History<Scheme>) => History<Scheme>) => {
@@ -245,9 +271,9 @@ function EditorBody({ scheme: loaded, game, onBack, onApply, historyOff, keysKep
   const view = useMemo(
     () =>
       'plan' in planned
-        ? editorView({ scheme, game, plan: planned.plan, mode, selected, press })
+        ? editorView({ scheme, game, plan: planned.plan, mode, selected, press, tab })
         : null,
-    [planned, scheme, game, mode, selected, press],
+    [planned, scheme, game, mode, selected, press, tab],
   );
 
   const select = (id: ControlId) => {
@@ -258,11 +284,41 @@ function EditorBody({ scheme: loaded, game, onBack, onApply, historyOff, keysKep
     if (isStick(control) || !assignable(game, mode, actionId)) return;
     edit((s) => assign(s, { mode, control, press: which }, actionId, game));
   };
-  const dropOn = (control: ControlId, actionId: string) => {
-    if (isStick(control)) return;
-    place(control, actionId, 'tap');
+  /** A drop: from the list it puts the action on; dragged off another control it moves it. */
+  const dropOn = (control: ControlId, actionId: string, from?: ControlId) => {
+    if (isStick(control) || !assignable(game, mode, actionId)) return;
+    if (from === undefined) place(control, actionId, 'tap');
+    else
+      edit((s) =>
+        move(s, { mode, control: from, press: 'tap' }, { mode, control, press: 'tap' }, game),
+      );
     setSelected(control);
     setPress('tap');
+  };
+  /** Opens a setup the picker made or switched to; a step that failed says why in one sentence. */
+  const opened = (outcome: { ok: true; schemeId: string } | { ok: false; message: string }) => {
+    if (outcome.ok) onOpenScheme?.(outcome.schemeId);
+    else setProblem(outcome.message);
+  };
+  const picker: PickerActions = {
+    switchTo: (id) => void runPick(window.helm, game.id, id).then(opened),
+    make: (preset) => void runMake(window.helm, game.id, preset).then(opened),
+    copy: () => void runCopy(window.helm, game.id, scheme.id).then(opened),
+    rename: (name) => edit((s) => renameScheme(s, name)),
+    remove: () =>
+      void runDelete(window.helm, game.id, scheme.id).then((after) => {
+        if (!after.ok) setProblem(after.message);
+        else if (after.next === null) onBack();
+        else onOpenScheme?.(after.next);
+      }),
+  };
+  const changeDevices = (next: Scheme['devices']) => {
+    edit((s) => setDevices(s, next, game));
+    setSelected(undefined);
+  };
+  const showTab = (id: DeviceTabId) => {
+    setTab(id);
+    setSelected(undefined);
   };
 
   const canPlace = selected !== undefined && !isStick(selected);
@@ -274,8 +330,49 @@ function EditorBody({ scheme: loaded, game, onBack, onApply, historyOff, keysKep
           <BackLink onBack={onBack} />
           <div className="ed-titles">
             <h1 className="ed-game">{game.name}</h1>
-            <span className="ed-scheme">Scheme: {scheme.name}</span>
+            <SchemePicker
+              scheme={scheme}
+              game={game}
+              actions={onOpenScheme === undefined ? null : picker}
+            />
           </div>
+          <span className="ed-rule" aria-hidden="true" />
+          {view !== null && view.tabs.length > 0 && (
+            <div className="ed-seg" role="group" aria-label="Device">
+              {view.tabs.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  className="ed-seg-btn"
+                  aria-pressed={view.tab === t.id}
+                  onClick={() => showTab(t.id)}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          )}
+          <DevicesChooser devices={scheme.devices} onChange={changeDevices} />
+          {view?.output !== null && view?.output !== undefined && (
+            <div className="ed-send">
+              <span className="ed-send-label" id="ed-send-label">
+                Azerons send
+              </span>
+              <div className="ed-seg" role="group" aria-labelledby="ed-send-label">
+                {(['keys', 'pad'] as const).map((output) => (
+                  <button
+                    key={output}
+                    type="button"
+                    className="ed-seg-btn"
+                    aria-pressed={view.output === output}
+                    onClick={() => edit((s) => setOutput(s, output, game))}
+                  >
+                    {output === 'keys' ? 'Keys' : 'Controller'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {view?.showModeTabs === true && (
             <div className="ed-seg" role="tablist" aria-label="Mode">
               {view.modes.map((m) => (
@@ -292,26 +389,6 @@ function EditorBody({ scheme: loaded, game, onBack, onApply, historyOff, keysKep
               ))}
             </div>
           )}
-          <Tip text="Set when the scheme was made. You can't change it here yet.">
-            <div className="ed-seg" role="group" aria-label="The Azerons send">
-              <button
-                type="button"
-                className="ed-seg-btn"
-                disabled
-                aria-pressed={scheme.output === 'keys'}
-              >
-                Keys
-              </button>
-              <button
-                type="button"
-                className="ed-seg-btn"
-                disabled
-                aria-pressed={scheme.output === 'pad'}
-              >
-                Controller
-              </button>
-            </div>
-          </Tip>
           <div className="ed-spacer" />
           <button
             type="button"
@@ -365,6 +442,11 @@ function EditorBody({ scheme: loaded, game, onBack, onApply, historyOff, keysKep
           )}
         </div>
 
+        {problem !== null && (
+          <p className="notice tone-error" role="alert">
+            {problem}
+          </p>
+        )}
         {saveFailed && (
           <p className="notice tone-warning" role="status">
             Your last change couldn&apos;t be saved. It is still here; try again in a moment.
@@ -377,20 +459,8 @@ function EditorBody({ scheme: loaded, game, onBack, onApply, historyOff, keysKep
           </p>
         ) : (
           <div className="ed-body">
-            <section className="ed-main" aria-label="Units and checks">
-              <div className="ed-units">
-                {(['left', 'right'] as const).map((hand) => (
-                  <div key={hand} className="ed-unit">
-                    <Unit
-                      hand={hand}
-                      {...unitProps(view[hand])}
-                      selected={selected ?? ''}
-                      onSelect={select}
-                      onDropAction={dropOn}
-                    />
-                  </div>
-                ))}
-              </div>
+            <section className="ed-main" aria-label="Devices and checks">
+              <DeviceArea view={view} selected={selected} onSelect={select} onDropAction={dropOn} />
               <Checks
                 view={view}
                 onFix={(row) => row.fix && edit(row.fix.apply)}
@@ -403,7 +473,8 @@ function EditorBody({ scheme: loaded, game, onBack, onApply, historyOff, keysKep
                 <div className="ed-pick">
                   <h2 className="ed-pick-title">Pick a button</h2>
                   <p className="ed-hint">
-                    Click one, then click an action below, or drag an action onto a button.
+                    Click one, then click an action below, or drag an action onto a button. Drag a
+                    button&apos;s action onto another to move it.
                   </p>
                 </div>
               ) : (
@@ -419,6 +490,9 @@ function EditorBody({ scheme: loaded, game, onBack, onApply, historyOff, keysKep
                   }
                   onTurbo={(on) => edit((s) => setTurbo(s, view.panel?.control ?? '', on))}
                   onLatch={(on) => edit((s) => setLatch(s, view.panel?.control ?? '', on))}
+                  onPad={(pad) =>
+                    edit((s) => setPadControl(s, view.panel?.control ?? '', pad, game))
+                  }
                 />
               )}
               <Unplaced
@@ -505,6 +579,7 @@ function Panel({
   onClear,
   onTurbo,
   onLatch,
+  onPad,
 }: {
   panel: PanelView;
   onClose(): void;
@@ -513,6 +588,7 @@ function Panel({
   onClear(press: Press): void;
   onTurbo(on: boolean): void;
   onLatch(on: boolean): void;
+  onPad(pad: PadControl): void;
 }) {
   return (
     <div className="ed-panel">
@@ -570,7 +646,7 @@ function Panel({
                     <span className="ed-slot-name">{row.action.name}</span>
                   ) : (
                     <span className="ed-slot-empty">
-                      {row.available ? 'Add' : 'Not on a controller'}
+                      {row.available ? 'Add' : panel.unavailable}
                     </span>
                   )}
                 </button>
@@ -589,35 +665,58 @@ function Panel({
               </div>
             ))}
           </div>
-          <div className="ed-group">
-            <span className="ed-lbl">Behaviour</span>
-            <div className="ed-checks-row">
-              <label className="ed-chk">
-                <input
-                  type="checkbox"
-                  checked={panel.turbo}
-                  onChange={(e) => onTurbo(e.target.checked)}
-                />
-                Turbo
-              </label>
-              <label className="ed-chk">
-                <input
-                  type="checkbox"
-                  checked={panel.latch}
-                  onChange={(e) => onLatch(e.target.checked)}
-                />
-                Hold to latch
-              </label>
+          {panel.behaviour && (
+            <div className="ed-group">
+              <span className="ed-lbl">Behaviour</span>
+              <div className="ed-checks-row">
+                <label className="ed-chk">
+                  <input
+                    type="checkbox"
+                    checked={panel.turbo}
+                    onChange={(e) => onTurbo(e.target.checked)}
+                  />
+                  Turbo
+                </label>
+                <label className="ed-chk">
+                  <input
+                    type="checkbox"
+                    checked={panel.latch}
+                    onChange={(e) => onLatch(e.target.checked)}
+                  />
+                  Hold to latch
+                </label>
+              </div>
             </div>
-          </div>
+          )}
         </>
       )}
 
-      <div className="ed-sends">
-        <span className="ed-sends-label">Sends</span>
-        <span className="ed-sends-signal">{panel.sends ?? 'nothing'}</span>
-        <span className="ed-sends-note">{panel.sendsNote}</span>
-      </div>
+      {panel.padChoice !== null && !panel.padChoice.locked ? (
+        <label className="ed-sends ed-sends-pick">
+          <span className="ed-sends-label">Sends</span>
+          <select
+            className="ed-select"
+            value={panel.padChoice.current ?? ''}
+            onChange={(e) => onPad(e.target.value as PadControl)}
+          >
+            {panel.padChoice.current === null && <option value="">Nothing yet</option>}
+            {panel.padChoice.options.map((o) => (
+              <option key={o.pad} value={o.pad}>
+                Xbox {o.label}
+              </option>
+            ))}
+          </select>
+          <span className="ed-sends-note">{panel.sendsNote}</span>
+        </label>
+      ) : (
+        <div className="ed-sends">
+          <span className="ed-sends-label">Sends</span>
+          <span className="ed-sends-signal">{panel.sends ?? 'nothing'}</span>
+          <span className="ed-sends-note">
+            {panel.padChoice?.locked === true ? 'the stick’s own direction' : panel.sendsNote}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
@@ -651,10 +750,7 @@ function Unplaced({
                 className="ed-act"
                 draggable
                 aria-disabled={prompt === null}
-                onDragStart={(e) => {
-                  e.dataTransfer.setData(ACTION_DRAG_TYPE, a.id);
-                  e.dataTransfer.effectAllowed = 'copy';
-                }}
+                onDragStart={dragAction(a.id)}
                 onClick={() => prompt !== null && onPlace(a.id)}
               >
                 <span
@@ -667,6 +763,284 @@ function Unplaced({
             </li>
           ))}
         </ul>
+      )}
+    </div>
+  );
+}
+
+/** What the Scheme picker can do: each switches the editor to the setup it leads to. */
+interface PickerActions {
+  switchTo(schemeId: string): void;
+  make(preset: Preset): void;
+  copy(): void;
+  rename(name: string): void;
+  remove(): void;
+}
+
+/**
+ * "Scheme: Main ▾", as drawn: the game's setups (switching is the second click), new ones from a
+ * default or a copy of this one (also the second click), its name and, behind one confirmation,
+ * deleting it.
+ */
+function SchemePicker({
+  scheme,
+  game,
+  actions,
+}: {
+  scheme: Scheme;
+  game: Game;
+  actions: PickerActions | null;
+}) {
+  const [open, setOpen] = useState(false);
+  const [list, setList] = useState<Scheme[] | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [name, setName] = useState(scheme.name);
+  const nativeKeys = game.actions.some((a) => a.native?.key !== undefined);
+  const label = `Scheme: ${scheme.name}`;
+  if (actions === null) return <span className="ed-scheme">{label}</span>;
+  const toggle = (next: boolean) => {
+    setOpen(next);
+    setConfirming(false);
+    setName(scheme.name);
+    if (next) window.helm.listSchemes(game.id).then(setList, () => setList([scheme]));
+  };
+  const choose = (run: () => void) => {
+    setOpen(false);
+    run();
+  };
+  return (
+    <Popover.Root open={open} onOpenChange={toggle}>
+      <Popover.Trigger asChild>
+        <button type="button" className="ed-scheme ed-scheme-btn">
+          {label}
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="2" />
+          </svg>
+        </button>
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content
+          className="popover ed-picker"
+          sideOffset={8}
+          align="start"
+          aria-label="Schemes"
+        >
+          <div className="choices">
+            <span className="hint">{game.name}</span>
+            {(list ?? [scheme]).map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                className="btn"
+                aria-current={s.id === scheme.id ? 'true' : undefined}
+                onClick={() => s.id !== scheme.id && choose(() => actions.switchTo(s.id))}
+              >
+                {s.name}
+              </button>
+            ))}
+          </div>
+          <div className="choices">
+            <span className="hint">New from</span>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => choose(() => actions.make('xbox'))}
+            >
+              Xbox controller
+            </button>
+            {nativeKeys && (
+              <button
+                type="button"
+                className="btn"
+                onClick={() => choose(() => actions.make('keys'))}
+              >
+                Game&apos;s own keys
+              </button>
+            )}
+            <button type="button" className="btn" onClick={() => choose(actions.copy)}>
+              Copy this one
+            </button>
+          </div>
+          <form
+            className="ed-rename"
+            onSubmit={(e) => {
+              e.preventDefault();
+              actions.rename(name);
+            }}
+          >
+            <label className="hint" htmlFor="ed-scheme-name">
+              Name
+            </label>
+            <span className="ed-field">
+              <input
+                id="ed-scheme-name"
+                value={name}
+                maxLength={NAME_LIMIT}
+                onChange={(e) => setName(e.target.value)}
+                onBlur={() => actions.rename(name)}
+              />
+            </span>
+          </form>
+          {confirming ? (
+            <div className="ed-confirm" role="group" aria-label={`Delete ${scheme.name}?`}>
+              <span>Delete {scheme.name}?</span>
+              <button
+                type="button"
+                className="btn ed-danger"
+                onClick={() => choose(actions.remove)}
+              >
+                Delete
+              </button>
+              <button type="button" className="btn ghost" onClick={() => setConfirming(false)}>
+                Keep
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="btn ghost ed-danger-ghost"
+              onClick={() => setConfirming(true)}
+            >
+              Delete this scheme
+            </button>
+          )}
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
+  );
+}
+
+const AZERON_CHOICES: { value: AzeronUse; label: string }[] = [
+  { value: 'both', label: 'Both' },
+  { value: 'left', label: 'Left + mouse' },
+  { value: 'none', label: 'None' },
+];
+
+/**
+ * What the setup plays with: which Azerons, the keyboard and mouse, the Xbox controller. Next to
+ * the device tabs; one click opens it, the next changes it. A choice that would leave the setup
+ * with nothing is not offered.
+ */
+function DevicesChooser({
+  devices,
+  onChange,
+}: {
+  devices: Scheme['devices'];
+  onChange(next: Scheme['devices']): void;
+}) {
+  const offer = (next: Scheme['devices']) => ({
+    disabled: !hasDevices(next),
+    onChange: () => onChange(next),
+  });
+  return (
+    <Popover.Root>
+      <Popover.Trigger asChild>
+        <button type="button" className="btn ghost ed-devices-btn">
+          Devices
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="2" />
+          </svg>
+        </button>
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content
+          className="popover ed-devices"
+          sideOffset={8}
+          align="start"
+          aria-label="Devices"
+        >
+          <fieldset className="ed-fieldset">
+            <legend className="hint">Azerons</legend>
+            {AZERON_CHOICES.map((c) => (
+              <label key={c.value} className="ed-chk">
+                <input
+                  type="radio"
+                  name="ed-azerons"
+                  checked={devices.azerons === c.value}
+                  {...offer(chooseAzerons(devices, c.value))}
+                />
+                {c.label}
+              </label>
+            ))}
+          </fieldset>
+          <fieldset className="ed-fieldset">
+            <legend className="hint">Also</legend>
+            <label className="ed-chk">
+              <input
+                type="checkbox"
+                checked={devices.keyboard}
+                {...offer(chooseKeyboard(devices, !devices.keyboard))}
+              />
+              Keyboard and mouse
+            </label>
+            <label className="ed-chk">
+              <input
+                type="checkbox"
+                checked={devices.controller}
+                {...offer(chooseController(devices, !devices.controller))}
+              />
+              Xbox controller
+            </label>
+          </fieldset>
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
+  );
+}
+
+/**
+ * The middle of the editor: the device tab shown. The Azerons side by side (a left Azeron + mouse
+ * setup has the mouse where the right unit was), the keyboard with the mouse, or the controller.
+ */
+function DeviceArea({
+  view,
+  selected,
+  onSelect,
+  onDropAction,
+}: {
+  view: EditorView;
+  selected: ControlId | undefined;
+  onSelect(id: ControlId): void;
+  onDropAction(control: ControlId, actionId: string, from?: ControlId): void;
+}) {
+  const fixed = {
+    keys: view.fixed,
+    selected,
+    conflicts: view.conflicts,
+    onSelect,
+    onDropAction,
+  };
+  if (view.tab === null)
+    return <p className="ed-hint">This scheme has no devices. Choose them in Devices, above.</p>;
+  if (view.tab === 'keyboard')
+    return (
+      <div className="ed-kbm">
+        {view.keyboard && (
+          <div className="ed-kb">
+            <Keyboard {...fixed} />
+          </div>
+        )}
+        {view.mouse && <Mouse {...fixed} />}
+      </div>
+    );
+  if (view.tab === 'controller') return <Controller {...fixed} />;
+  return (
+    <div className="ed-units">
+      {view.hands.map((hand) => (
+        <div key={hand} className="ed-unit">
+          <Unit
+            hand={hand}
+            {...unitProps(view[hand])}
+            selected={selected ?? ''}
+            onSelect={onSelect}
+            onDropAction={onDropAction}
+          />
+        </div>
+      ))}
+      {view.mouseBeside && (
+        <div className="ed-unit ed-mouse-beside">
+          <Mouse {...fixed} />
+        </div>
       )}
     </div>
   );

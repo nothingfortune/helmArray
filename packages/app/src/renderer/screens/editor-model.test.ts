@@ -21,16 +21,21 @@ import {
   assign,
   canRedo,
   canUndo,
+  chooseAzerons,
+  chooseController,
+  chooseKeyboard,
   clear,
   commit,
   fixFor,
   historyAction,
+  hasDevices,
   historyShortcut,
   isAcceptable,
   isTextEntry,
   move,
   isStick,
   redo,
+  renameScheme,
   setDevices,
   setLatch,
   setOutput,
@@ -1183,5 +1188,56 @@ describe('a control or mode named like an Object property', () => {
     expect(actionAt(clear(placed, slot('ship', 'constructor')), slot('ship', 'constructor'))).toBe(
       undefined,
     );
+  });
+});
+
+describe('the device chooser', () => {
+  const both = { ...AZERONS_ONLY };
+
+  it('the left Azeron brings the mouse; both or none keep it only with the keyboard', () => {
+    expect([
+      chooseAzerons(both, 'left'),
+      chooseAzerons(chooseAzerons(both, 'left'), 'both').mouse,
+      chooseAzerons(chooseKeyboard(both, true), 'none'),
+    ]).toEqual([
+      { azerons: 'left', keyboard: false, mouse: true, controller: false },
+      false,
+      { azerons: 'none', keyboard: true, mouse: true, controller: false },
+    ]);
+  });
+
+  it('the keyboard comes with the mouse, and the mouse stays with the left Azeron', () => {
+    expect([
+      chooseKeyboard(both, true),
+      chooseKeyboard(chooseKeyboard(both, true), false).mouse,
+      chooseKeyboard(chooseAzerons(both, 'left'), false).mouse,
+    ]).toEqual([{ azerons: 'both', keyboard: true, mouse: true, controller: false }, false, true]);
+  });
+
+  it('adds and takes away the controller', () => {
+    expect([chooseController(both, true).controller, chooseController(both, false)]).toEqual([
+      true,
+      both,
+    ]);
+  });
+
+  it('knows a setup with nothing in it', () => {
+    expect([
+      hasDevices(both),
+      hasDevices(chooseAzerons(both, 'none')),
+      hasDevices(chooseController(chooseAzerons(both, 'none'), true)),
+    ]).toEqual([true, false, true]);
+  });
+});
+
+describe('renameScheme', () => {
+  it('takes the name trimmed, and keeps the old one for an empty name or the same one', () => {
+    const scheme = frozen();
+    expect([
+      renameScheme(scheme, '  Desk  ').name,
+      renameScheme(scheme, '   ') === scheme,
+      renameScheme(scheme, 'Main') === scheme,
+      renameScheme(scheme, 'x'.repeat(60)).name.length,
+    ]).toEqual(['Desk', true, true, 40]);
   });
 });

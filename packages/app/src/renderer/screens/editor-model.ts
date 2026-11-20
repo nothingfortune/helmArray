@@ -7,6 +7,7 @@
 
 import type {
   ActionId,
+  AzeronUse,
   Behaviour,
   ControlId,
   Finding,
@@ -751,4 +752,41 @@ export function setPadControl(
   }
   out = dropStrayStickPads(out, game);
   return padSignalOf(out, control) === pad ? out : scheme;
+}
+
+// ---- The device chooser and the setup's name ----
+
+/**
+ * Which Azerons the setup uses: both, the left one (which always brings the mouse), or none. The
+ * mouse stays only with the keyboard or the left Azeron.
+ */
+export const chooseAzerons = (devices: SetupDevices, azerons: AzeronUse): SetupDevices => ({
+  ...devices,
+  azerons,
+  mouse: devices.keyboard || azerons === 'left',
+});
+
+/** The keyboard and the mouse, together: one choice for the player. */
+export const chooseKeyboard = (devices: SetupDevices, on: boolean): SetupDevices => ({
+  ...devices,
+  keyboard: on,
+  mouse: on || devices.azerons === 'left',
+});
+
+export const chooseController = (devices: SetupDevices, on: boolean): SetupDevices => ({
+  ...devices,
+  controller: on,
+});
+
+/** Whether a setup plays with anything at all: a choice that leaves nothing isn't offered. */
+export const hasDevices = (devices: SetupDevices): boolean =>
+  devices.azerons !== 'none' || devices.keyboard || devices.mouse || devices.controller;
+
+/** The longest name a setup takes. */
+export const NAME_LIMIT = 40;
+
+/** Renames a setup: the name trimmed, never empty, never past the limit. */
+export function renameScheme(scheme: Scheme, name: string): Scheme {
+  const next = name.trim().slice(0, NAME_LIMIT).trim();
+  return next === '' || next === scheme.name ? scheme : { ...scheme, name: next };
 }
