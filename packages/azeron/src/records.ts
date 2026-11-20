@@ -161,7 +161,9 @@ class Writer {
     for (let i = 0; i < count; i++) this.u16(values[i] ?? 0, what);
   }
   done(length: number): Uint8Array {
+    // Stryker disable next-line BlockStatement,ConditionalExpression: unreachable guard; every encoder writes a fixed number of fields
     if (this.bytes.length !== length) {
+      // Stryker disable next-line StringLiteral,CallExpression: unreachable message; every encoder writes a fixed number of fields
       throw new ProtocolError(`${this.where} came to ${this.bytes.length} bytes, not ${length}.`);
     }
     return Uint8Array.from(this.bytes);
@@ -174,6 +176,7 @@ class Writer {
 }
 
 function block(w: Writer, b: Block, delay: number | undefined, what: string) {
+  // Stryker disable next-line StringLiteral: a block's type byte is one of six constants that always fit, so its label is never printed
   w.u8(BLOCK_TYPES[b.type], `${what} type`);
   w.list(b.keys, 4, `${what} keys`);
   w.list(b.mods, 3, `${what} modifiers`);
@@ -191,6 +194,7 @@ function encodeButton(slot: number, r: ButtonRecord): Uint8Array {
   w.u8(r.pinOne, 'pin');
   w.u8(r.pinTwo, 'second pin');
   if (r.tap.type === 'wheel') {
+    // Stryker disable next-line StringLiteral: a scroll's tap type 0x23 always fits a byte, so its label is never printed
     w.u8(0x23, 'tap type');
     w.i8(r.tap.x, 'scroll x');
     w.i8(r.tap.y, 'scroll y');
@@ -211,6 +215,7 @@ function encodeStick(slot: number, r: StickRecord): Uint8Array {
   w.u8(r.id, 'id');
   w.u8(r.pinOne, 'pin');
   w.u8(r.pinTwo, 'second pin');
+  // Stryker disable next-line StringLiteral: a stick's type byte is one of three constants that always fit, so its label is never printed
   w.u8(STICK_TYPES[r.mode], 'type');
   w.u16(t.upperLimit, 'upper limit');
   w.u16(t.lowerLimit, 'lower limit');

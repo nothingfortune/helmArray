@@ -12,3 +12,4 @@ playwright-report/
 .stryker-tmp/
 reports/mutation/*
 !reports/mutation/incremental.json
+.tmp-run/
