@@ -13,7 +13,7 @@ import type {
   Scheme,
   Signal,
 } from './model';
-import { PRESSES } from './model';
+import { PRESSES, STICK_DIRECTIONS } from './model';
 import type { Finding, PinPlan, Plan, UnitProfile } from './plan';
 import { signalId } from './signal';
 
@@ -27,6 +27,7 @@ export const CHECK_RULES = [
   'hold-on-movement',
   'mixed-input',
   'stick-not-keyboard',
+  'stick-no-directions',
 ] as const;
 export type CheckRule = (typeof CHECK_RULES)[number];
 
@@ -352,6 +353,22 @@ function stickNotKeyboard(ctx: Context): Finding[] {
     }));
 }
 
+/** A stick in key mode with no direction keys: it is set to send keys and sends none. */
+function stickNoDirections(ctx: Context): Finding[] {
+  return sticks(ctx.plan)
+    .filter(
+      ([, stick]) =>
+        stick.mode === 'keys' &&
+        !STICK_DIRECTIONS.some((direction) => stick.directions?.[direction] !== undefined),
+    )
+    .map(([control]) => ({
+      rule: 'stick-no-directions',
+      severity: 'error' as const,
+      control,
+      message: `The ${control.startsWith('L.') ? 'left' : 'right'} stick sends nothing: give its directions keys or set it to a controller stick.`,
+    }));
+}
+
 const CHECKS: Record<CheckRule, (ctx: Context) => Finding[]> = {
   'key-collision': keyCollision,
   'sends-nothing': sendsNothing,
@@ -361,6 +378,7 @@ const CHECKS: Record<CheckRule, (ctx: Context) => Finding[]> = {
   'hold-on-movement': holdOnMovement,
   'mixed-input': mixedInput,
   'stick-not-keyboard': stickNotKeyboard,
+  'stick-no-directions': stickNoDirections,
 };
 
 /**
