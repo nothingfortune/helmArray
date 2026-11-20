@@ -142,7 +142,10 @@ async function startServices(): Promise<() => Promise<void>> {
   });
 
   const hid = nodeHidBackend();
+  // A fresh listing every time, never the watcher's last answer; a listing that fails throws.
+  const azeronOpen = async () => azeronAppRunning(await listProcesses());
   const devices = new Devices({
+    azeronAppRunning: azeronOpen,
     findUnits: () => findUnits(hid),
     openUnit: (path) => openUnit(hid, path),
     trace: (path, line) => log.write(path, line),
@@ -178,8 +181,7 @@ async function startServices(): Promise<() => Promise<void>> {
     plans,
     devices,
     hands,
-    // A fresh listing every time, never the watcher's last answer; a listing that fails throws.
-    azeronAppRunning: async () => azeronAppRunning(await listProcesses()),
+    azeronAppRunning: azeronOpen,
     saveApplied: (schemeId, plan) => data.saveApplied(schemeId, plan),
     setActive: (gameId, schemeId) => data.setActive(gameId, schemeId),
     settled: () => helm.plansChanged(),

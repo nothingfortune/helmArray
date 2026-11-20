@@ -21,6 +21,12 @@ export interface DeviceDeps {
   pollMs?: number;
   /** The clock, in milliseconds. Defaults to `Date.now`. */
   now?(): number;
+  /**
+   * A fresh look at whether the Azeron app is running, every call; a look that fails throws.
+   * Asked before every command the service itself sends a unit (on connecting it, on reading it
+   * again): anything but a plain "no" and the unit is left alone. Without it, nothing is asked.
+   */
+  azeronAppRunning?(): Promise<boolean>;
 }
 
 export const POLL_MS = 1000;
@@ -33,7 +39,11 @@ export interface UnitSnapshot {
   state: UnitState;
   /** Known once the unit has answered; also on a unit that then failed to read its slots. */
   identity?: UnitIdentity;
-  /** Known once ready. */
+  /**
+   * What the unit held when last read. Known once ready, but gone again when the unit could not
+   * be looked at since (the Azeron app was open, or could not be ruled out): nothing is then
+   * known of what it holds.
+   */
   slots?: StoredSlot[];
   /** Why a unit failed, in the unit session's own words. */
   error?: string;
@@ -173,6 +183,13 @@ export class Devices {
       if (entry.state !== 'ready' || entry.dropped || !entry.session) continue;
       if (olderThanMs !== undefined && now() - (entry.readAt ?? 0) < olderThanMs) continue;
       changed = true;
+      // Fresh, for each unit: the Azeron app may open between one and the next. A unit not looked
+      // at keeps nothing it held: it is no longer said to be read, and the next look reads it.
+      if (!(await this.mayTalk(entry.path))) {
+        delete entry.slots;
+        delete entry.readAt;
+        continue;
+      }
       try {
         const identity = await entry.session.identify();
         const slots = await entry.session.readSlots();
@@ -263,10 +280,12 @@ export class Devices {
       entry.transport = transport;
       if (entry.dropped) return void (await this.close(entry));
       const session = new UnitSession(transport, (line) => this.trace(path, line));
+      if (!(await this.mayTalk(path))) return this.giveUp(entry);
       const identity = await session.identify();
       if (entry.dropped) return;
       entry.identity = identity;
       this.emit();
+      if (!(await this.mayTalk(path))) return this.giveUp(entry);
       const slots = await session.readSlots();
       if (entry.dropped) return;
       entry.session = session;
@@ -282,6 +301,30 @@ export class Devices {
       this.emit();
       await this.close(entry);
     }
+  }
+
+  /** Whether a command may be sent to this unit: only when the Azeron app is known not to run. */
+  private async mayTalk(path: string): Promise<boolean> {
+    const look = this.deps.azeronAppRunning;
+    if (!look) return true;
+    try {
+      if (!(await look())) return true;
+      this.trace(path, 'left alone: the Azeron app is open');
+    } catch (error) {
+      this.trace(
+        path,
+        `left alone: couldn't tell whether the Azeron app is open (${messageOf(error)})`,
+      );
+    }
+    return false;
+  }
+
+  /** Lets a unit go that was not to be talked to; a later poll tries it again. */
+  private giveUp(entry: Entry): void {
+    if (entry.dropped) return;
+    if (this.entries.get(entry.path) === entry) this.entries.delete(entry.path);
+    this.cleanUp(entry.path, entry);
+    this.emit();
   }
 
   private cleanUp(path: string, entry: Entry): void {

@@ -86,7 +86,10 @@ async function rig(
     );
   }
   const bench = { listed: 0, opened: [] as string[], closed: [] as string[] };
+  // What the devices service asks: not open while the units connect, then what the test says.
+  const look = { fn: (): Promise<boolean> => Promise.resolve(false) };
   const devices = new Devices({
+    azeronAppRunning: () => look.fn(),
     findUnits: () => {
       bench.listed++;
       return Promise.resolve([...units.keys()].map((path) => ({ path })));
@@ -108,6 +111,7 @@ async function rig(
   devices.start();
   await vi.advanceTimersByTimeAsync(0);
 
+  look.fn = over.azeron ?? (() => Promise.resolve(false));
   const saveApplied = vi.fn(over.saveApplied ?? (() => Promise.resolve()));
   const setActive = vi.fn(over.setActive ?? (() => Promise.resolve()));
   const settled = vi.fn();
@@ -119,7 +123,7 @@ async function rig(
     },
     devices,
     hands: { get: (id) => HANDS[id as keyof typeof HANDS] },
-    azeronAppRunning: over.azeron ?? (() => Promise.resolve(false)),
+    azeronAppRunning: (): Promise<boolean> => look.fn(),
     saveApplied,
     setActive,
     settled,
@@ -237,6 +241,18 @@ describe('Apply as the windows ask for it', () => {
       expect(r.setActive).not.toHaveBeenCalled();
     });
 
+    it('the preview leaves the units alone when the app opens just after its own look', async () => {
+      let looks = 0;
+      r = await rig({ azeron: () => Promise.resolve(++looks > 1) });
+      await vi.advanceTimersByTimeAsync(10_000); // what the service read is old enough to be read again
+      looks = 0;
+      const reports = r.reports();
+      const preview = await r.service.preview(scheme.id);
+      expect(r.reports()).toBe(reports);
+      expect(preview.ready).toBe(false);
+      expect(preview.checks.some((c) => /hasn't been read yet/.test(c.text))).toBe(true);
+    });
+
     it('does not trust a look at the programs that failed', async () => {
       r = await rig({ azeron: () => Promise.reject(new Error('tasklist failed')) });
       const preview = await r.service.preview(scheme.id);
@@ -248,19 +264,75 @@ describe('Apply as the windows ask for it', () => {
       expect(r.saveApplied).not.toHaveBeenCalled();
     });
 
-    it('opening between the units stops the second, remembers nothing, and says what was done', async () => {
+    it('opening between the units stops the second, sends no unit another command, remembers nothing', async () => {
       let looks = 0;
-      // Apply's own readiness look, then the left unit's five (start, write, switch, two deletes).
-      r = await rig({ azeron: () => Promise.resolve(++looks > 6) });
-      const result = await r.service.apply(scheme.id);
+      let atOpening: number[] | undefined;
+      const rigged = await rig({
+        azeron: () => {
+          // Apply's readiness look, then the left unit's seven (start, write, switch, the other
+          // slots, two deletes, the read back); it opens the moment the left unit is done.
+          const open = ++looks > 8;
+          if (open && !atOpening)
+            atOpening = [...rigged.units.values()].map((u) => u.received.length);
+          return Promise.resolve(open);
+        },
+      });
+      r = rigged;
+      const result = await rigged.service.apply(scheme.id);
       expect(result.ok).toBe(false);
       expect(result.units.map((u) => u.status)).toEqual(['applied', 'failed']);
       expect(result.message).toMatch(/right unit failed: the Azeron app is open/);
-      expect(r.saveApplied).not.toHaveBeenCalled();
-      expect(r.setActive).not.toHaveBeenCalled();
-      expect(r.right && writesTo(r.right)).toEqual([]);
-      // The left unit is read again: it holds the new layout now, and the service says so.
-      expect(r.devices.snapshot().units[0]?.slots?.map((s) => s.slot)).toEqual([1]);
+      expect(rigged.saveApplied).not.toHaveBeenCalled();
+      expect(rigged.setActive).not.toHaveBeenCalled();
+      expect(rigged.right && writesTo(rigged.right)).toEqual([]);
+      // Not one command to either unit after the Azeron app appeared, the read afterwards included.
+      expect(atOpening).toBeDefined();
+      expect([...rigged.units.values()].map((u) => u.received.length)).toEqual(atOpening);
+      // What the left unit holds is no longer known, and the pill is not told it is: its slots are
+      // gone from the service and the units are said not to have been read.
+      expect(rigged.devices.snapshot().units.map((u) => u.slots)).toEqual([undefined, undefined]);
+      expect((await rigged.service.preview(scheme.id)).ready).toBe(false);
+    });
+
+    it('does not read the units again after an apply when the app cannot be ruled out', async () => {
+      let looks = 0;
+      let atFailure: number[] | undefined;
+      const rigged = await rig({
+        azeron: () => {
+          // Fails to tell from the look after the readiness one and the left unit's seven.
+          if (++looks > 8) {
+            atFailure ??= [...rigged.units.values()].map((u) => u.received.length);
+            return Promise.reject(new Error('tasklist failed'));
+          }
+          return Promise.resolve(false);
+        },
+      });
+      r = rigged;
+      const result = await rigged.service.apply(scheme.id);
+      expect(result.ok).toBe(false);
+      expect([...rigged.units.values()].map((u) => u.received.length)).toEqual(atFailure);
+      expect(rigged.devices.snapshot().units.every((u) => u.slots === undefined)).toBe(true);
+    });
+
+    it('reads the units again after a good apply only while the app is still closed, unit by unit', async () => {
+      let looks = 0;
+      let atOpening: number[] | undefined;
+      const rigged = await rig({
+        azeron: () => {
+          // Readiness, left (7) and right (6) take 14 looks; the refresh then asks once per unit,
+          // and the app opens between the two.
+          const open = ++looks > 15;
+          if (open) atOpening ??= [...rigged.units.values()].map((u) => u.received.length);
+          return Promise.resolve(open);
+        },
+      });
+      r = rigged;
+      const result = await rigged.service.apply(scheme.id);
+      expect(result.ok).toBe(true);
+      const [left, right] = rigged.devices.snapshot().units;
+      expect(left?.slots?.map((x) => x.slot)).toEqual([1]);
+      expect(right?.slots).toBeUndefined();
+      expect([...rigged.units.values()].map((u) => u.received.length)).toEqual(atOpening);
     });
   });
 

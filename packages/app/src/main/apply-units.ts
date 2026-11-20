@@ -423,6 +423,8 @@ async function applyUnit(
     outcome.slot = slot;
 
     // Every other slot, read afresh: only now, with the layout read back clean and running.
+    // A read is traffic to the unit too: the Azeron app is looked for again before it.
+    await guard();
     let others: StoredSlot[];
     try {
       others = (await session.readSlots()).filter((s) => s.slot !== slot);
@@ -456,6 +458,7 @@ async function applyUnit(
 
     // Read every slot back and compare what the unit runs with the plan.
     left = 'the other slots are deleted';
+    await guard();
     let finalVerdict: Verdict;
     try {
       const after = await session.readSlots();

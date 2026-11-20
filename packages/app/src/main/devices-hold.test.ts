@@ -18,6 +18,8 @@ class Bench {
   reports = 0;
   listing: Promise<void> | null = null;
   failSends = false;
+  /** What the Azeron app check says: a value, or a way to throw. */
+  azeron: () => Promise<boolean> = () => Promise.resolve(false);
 
   findUnits = async () => {
     this.listed++;
@@ -60,6 +62,7 @@ describe('the devices service held by a job', () => {
       findUnits: () => bench.findUnits(),
       openUnit: (path) => bench.openUnit(path),
       now: () => clock,
+      azeronAppRunning: () => bench.azeron(),
     });
     bench.plugged.set('left-path', new FakeUnit({ deviceId: LEFT }));
     bench.plugged.set('right-path', new FakeUnit({ deviceId: RIGHT }));
@@ -188,6 +191,59 @@ describe('the devices service held by a job', () => {
       expect(units[0]?.slots).toBeUndefined();
       expect(devices.session(LEFT)).toBeUndefined();
       expect(bench.closed.sort()).toEqual(['left-path', 'right-path']);
+    });
+  });
+
+  describe('while the Azeron app is open, or cannot be ruled out', () => {
+    it('sends a unit nothing on connecting, lets it go, and connects it on a later poll', async () => {
+      bench.azeron = () => Promise.resolve(true);
+      devices.start();
+      await vi.advanceTimersByTimeAsync(POLL_MS * 3);
+      expect(bench.reports).toBe(0);
+      expect(devices.snapshot().units).toEqual([]);
+      expect(bench.closed.length).toBeGreaterThan(0);
+
+      bench.azeron = () => Promise.resolve(false);
+      await vi.advanceTimersByTimeAsync(POLL_MS * 2);
+      expect(devices.snapshot().units.map((u) => u.state)).toEqual(['ready', 'ready']);
+    });
+
+    it('treats a look that fails as open: no unit is sent anything', async () => {
+      bench.azeron = () => Promise.reject(new Error('tasklist failed'));
+      devices.start();
+      await vi.advanceTimersByTimeAsync(POLL_MS * 3);
+      expect(bench.reports).toBe(0);
+      expect(devices.snapshot().units).toEqual([]);
+    });
+
+    it('asks again before the second command of a connection, not only before the first', async () => {
+      // Open from the second look: the unit is identified, then left alone before its slots.
+      let looks = 0;
+      bench.azeron = () => Promise.resolve(++looks > 1 && looks < 10);
+      devices.start();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(devices.snapshot().units.every((u) => u.slots === undefined)).toBe(true);
+      expect(devices.snapshot().units.every((u) => u.state !== 'ready')).toBe(true);
+    });
+
+    it('reads again only the units it may, asking before each, and forgets what it could not read', async () => {
+      await connected();
+      const reports = bench.reports;
+      let looks = 0;
+      bench.azeron = () => Promise.resolve(++looks > 1); // fine for the first unit, open after
+      await devices.refresh();
+      const [left, right] = devices.snapshot().units;
+      expect(left?.slots).toBeDefined();
+      expect(right?.slots).toBeUndefined();
+      expect(right?.state).toBe('ready');
+      const afterLeft = bench.reports;
+      expect(afterLeft).toBeGreaterThan(reports);
+      // Nothing more is sent while it stays open, and an unread unit is read again when it can be.
+      await devices.refresh();
+      expect(bench.reports).toBe(afterLeft);
+      bench.azeron = () => Promise.resolve(false);
+      await devices.refresh({ olderThanMs: 1000 });
+      expect(devices.snapshot().units[1]?.slots).toBeDefined();
     });
   });
 });

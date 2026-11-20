@@ -129,6 +129,10 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
       if (unit.state === 'connecting') {
         return { ok: false, text: `The ${word} Azeron is still being read.` };
       }
+      if (unit.state === 'ready' && unit.slots === undefined) {
+        // Not looked at since the Azeron app was last open, or could not be ruled out.
+        return { ok: false, text: `The ${word} Azeron hasn't been read yet.` };
+      }
       if (unit.state === 'failed') {
         return {
           ok: false,

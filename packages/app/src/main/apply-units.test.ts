@@ -252,20 +252,20 @@ describe('applying to the units', () => {
     const [left, right] = twoUnits({ slots: { 0: { name: 'Default' }, 2: { name: 'Old' } } });
     const state = await rig(left, right);
     await applyUnits(plan, state.deps);
-    // Left: once to start, write, switch, two deletes. Right: once, write, switch, one delete.
-    expect(state.azeronCalls).toBe(5 + 4);
+    // Left: once to start, write, switch, the read of the other slots, two deletes, the read
+    // back. Right: the same with one delete. Every step that sends the unit anything.
+    expect(state.azeronCalls).toBe(7 + 6);
   });
 
   it('leaves the right unit untouched when the Azeron app appears between the units', async () => {
     const [left, right] = twoUnits({ slots: { 0: { name: 'Default' } } });
     const state = await rig(left, right);
     const rightBefore = right.received.length;
-    let appRunning = false;
+    let calls = 0;
     state.deps.azeronAppRunning = () => {
-      // It opens the moment the left unit is done.
-      if (slotsOf(left).length === 1 && left.running === slotsOf(left)[0] && left.running !== 0)
-        appRunning = true;
-      return Promise.resolve(appRunning);
+      // The left unit takes six looks (start, write, switch, the other slots, one delete, the
+      // read back); it opens the moment it is done.
+      return Promise.resolve(++calls > 6);
     };
     const result = await applyUnits(plan, state.deps);
 
@@ -278,6 +278,28 @@ describe('applying to the units', () => {
     expect(right.received).toHaveLength(rightBefore);
     expect(writesTo(right)).toEqual([]);
     expect(slotsOf(right)).toEqual([0]);
+  });
+
+  it.each([
+    ['the other slots are read', 4],
+    ['the layout is read back', 6],
+  ])('sends the unit nothing more once the Azeron app opens before %s', async (_when, opens) => {
+    const [left, right] = twoUnits({ slots: { 0: { name: 'Default' } } });
+    const state = await rig(left, right);
+    const rightBefore = right.received.length;
+    let calls = 0;
+    let at: number | undefined;
+    state.deps.azeronAppRunning = () => {
+      const open = ++calls >= opens;
+      if (open) at ??= left.received.length;
+      return Promise.resolve(open);
+    };
+    const result = await applyUnits(plan, state.deps);
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain('the Azeron app is open');
+    expect(left.received).toHaveLength(at ?? -1);
+    expect(right.received).toHaveLength(rightBefore);
+    expect(result.units[1]?.status).toBe('not-attempted');
   });
 
   it('touches nothing when the Azeron app is already open, and says so', async () => {
@@ -495,8 +517,9 @@ describe('applying to the units', () => {
       const state = await rig(left, new FakeUnit({ deviceId: RIGHT_ID }));
       let calls = 0;
       state.deps.azeronAppRunning = () => {
-        // Start, then the look before deleting slot 0, then the one before deleting slot 2.
-        if (++calls === 3) left.running = 2;
+        // Start, the read of the other slots, the look before deleting slot 0, then the one
+        // before deleting slot 2.
+        if (++calls === 4) left.running = 2;
         return Promise.resolve(false);
       };
       const result = await applyUnits(plan, state.deps);
