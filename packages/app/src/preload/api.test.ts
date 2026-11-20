@@ -97,6 +97,17 @@ describe('window.helm', () => {
     expect(await api.openLogFolder()).toBeUndefined();
   });
 
+  it('asks for the library over its own channel, asking for a fresh read only with `true`', async () => {
+    const b = bridge();
+    const api = createHelmApi(b.ipc);
+    await api.listLibrary();
+    await api.listLibrary(true);
+    expect(b.invoked).toEqual([
+      [CHANNELS.listLibrary, [false]],
+      [CHANNELS.listLibrary, [true]],
+    ]);
+  });
+
   describe('the games and schemes', () => {
     const scheme = gameKeysPreset({
       id: 'skiff',

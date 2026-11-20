@@ -509,6 +509,11 @@ export class DataStore {
     return { gameId, schemeId };
   }
 
+  /** One game's own active scheme, whether or not the game is the active one. */
+  activeSchemeOf(gameId: string): string | null {
+    return own(this.settings.activeScheme, gameId) ?? null;
+  }
+
   /** Makes this game, and this scheme of it, the active ones. `null` leaves the game with none. */
   setActive(gameId: string, schemeId: string | null): Promise<void> {
     // One change at a time, in the order asked: each reads the settings the one before left.
