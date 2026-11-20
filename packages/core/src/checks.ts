@@ -199,11 +199,24 @@ function keyCollision(ctx: Context): Finding[] {
       }
     }
   }
-  // A stick direction is live in every mode: a button sending its key does both at once.
+  // A stick direction is live in every mode: a button sending its key does both at once, unless
+  // it is the same action (a button and a stick both sending the game's own key for it is a
+  // second way to do one thing). The stick reaches the actions the game ships on its key.
   for (const { control, direction, signal } of stickKeys(ctx.plan)) {
     for (const mode of ctx.game.modes) {
+      const reached = new Set(
+        ctx.game.actions
+          .filter(
+            (a) =>
+              a.mode === mode.id &&
+              a.native?.key !== undefined &&
+              signalId(a.native.key) === signalId(signal),
+          )
+          .map((a) => a.id),
+      );
       const clash = ctx.plan.bindings.find(
-        (b) => b.mode === mode.id && signalId(b.signal) === signalId(signal),
+        (b) =>
+          b.mode === mode.id && signalId(b.signal) === signalId(signal) && !reached.has(b.action),
       );
       if (!clash) continue;
       out.push({

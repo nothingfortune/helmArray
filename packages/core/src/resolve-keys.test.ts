@@ -202,6 +202,34 @@ describe('stick directions', () => {
   });
 });
 
+describe('a stick direction and a button on the same action', () => {
+  // Boost is Tab in this game. The left stick's up sends Tab, and so can a button.
+  const tabUp = {
+    ...keyedSticks,
+    'L.stick': { stick: { mode: 'keys', directions: { ...wasd, up: key('Tab') } } },
+  } satisfies Scheme['behaviour'];
+  const collisions = (action: string) =>
+    resolve(
+      scheme({
+        behaviour: tabUp,
+        ledger: { 'L.index_1': { tap: key('Tab') } },
+        map: { ship: { 'L.index_1': { tap: action } } },
+      }),
+      game,
+      BUILT_IN_DEVICES,
+    ).findings.filter((f) => f.rule === 'key-collision');
+
+  it('is not a collision: two ways to send the one action', () => {
+    expect(collisions('boost')).toEqual([]);
+  });
+
+  it('is a collision when the button carries a different action', () => {
+    expect(collisions('map')).toEqual([
+      expect.objectContaining({ control: 'L.stick', mode: 'ship', severity: 'error' }),
+    ]);
+  });
+});
+
 describe('the ledger', () => {
   it('comes first: a key once given stays, even with an earlier pool key free', () => {
     const plan = resolve(
