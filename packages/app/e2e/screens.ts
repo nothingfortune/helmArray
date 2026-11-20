@@ -42,18 +42,32 @@ export interface FocusStop {
   label: string;
   /** Inside an open dialog. */
   inDialog: boolean;
-  /** A non-none outline with a width, or a box-shadow. */
+  /**
+   * The look of the control (or of a field around it that styles `:focus-within`) changes when
+   * it gets the focus: its outline, box-shadow, border or background is not what it was blurred.
+   */
   visible: boolean;
-  outline: string;
-  shadow: string;
+  /** What was compared, blurred then focused, for a failure message. */
+  blurred: string;
+  focused: string;
 }
 
 /**
  * Presses Tab, in the page, until the focus comes round to a stop already visited (or leaves the
- * page), and says what each stop looked like. The key press is Playwright's, into the page.
+ * page). For each stop it reads the look of the focused element and of the fields around it that
+ * match `:focus-within`, then blurs the element, reads them again, and gives it the focus back.
+ * A ring that is there either way (an inset shadow that is part of the design) does not count:
+ * only a change does. Transitions and animations are switched off for the walk, so a change that
+ * is only starting is still read. The key presses are Playwright's, into the page.
  */
 export async function walkTabOrder(page: Page, limit = 300): Promise<FocusStop[]> {
-  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await page.evaluate(() => {
+    const still = document.createElement('style');
+    still.textContent =
+      '*, *::before, *::after { transition: none !important; animation: none !important; }';
+    document.head.append(still);
+    (document.activeElement as HTMLElement | null)?.blur();
+  });
   const stops: FocusStop[] = [];
   for (let i = 0; i < limit; i++) {
     await page.keyboard.press('Tab');
@@ -62,28 +76,33 @@ export async function walkTabOrder(page: Page, limit = 300): Promise<FocusStop[]
       if (!(el instanceof HTMLElement) || el === document.body) return 'left';
       if (el.dataset['e2eStop'] !== undefined) return 'wrapped';
       el.dataset['e2eStop'] = '1';
-      const style = getComputedStyle(el);
-      const ringed = (node: Element): boolean => {
+      const look = (node: Element): string => {
         const s = getComputedStyle(node);
-        return (
-          (s.outlineStyle !== 'none' && parseFloat(s.outlineWidth) > 0) || s.boxShadow !== 'none'
-        );
+        return [
+          `outline ${s.outlineStyle} ${s.outlineWidth} ${s.outlineColor} ${s.outlineOffset}`,
+          `shadow ${s.boxShadow}`,
+          `border ${s.borderTopStyle} ${s.borderTopWidth} ${s.borderTopColor} ${s.borderRightColor} ${s.borderBottomColor} ${s.borderLeftColor}`,
+          `background ${s.backgroundColor} ${s.backgroundImage}`,
+        ].join('; ');
       };
-      // The ring may be on the control, or on the field that holds it (`:focus-within`).
-      let holder: Element | null = el;
-      let drawn = false;
-      for (let depth = 0; holder && depth < 3 && !drawn; depth++) {
-        drawn = ringed(holder);
-        holder = holder.parentElement?.matches(':focus-within') ? holder.parentElement : null;
+      // The element, and up to three fields round it that show the focus being inside them.
+      const nodes: Element[] = [el];
+      for (let up = el.parentElement; up && nodes.length < 4 && up.matches(':focus-within');) {
+        nodes.push(up);
+        up = up.parentElement;
       }
+      const focused = nodes.map(look);
+      el.blur();
+      const blurred = nodes.map(look);
+      el.focus();
       return {
         label:
           el.getAttribute('aria-label') ??
           (el.textContent?.trim().slice(0, 40) || el.tagName.toLowerCase()),
         inDialog: el.closest('[role="dialog"]') !== null,
-        visible: drawn,
-        outline: `${style.outlineStyle} ${style.outlineWidth} ${style.outlineColor}`,
-        shadow: style.boxShadow,
+        visible: focused.some((look, n) => look !== blurred[n]),
+        blurred: blurred.join(' | '),
+        focused: focused.join(' | '),
       };
     });
     if (stop === 'wrapped' || stop === 'left') break;
@@ -96,4 +115,4 @@ export async function walkTabOrder(page: Page, limit = 300): Promise<FocusStop[]
 export const unseen = (stops: readonly FocusStop[]): string[] =>
   stops
     .filter((s) => !s.visible)
-    .map((s) => `${s.label} (outline: ${s.outline}; shadow: ${s.shadow})`);
+    .map((s) => `${s.label} (blurred: ${s.blurred}; focused: ${s.focused})`);
