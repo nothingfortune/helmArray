@@ -1,0 +1,405 @@
+/* The Editor screen, from docs/design/canvas/Editor.dc.html. Colours, type and spacing come
+   from the tokens. */
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 60px);
+  background: var(--color-bg);
+}
+
+/* The bar under the header: game, scheme, mode tabs, Keys / Controller, Apply. */
+.ed-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-16);
+  padding: var(--space-12) var(--space-24);
+  border-bottom: 1px solid var(--color-raised);
+}
+.ed-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: var(--space-8);
+  color: var(--color-muted);
+}
+.ed-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ed-game {
+  margin: 0;
+  font: 700 var(--size-title) / 1.1 var(--font-name);
+}
+.ed-scheme {
+  color: var(--color-muted);
+  font-size: var(--size-label);
+  font-weight: 600;
+}
+.ed-spacer {
+  flex: 1;
+}
+.ed-tip {
+  display: inline-flex;
+  border-radius: var(--radius-key);
+}
+
+.ed-seg {
+  display: inline-flex;
+  gap: var(--space-4);
+  padding: 3px;
+  background: var(--color-panel);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-key);
+}
+.ed-seg-btn {
+  height: 34px;
+  padding: 0 var(--space-12);
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-muted);
+  font: 600 var(--size-label) var(--font-read);
+  cursor: pointer;
+}
+.ed-seg-btn:hover:not(:disabled) {
+  background: var(--color-raised);
+}
+.ed-seg-btn[aria-selected='true'],
+.ed-seg-btn[aria-pressed='true'] {
+  background: var(--color-line);
+  color: var(--color-text);
+  box-shadow: inset 0 -2px 0 var(--color-accent);
+}
+/* Read-only: the current one stays readable, the other recedes. */
+.ed-seg-btn:disabled {
+  cursor: default;
+}
+.ed-seg-btn:disabled[aria-pressed='false'] {
+  color: var(--color-muted);
+}
+
+.btn.icon:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.ed-primary {
+  height: 38px;
+  background: var(--color-accent);
+  color: var(--color-accent-ink);
+}
+.ed-primary:hover {
+  background: var(--color-accent-hover);
+}
+.ed-primary[aria-disabled='true'] {
+  background: var(--color-raised);
+  color: var(--color-muted);
+  border-color: var(--color-line);
+  cursor: default;
+}
+
+.ed-state {
+  margin: var(--space-32) var(--space-24);
+  color: var(--color-secondary);
+}
+
+/* Units and checks on the left; the side panel on the right, or below when there is no room. */
+.ed-body {
+  display: flex;
+  flex-wrap: wrap;
+  flex: 1;
+  min-height: 0;
+}
+.ed-main {
+  flex: 999 1 760px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+  padding: 22px var(--space-24) var(--space-24);
+}
+
+/* Two units side by side, scaled to fit the width; each is never drawn smaller than 448 px
+   (the canvas's 0.70), so they stack only when there is no room for two. */
+.ed-units {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 20px;
+}
+.ed-unit {
+  flex: 1 1 448px;
+  max-width: 640px;
+  min-width: 0;
+}
+
+.ed-checks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  width: 100%;
+  max-width: 1080px;
+  margin: 0 auto;
+}
+.ed-clear {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  margin: 0;
+  color: var(--color-muted);
+  font-size: var(--size-label);
+}
+.ed-check {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-12);
+  padding: 10px var(--space-12) 10px 14px;
+  border-radius: var(--radius-key);
+  border: 1px solid var(--color-line);
+  background: var(--color-panel);
+  font-size: var(--size-label);
+}
+.ed-check.tone-warning {
+  background: var(--color-warning-bg);
+  border-color: #3a3218;
+}
+.ed-check.tone-error {
+  background: var(--color-error-bg);
+  border-color: #4a2328;
+}
+.ed-check.is-kept {
+  background: transparent;
+}
+.ed-check-text {
+  flex: 1;
+  min-width: 240px;
+  color: var(--color-text);
+}
+.ed-check .btn {
+  height: 30px;
+  padding: 0 11px;
+  border-radius: 8px;
+}
+.ed-fix {
+  background: var(--color-raised);
+  border-color: var(--color-line-key);
+}
+.ed-kept {
+  color: var(--color-muted);
+  font-size: var(--size-label);
+}
+.ed-kept summary {
+  cursor: pointer;
+  padding: var(--space-4) 0 var(--space-8);
+}
+
+/* The side panel. */
+.ed-side {
+  flex: 1 1 340px;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 20px;
+  background: var(--color-chrome);
+  border-left: 1px solid var(--color-raised);
+}
+.ed-lbl {
+  color: var(--color-muted);
+  font: 600 11px var(--font-read);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+.ed-hint {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: var(--size-label);
+  line-height: 1.45;
+}
+.ed-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ed-pick-title {
+  margin: 0;
+  font: 700 20px var(--font-name);
+}
+.ed-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.ed-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-8);
+}
+.ed-panel-names {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+.ed-panel-title {
+  font: 700 22px / 1.15 var(--font-name);
+}
+.ed-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ed-across {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-height: 36px;
+  padding: 0 var(--space-12);
+  border-radius: 9px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--color-text);
+  font: 500 var(--size-label) var(--font-read);
+  text-align: left;
+  cursor: pointer;
+}
+.ed-across.is-empty {
+  color: var(--color-muted);
+}
+.ed-across.is-active {
+  background: var(--color-raised);
+  border-color: var(--color-line-key);
+}
+.ed-across-mode {
+  width: 62px;
+  flex: none;
+  color: var(--color-muted);
+  font-weight: 600;
+}
+
+.ed-slot {
+  display: flex;
+  align-items: center;
+  min-height: 42px;
+  padding-right: 6px;
+  border-radius: 9px;
+  background: #161a21;
+  border: 1px solid #232933;
+}
+.ed-slot.is-target {
+  border-color: var(--color-accent);
+}
+.ed-slot-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  min-height: 40px;
+  padding: 0 0 0 var(--space-12);
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ed-slot-main[aria-disabled='true'] {
+  cursor: default;
+}
+.ed-slot-word {
+  width: 52px;
+  flex: none;
+  color: var(--color-muted);
+  font: 600 12.5px var(--font-read);
+}
+.ed-slot-name {
+  font: 600 14px var(--font-read);
+}
+.ed-slot-empty {
+  color: var(--color-muted);
+  font-size: var(--size-label);
+}
+
+.ed-checks-row {
+  display: flex;
+  gap: 18px;
+}
+.ed-chk {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  font-size: var(--size-label);
+}
+.ed-chk input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--color-accent);
+}
+
+.ed-sends {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-8);
+  padding: 10px var(--space-12);
+  border-radius: 9px;
+  background: var(--color-panel);
+  border: 1px solid #1e232c;
+}
+.ed-sends-label {
+  color: var(--color-muted);
+  font-size: var(--size-caption);
+}
+.ed-sends-signal {
+  font: 500 12.5px var(--font-signal);
+}
+.ed-sends-note {
+  flex: 1;
+  text-align: right;
+  color: var(--color-muted);
+  font-size: var(--size-caption);
+}
+
+.ed-unplaced-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.ed-count {
+  color: var(--color-muted);
+  font: 600 12px var(--font-read);
+}
+.ed-actions {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ed-act {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-text);
+  font: 500 13.5px var(--font-read);
+  text-align: left;
+  cursor: grab;
+}
+.ed-act:hover {
+  background: var(--color-raised);
+}
+.ed-act[aria-disabled='true']:not(:hover) {
+  color: var(--color-secondary);
+}
