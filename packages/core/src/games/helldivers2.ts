@@ -10,16 +10,18 @@
 //
 // PAD DEFAULTS (`native.pad`). Source of every one of them, read 2026-11-19:
 //   https://content.thehelldiversgame.com/help/inputs.md
-// Arrowhead's own page on the input settings file. It lists the game's default bindings per
-// device, and its `PadXBOX` rows are the Xbox controller defaults. The game uses one layout on
+// Arrowhead's own page on the input settings file. Its "Default bindings" section ("their default
+// values", it says) lists the game's default bindings per device, and its
+// `PadXBOX` rows are the Xbox controller defaults. The game uses one layout on
 // Xbox and PlayStation (Cross=A, Circle=B, Square=X, Triangle=Y, L1=LB, R1=RB, L2=LT, R2=RT,
 // L3/R3, Touchpad=View); where a second source below gives only the PlayStation button, the
 // translation to the Xbox button is ours.
 //
 // A second source checked each default it names (PS5 buttons, translated):
 //   https://www.magicgameworld.com/helldivers-2-playstation-5-controls/   (dated 2023)
-// UNCONFIRMED below means that second source does not give the binding, so Arrowhead's page is
-// the only source. The two pages disagree on one binding, marked "disagree".
+// UNCONFIRMED (official only) below: that second source is silent or says only "D-pad" without a
+// direction, so Arrowhead's page is the only source, and it is a strong one. UNCONFIRMED (sources
+// disagree): the two pages differ.
 //
 //   Action           Xbox         Trigger in the game   Status
 //   Move (4)         left stick   stick direction       confirmed
@@ -28,21 +30,21 @@
 //   Interact         A            press                 confirmed
 //   Crouch           B            tap                   confirmed
 //   Prone            B            long press            confirmed
-//   Dive             B            double tap            UNCONFIRMED, disagree: the second
+//   Dive             B            double tap            UNCONFIRMED (sources disagree): the second
 //                                                       source says tap L3
 //   Fire             RT           hold                  confirmed
 //   Aim              LT           hold                  confirmed
 //   Reload           X            tap                   confirmed
 //   Melee            RS           press                 confirmed
-//   Grenade slot     D-pad right  press                 UNCONFIRMED (second source: "D-pad")
-//   Backpack         D-pad down   tap                   UNCONFIRMED (second source: "D-pad")
-//   Stim             D-pad up     press                 UNCONFIRMED (second source: "D-pad")
-//   Drop             D-pad down   long press            UNCONFIRMED (second source: "D-pad")
+//   Grenade slot     D-pad right  press                 UNCONFIRMED (official only)
+//   Backpack         D-pad down   tap                   UNCONFIRMED (official only)
+//   Stim             D-pad up     press                 UNCONFIRMED (official only)
+//   Drop             D-pad down   long press            UNCONFIRMED (official only)
 //   Stratagem (hold) LB           hold                  confirmed
 //   Ping / comms     RB           tap spots, long opens confirmed
 //   Map              BACK (View)  tap                   confirmed
 //   Emote            D-pad left   long press            confirmed
-//   Menu             START        press                 UNCONFIRMED: Arrowhead's `ToggleMenu`;
+//   Menu             START        press                 UNCONFIRMED (official only): `ToggleMenu`;
 //                                                       its page says Esc is a separate bind of
 //                                                       the same menu "for technical reasons"
 //
