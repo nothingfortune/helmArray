@@ -52,6 +52,12 @@ export interface DataStoreOptions {
   builtInGames: readonly Game[];
   /** Wait after the last `saveScheme` of a scheme before it is written. */
   debounceMs?: number;
+  /**
+   * Runs `job` after `ms`, and returns the way to call it off. The job is the write itself, so a
+   * test's scheduler can wait for it to finish instead of looking at the disk until it has.
+   * Defaults to `setTimeout`.
+   */
+  schedule?(job: () => Promise<void>, ms: number): () => void;
   /** Told of every file that couldn't be read or written. Must not throw. */
   onProblem?(problem: StoreProblem): void;
   /** A short unique text, for new scheme ids and for names of quarantined files. */
@@ -218,12 +224,17 @@ async function writeAtomic(path: string, text: string): Promise<void> {
 
 // --- the store ------------------------------------------------------------------------------
 
-type Timer = ReturnType<typeof setTimeout>;
+/** The app's scheduler: a timer, its job's promise left to run (the job reports its own failure). */
+const timerSchedule = (job: () => Promise<void>, ms: number): (() => void) => {
+  const timer = setTimeout(() => void job(), ms);
+  return () => clearTimeout(timer);
+};
 
 export class DataStore {
   private readonly root: string;
   private readonly builtIn: readonly Game[];
   private readonly debounceMs: number;
+  private readonly schedule: (job: () => Promise<void>, ms: number) => () => void;
   private readonly onProblem: (problem: StoreProblem) => void;
   private readonly newId: () => string;
 
@@ -238,12 +249,14 @@ export class DataStore {
   /** Changes still under way, for `flush()` to wait for. */
   private readonly ops = new Set<Promise<void>>();
   private readonly unsaved = new Map<string, Scheme>();
-  private readonly timers = new Map<string, Timer>();
+  /** The way to call off each scheme's waiting write. */
+  private readonly timers = new Map<string, () => void>();
 
   private constructor(options: DataStoreOptions) {
     this.root = options.root;
     this.builtIn = options.builtInGames;
     this.debounceMs = options.debounceMs ?? AUTOSAVE_MS;
+    this.schedule = options.schedule ?? timerSchedule;
     this.onProblem = options.onProblem ?? (() => undefined);
     this.newId = options.newId ?? (() => randomUUID().slice(0, 8));
   }
@@ -465,13 +478,12 @@ export class DataStore {
     if (!isScheme(scheme)) throw new StoreError("That isn't a scheme helmArray can save.");
     const copy = structuredClone(scheme);
     this.unsaved.set(copy.id, copy);
-    const earlier = this.timers.get(copy.id);
-    if (earlier !== undefined) clearTimeout(earlier);
+    this.timers.get(copy.id)?.();
     this.timers.set(
       copy.id,
-      setTimeout(() => {
+      this.schedule(() => {
         this.timers.delete(copy.id);
-        void this.writeScheme(copy.id);
+        return this.writeScheme(copy.id);
       }, this.debounceMs),
     );
   }
@@ -491,7 +503,7 @@ export class DataStore {
 
   /** Writes every waiting edit now, and waits for all writes to finish. Used on quit. */
   async flush(): Promise<void> {
-    for (const timer of this.timers.values()) clearTimeout(timer);
+    for (const cancel of this.timers.values()) cancel();
     this.timers.clear();
     // A change still looking things up isn't queued to write yet: wait for it first.
     while (this.ops.size > 0) await Promise.allSettled([...this.ops]);
