@@ -22,8 +22,8 @@
 // Nothing here throws at a caller: every refusal and failure comes back as a sentence.
 // Pure: the store, the units and the running programs are handed in.
 
-import type { Game, GameBinding, Hand, Plan, Scheme, Signal } from '@helmarray/core';
-import { handsOf, signalId } from '@helmarray/core';
+import type { Game, GameBinding, Hand, Plan, Scheme } from '@helmarray/core';
+import { gameRowsChanged, handsOf } from '@helmarray/core';
 import type {
   ApplyGame,
   ApplyGameRow,
@@ -440,48 +440,22 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
 /** The game's half when there is nothing to say: no binding changes. */
 const NO_GAME_CHANGE: ApplyGame = { via: 'sheet', rows: [] };
 
-const bindingKey = (b: Pick<GameBinding, 'set' | 'mode' | 'action'>) =>
-  `${b.set}|${b.mode}|${b.action}`;
-const signalsOf = (bindings: readonly GameBinding[]) =>
-  bindings.map((b) => (b.signal === null ? 'none' : signalId(b.signal))).join(',');
-
-/**
- * The plan's game bindings that differ from what the game holds now: what `holds` (the plan applied
- * to the game last) says of the same action in the same set, else what the game ships. One row per
- * binding of an action that changes, in the plan's order.
- */
 export function changedRows(plan: Plan, game: Game, holds: Plan | null): ApplyGameRow[] {
-  const byKey = (bindings: readonly GameBinding[]) => {
-    const out = new Map<string, GameBinding[]>();
-    for (const b of bindings) out.set(bindingKey(b), [...(out.get(bindingKey(b)) ?? []), b]);
-    return out;
-  };
-  const now = byKey(plan.gameBindings);
-  const before = byKey(holds?.gameBindings ?? []);
-  const rows: ApplyGameRow[] = [];
-  for (const [key, mine] of now) {
-    const first = mine[0];
-    if (first === undefined) continue;
-    const held = before.get(key);
-    const from: Signal | null = held === undefined ? first.native : (held[0]?.signal ?? null);
-    const was =
-      held === undefined
-        ? first.native === null
-          ? 'none'
-          : signalId(first.native)
-        : signalsOf(held);
-    if (was === signalsOf(mine)) continue;
-    for (const b of mine) {
-      rows.push({
-        set: b.set,
-        mode: b.mode,
-        modeName: game.modes.find((m) => m.id === b.mode)?.name ?? b.mode,
-        action: b.action,
-        actionName: game.actions.find((a) => a.id === b.action)?.name ?? b.action,
-        to: b.signal,
-        from,
-      });
-    }
+  // What the game holds of each action: the first of its rows in the plan applied last.
+  const held = new Map<string, GameBinding>();
+  for (const b of holds?.gameBindings ?? []) {
+    const k = `${b.set}|${b.mode}|${b.action}`;
+    if (!held.has(k)) held.set(k, b);
   }
-  return rows;
+  return gameRowsChanged(plan, holds).map((b) => ({
+    set: b.set,
+    mode: b.mode,
+    modeName: game.modes.find((m) => m.id === b.mode)?.name ?? b.mode,
+    action: b.action,
+    actionName: game.actions.find((a) => a.id === b.action)?.name ?? b.action,
+    to: b.signal,
+    from: held.has(`${b.set}|${b.mode}|${b.action}`)
+      ? (held.get(`${b.set}|${b.mode}|${b.action}`)?.signal ?? null)
+      : b.native,
+  }));
 }

@@ -432,6 +432,29 @@ export function bindingChanged(binding: GameBinding): boolean {
   return signalId(binding.signal) !== signalId(binding.native);
 }
 
+/**
+ * The game bindings of `current` that differ from what the game holds after `before` was applied:
+ * what `before` says of the same action in the same set, else (a plan with no rows for it, or no
+ * plan) what the game ships. Each changed action's rows, in `current`'s order. Apply's drawer lists
+ * these, and the sync pill counts them as not applied.
+ */
+export function gameRowsChanged(current: Plan, before: Plan | null): GameBinding[] {
+  const key = (b: GameBinding) => `${b.set}|${b.mode}|${b.action}`;
+  const ids = (signals: readonly (Signal | null)[]) =>
+    signals.map((sig) => (sig === null ? 'none' : signalId(sig))).join(',');
+  const held = new Map<string, GameBinding[]>();
+  for (const b of before?.gameBindings ?? []) held.set(key(b), [...(held.get(key(b)) ?? []), b]);
+  const now = new Map<string, GameBinding[]>();
+  for (const b of current.gameBindings) now.set(key(b), [...(now.get(key(b)) ?? []), b]);
+  const out: GameBinding[] = [];
+  for (const [k, mine] of now) {
+    const was = held.get(k);
+    const then = was === undefined ? ids([mine[0]?.native ?? null]) : ids(was.map((b) => b.signal));
+    if (then !== ids(mine.map((b) => b.signal))) out.push(...mine);
+  }
+  return out;
+}
+
 /** resolve(scheme, game, devices) → Plan. Pure and deterministic. */
 export function resolve(scheme: Scheme, game: Game, devices: readonly Device[]): Plan {
   if (scheme.gameId !== game.id) {

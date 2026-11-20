@@ -18,6 +18,7 @@
 
 import type { Verdict } from '@helmarray/azeron';
 import type { Hand, Plan } from '@helmarray/core';
+import { gameRowsChanged } from '@helmarray/core';
 import { canonical } from './plan-fingerprint';
 
 export interface HandSync {
@@ -158,13 +159,13 @@ function says(plan: Plan | null): Map<string, string[]> {
  * nothing applied yet, it is how many say anything at all. A scheme that did not resolve
  * (`current` null) counts as one change: whatever it says, it can't be said to be applied.
  *
- * What the game's file will hold is part of the plan; writing it is not part of Apply yet.
+ * The game's bindings that differ from what was applied count too, one per action.
  */
 export function pendingChanges(applied: Plan | null, current: Plan | null): number {
   if (current === null) return 1;
   const before = says(applied);
   const now = says(current);
-  let count = 0;
+  const changed = new Set<string>();
   for (const control of new Set([...before.keys(), ...now.keys()])) {
     const a = (before.get(control) ?? []).join('|');
     const b = (now.get(control) ?? []).join('|');
@@ -172,7 +173,21 @@ export function pendingChanges(applied: Plan | null, current: Plan | null): numb
     // Nothing applied: only what the scheme puts on a button counts, not a stick's default
     // behaviour, so a scheme with nothing on it has nothing to apply.
     if (applied === null && control.endsWith('.stick')) continue;
-    count++;
+    changed.add(control);
   }
-  return count;
+  // The game's bindings: until helmArray writes game files (M5) a row is set by hand from the
+  // drawer, so one that differs from what was last applied is a change not applied, each action
+  // once. A row a changed button already accounts for (its action came or went with the button)
+  // is that change, not another.
+  const explained = new Set(
+    [...(applied?.bindings ?? []), ...current.bindings]
+      .filter((b) => changed.has(b.control))
+      .map((b) => `${b.mode}|${b.action}`),
+  );
+  const rows = new Set(
+    gameRowsChanged(current, applied)
+      .filter((b) => !explained.has(`${b.mode}|${b.action}`))
+      .map((b) => `${b.set}|${b.mode}|${b.action}`),
+  );
+  return changed.size + rows.size;
 }

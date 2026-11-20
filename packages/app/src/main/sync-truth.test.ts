@@ -11,8 +11,10 @@ import {
   CYBORG2_LEFT,
   CYBORG2_RIGHT,
   gameKeysPreset,
+  helldivers2,
   resolve,
   unitOf,
+  xboxControllerPreset,
 } from '@helmarray/core';
 import {
   FakeUnit,
@@ -227,6 +229,30 @@ describe('the sync pill for a setup of the left Azeron and the mouse', () => {
       map: { ship: { 'key.Tab': { tap: 'boost' }, 'mouse.left': { tap: 'fire' } } },
     });
     expect(pill([], active(none, none))).toEqual({ label: 'In sync', tone: 'ok' });
+  });
+});
+
+describe('the sync pill counts the game’s bindings', () => {
+  // Helldivers 2 from the Xbox controller preset, applied; then the mouse joins the setup with
+  // nothing put on it. The units' layout doesn't change, but the game's keyboard bindings do: the
+  // mouse's buttons are the setup's now, empty, so Fire and Aim come off them.
+  const preset = xboxControllerPreset(helldivers2);
+  const withMouse: Scheme = { ...preset, devices: { ...preset.devices, mouse: true } };
+  const hd = (scheme: Scheme): Plan => resolve(scheme, helldivers2, BUILT_IN_DEVICES);
+
+  it('says the game rows are not applied, though both units hold the layout', async () => {
+    const applied = hd(preset);
+    const units = [await holding('left', applied), await holding('right', applied)];
+    expect([
+      unitOf(hd(withMouse), 'left').pins,
+      pill(units, active(applied, hd(withMouse))),
+    ]).toEqual([unitOf(applied, 'left').pins, { label: '2 changes not applied', tone: 'warning' }]);
+  });
+
+  it('is In sync again once those rows are what was applied', async () => {
+    const applied = hd(withMouse);
+    const units = [await holding('left', applied), await holding('right', applied)];
+    expect(pill(units, active(applied, hd(withMouse)))).toEqual({ label: 'In sync', tone: 'ok' });
   });
 });
 

@@ -146,7 +146,6 @@ export function shownAction(
   return undefined;
 }
 
-
 /** A copy of the pad map without these buttons. */
 const without = (padMap: Scheme['padMap'], controls: readonly ControlId[]): Scheme['padMap'] =>
   Object.fromEntries(
