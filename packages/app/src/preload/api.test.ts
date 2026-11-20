@@ -1,3 +1,4 @@
+import { gameKeysPreset } from '@helmarray/core';
 import { describe, expect, it } from 'vitest';
 import type { AppState } from '../shared/api';
 import { CHANNELS } from '../shared/api';
@@ -9,6 +10,8 @@ const STATE: AppState = {
   sync: { label: 'Not checked yet', tone: 'warning' },
   writeBlock: null,
   question: null,
+  activeGameId: null,
+  activeSchemeId: null,
 };
 
 function bridge() {
@@ -92,5 +95,54 @@ describe('window.helm', () => {
     const api = createHelmApi(bridge().ipc);
     expect(await api.chooseHand(1, 'right')).toBeUndefined();
     expect(await api.openLogFolder()).toBeUndefined();
+  });
+
+  describe('the games and schemes', () => {
+    const scheme = gameKeysPreset({
+      id: 'skiff',
+      name: 'Skiff',
+      modes: [{ id: 'ship', name: 'Ship' }],
+      actions: [],
+    });
+
+    it('asks each question over its own channel, with its arguments', async () => {
+      const b = bridge();
+      const api = createHelmApi(b.ipc);
+      await api.listGames();
+      await api.getScheme('skiff-own-keys');
+      await api.listSchemes('skiff');
+      await api.createScheme('skiff', 'xbox');
+      await api.saveScheme(scheme);
+      await api.setActive('skiff', 'skiff-own-keys');
+      await api.setActive('skiff', null);
+      expect(b.invoked).toEqual([
+        [CHANNELS.listGames, []],
+        [CHANNELS.getScheme, ['skiff-own-keys']],
+        [CHANNELS.listSchemes, ['skiff']],
+        [CHANNELS.createScheme, ['skiff', 'xbox']],
+        [CHANNELS.saveScheme, [scheme]],
+        [CHANNELS.setActive, ['skiff', 'skiff-own-keys']],
+        [CHANNELS.setActive, ['skiff', null]],
+      ]);
+    });
+
+    it('gives back what main answers, and nothing from the writes', async () => {
+      const answers = new Map<string, unknown>([
+        [CHANNELS.listGames, [{ game: { id: 'skiff' }, builtIn: true }]],
+        [CHANNELS.getScheme, scheme],
+        [CHANNELS.createScheme, scheme],
+      ]);
+      const ipc: IpcBridge = {
+        invoke: (channel) => Promise.resolve(answers.get(channel) ?? 'something'),
+        on: () => undefined,
+        removeListener: () => undefined,
+      };
+      const api = createHelmApi(ipc);
+      expect(await api.listGames()).toEqual([{ game: { id: 'skiff' }, builtIn: true }]);
+      expect(await api.getScheme('x')).toBe(scheme);
+      expect(await api.createScheme('skiff', 'keys')).toBe(scheme);
+      expect(await api.saveScheme(scheme)).toBeUndefined();
+      expect(await api.setActive('skiff', null)).toBeUndefined();
+    });
   });
 });
