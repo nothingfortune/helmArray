@@ -77,21 +77,33 @@ function flipOneKey(stored: Uint8Array[]) {
   record[7] = (record[7] ?? 0) ^ 1;
 }
 
-/** Takes the first button record's tap key off by one in the slot, as a unit that stored wrong. */
+/**
+ * Stores one record wrong in a slot, once, after the first record of a write has gone in: the
+ * next read of the slots shows it, as a unit that kept something other than it was sent would.
+ */
 class CorruptingUnit extends FakeUnit {
   corruptSlot: number | undefined;
+  private armed = false;
   override async send(report: Uint8Array): Promise<void> {
-    if (parseHostReport(report).command === Command.PROFILE_PAYLOAD_V2) this.corrupt();
+    const { command } = parseHostReport(report);
+    if (command === Command.OBM_COPY) this.armed = true;
+    if (command === Command.PROFILE_PAYLOAD_V2 && this.armed) this.corrupt();
     return super.send(report);
   }
   private corrupt() {
     const slot = this.corruptSlot === undefined ? undefined : this.slots.get(this.corruptSlot);
-    if (!slot || slot.records.size === 0) return;
-    for (const record of slot.records.values()) {
-      if (STICKS.includes(record[4] ?? 0)) continue;
-      record[7] = (record[7] ?? 0) ^ 1;
-      return;
-    }
+    const record = [...(slot?.records.values() ?? [])].find((r) => !STICKS.includes(r[4] ?? 0));
+    if (!record) return;
+    record[7] = (record[7] ?? 0) ^ 1;
+    this.armed = false;
+  }
+}
+
+/** Says it runs a slot it does not have once a slot has been deleted. */
+class DriftingUnit extends FakeUnit {
+  override async send(report: Uint8Array): Promise<void> {
+    await super.send(report);
+    if (parseHostReport(report).command === Command.DELETE_PROFILE) this.running = 7;
   }
 }
 
@@ -351,6 +363,38 @@ describe('applying to the units', () => {
       expect(slotsOf(left)).toEqual([0, 1, 2]);
       expect(left.running).toBe(0);
     });
+  });
+
+  it('says that a slot written over is lost when its read-back is not clean', async () => {
+    const left = new CorruptingUnit({
+      deviceId: LEFT_ID,
+      limit: 2,
+      // Slot 1 holds another layout (the right unit's) under our name.
+      slots: { 0: { name: 'Default' }, 1: { name: NAME, records: holding(1, 'right') } },
+      running: 0,
+    });
+    left.corruptSlot = 1;
+    const state = await rig(left, new FakeUnit({ deviceId: RIGHT_ID }));
+    const result = await applyUnits(plan, state.deps);
+    expect(result.ok).toBe(false);
+    expect(result.units[0]).toMatchObject({ wrote: true, switched: false, deleted: [] });
+    expect(result.message).toMatch(
+      /^The left unit failed: slot 1 read back differently from the layout \(\d+ inputs?, first: input \d+ .+\); slot 1 is not in use and what it held before \("Skiff"\) is gone, the unit still runs slot 0, and nothing was deleted\.$/,
+    );
+    expect(sent(left)).not.toContain(Command.SWITCH_PROFILE);
+    expect(sent(left)).not.toContain(Command.DELETE_PROFILE);
+    expect(left.running).toBe(0);
+    expect(slotsOf(left)).toEqual([0, 1]);
+  });
+
+  it('says what the unit runs when it is not the slot the layout is in after cleaning up', async () => {
+    const left = new DriftingUnit({ deviceId: LEFT_ID, slots: { 0: { name: 'Default' } } });
+    const state = await rig(left, new FakeUnit({ deviceId: RIGHT_ID }));
+    const result = await applyUnits(plan, state.deps);
+    expect(result.ok).toBe(false);
+    expect(result.message).toBe(
+      'The left unit failed: it is not running slot 1, where the layout is; the unit runs slot 7 and the other slots are deleted.',
+    );
   });
 
   it('says what is left when the unit stops answering part way through the write', async () => {

@@ -338,6 +338,11 @@ async function applyUnit(
       if (!choice.ok) return stop(choice.reason);
       slot = choice.slot;
       const into = choice.overwrites ? slotLabel(choice.overwrites) : `slot ${slot}`;
+      // A slot written over has lost what it held, whatever happens next: say so.
+      const overwritten = (clause: string) =>
+        choice.overwrites
+          ? `${clause} and what it held before${choice.overwrites.name === '' ? '' : ` ("${choice.overwrites.name}")`} is gone`
+          : clause;
       trace(`writing the layout into ${into}`);
 
       await guard();
@@ -375,12 +380,12 @@ async function applyUnit(
           ...result.differences.map((d) => d.id),
           ...result.unchecked.map((u) => u.id),
         ]).size;
-        left = `slot ${slot} is not in use, the unit still runs slot ${identity.runningSlot}, and nothing was deleted`;
+        left = `${overwritten(`slot ${slot} is not in use`)}, the unit still runs slot ${identity.runningSlot}, and nothing was deleted`;
         return stop(
           `slot ${slot} read back differently from the layout (${count} input${count === 1 ? '' : 's'}${first ? `, first: input ${first.id} ${first.what}` : ''})`,
         );
       }
-      left = `slot ${slot} holds the layout, the unit still runs slot ${identity.runningSlot}, and nothing was deleted`;
+      left = `${overwritten(`slot ${slot} holds the layout`)}, the unit still runs slot ${identity.runningSlot}, and nothing was deleted`;
       await guard();
       try {
         await session.switchTo(slot);
@@ -414,14 +419,15 @@ async function applyUnit(
     }
 
     // Read every slot back and compare what the unit runs with the plan.
-    left = `the unit runs slot ${slot}`;
+    left = 'the other slots are deleted';
     let finalVerdict: Verdict;
     try {
       const after = await session.readSlots();
       const running = await session.runningSlot();
       finalVerdict = verify(records, after.find((s) => s.slot === running)?.records ?? []);
       outcome.verdict = finalVerdict;
-      if (running !== slot) return stop(`it runs slot ${running}, not slot ${slot}`);
+      left = `the unit runs slot ${running} and the other slots are deleted`;
+      if (running !== slot) return stop(`it is not running slot ${slot}, where the layout is`);
     } catch (error) {
       if (error instanceof Stop) throw error;
       return stop(messageOf(error));
