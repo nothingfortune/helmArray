@@ -212,7 +212,7 @@ function EditorBody({ scheme: loaded, game, onBack, onApply }: BodyProps) {
   };
   const place = (control: ControlId, actionId: string, which: Press) => {
     if (isStick(control) || !assignable(game, mode, actionId)) return;
-    edit((s) => assign(s, { mode, control, press: which }, actionId));
+    edit((s) => assign(s, { mode, control, press: which }, actionId, game));
   };
   const dropOn = (control: ControlId, actionId: string) => {
     if (isStick(control)) return;

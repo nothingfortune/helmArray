@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { Scheme } from '@helmarray/core';
-import { assign, acceptFinding, setLatch } from './editor-model';
-import { assignable, editorView, signalText } from './editor-view';
-import { game, keysScheme, padScheme, plan } from './editor-fixture';
+import { assign, acceptFinding, clear, setLatch } from './editor-model';
+import { assignable, editorView, padFindings, signalText } from './editor-view';
+import { game, keysScheme, padGame, padScheme, plan } from './editor-fixture';
 
 const view = (
   scheme: Scheme,
@@ -61,6 +61,7 @@ describe('unit keys', () => {
       keysScheme(),
       { mode: 'ship', control: 'L.index_2', press: 'long' },
       'gear',
+      game,
     );
     expect(view(scheme).left.keys['L.index_2']).toEqual({
       label: 'Long: Landing gear',
@@ -112,6 +113,7 @@ describe('unplaced actions', () => {
       keysScheme(),
       { mode: 'ship', control: 'L.index_2', press: 'long' },
       'gear',
+      game,
     );
     expect(view(scheme).unplaced.map((a) => a.id)).not.toContain('gear');
   });
@@ -154,6 +156,7 @@ describe('the side panel', () => {
       keysScheme(),
       { mode: 'ship', control: 'L.index_1', press: 'long' },
       'galaxy',
+      game,
     );
     const rows = view(scheme, 'ship', 'L.index_1', 'long').panel?.presses;
     expect(rows?.map((r) => [r.press, r.action?.name, r.target, r.available])).toEqual([
@@ -306,7 +309,12 @@ describe('checks', () => {
 
   it('gives each finding a key that does not change with an unrelated edit', () => {
     const base = setLatch(keysScheme(), 'L.index_1', true);
-    const edited = assign(base, { mode: 'ship', control: 'R.index_2', press: 'tap' }, 'hardpoints');
+    const edited = assign(
+      base,
+      { mode: 'ship', control: 'R.index_2', press: 'tap' },
+      'hardpoints',
+      game,
+    );
     expect(view(edited).findings.map((r) => r.key)).toEqual(view(base).findings.map((r) => r.key));
   });
 
@@ -316,10 +324,109 @@ describe('checks', () => {
       padScheme(),
       { mode: 'ship', control: 'L.index_1', press: 'long' },
       'galaxy',
+      game,
     );
-    scheme = assign(scheme, { mode: 'ship', control: 'L.index_1', press: 'double' }, 'gear');
+    scheme = assign(scheme, { mode: 'ship', control: 'L.index_1', press: 'double' }, 'gear', game);
     const rows = [...view(scheme).findings, ...view(scheme).kept];
     expect(rows.filter((r) => r.finding.rule === 'sends-nothing')).toHaveLength(2);
     expect(new Set(rows.map((r) => r.key)).size).toBe(rows.length);
+  });
+});
+
+describe("controller output: the editor's own findings and the panel", () => {
+  const padView = (scheme: Scheme, mode = 'ship', selected?: string) =>
+    editorView({ scheme, game: padGame, plan: plan(scheme, padGame), mode, selected });
+  const ruled = (scheme: Scheme, rule: string) =>
+    [...padView(scheme).findings, ...padView(scheme).kept].filter((r) => r.finding.rule === rule);
+
+  it('has none when each button sends what the game puts its action on', () => {
+    expect(padView(padScheme()).findings).toEqual([]);
+  });
+
+  it("says the game's controller default is not known, in one keepable sentence", () => {
+    const scheme = assign(
+      padScheme(),
+      { mode: 'ship', control: 'R.index_1', press: 'tap' },
+      'gear',
+      padGame,
+    );
+    const [row] = ruled(scheme, 'pad-default-unknown');
+    expect(row?.finding.message).toBe(
+      "Lite Dangerous's controller default for Landing gear isn't known: check it's on RT in the game's controls menu.",
+    );
+    expect(row?.finding).toMatchObject({
+      control: 'R.index_1',
+      action: 'gear',
+      severity: 'warning',
+    });
+    expect(row?.canKeep).toBe(true);
+  });
+
+  it('can be kept with "Keep, I know", and then comes back marked', () => {
+    const scheme = assign(
+      padScheme(),
+      { mode: 'ship', control: 'R.index_1', press: 'tap' },
+      'gear',
+      padGame,
+    );
+    const [row] = ruled(scheme, 'pad-default-unknown');
+    const kept = acceptFinding(scheme, (row as NonNullable<typeof row>).finding);
+    expect(padView(kept).findings.filter((r) => r.finding.rule === 'pad-default-unknown')).toEqual(
+      [],
+    );
+    expect(padView(kept).kept[0]?.kept).toBe('Kept on purpose');
+  });
+
+  it('says so when a button sends another control than the action is on by default', () => {
+    // Dropping SRV Fire on L.index_1 makes it send RT in every mode; Boost ships on RB.
+    const scheme = assign(
+      padScheme(),
+      { mode: 'srv', control: 'L.index_1', press: 'tap' },
+      'srv_fire',
+      padGame,
+    );
+    expect(ruled(scheme, 'pad-mismatch').map((r) => r.finding.message)).toEqual([
+      'Boost is on RB in Lite Dangerous by default, but this button sends RT in every mode: move it to a button that sends RB.',
+    ]);
+  });
+
+  it('leaves a button with no pad control to core, with no second finding of its own', () => {
+    const scheme = assign(
+      padScheme(),
+      { mode: 'ship', control: 'L.index_4', press: 'tap' },
+      'gear',
+      padGame,
+    );
+    const v = padView(scheme);
+    expect(v.findings.some((r) => r.finding.rule === 'sends-nothing')).toBe(true);
+    expect(v.findings.some((r) => r.finding.rule === 'pad-default-unknown')).toBe(false);
+  });
+
+  it('makes none for key output', () => {
+    expect(padFindings(keysScheme(), padGame)).toEqual([]);
+  });
+
+  it('gives each a key of its own', () => {
+    let scheme = assign(
+      padScheme(),
+      { mode: 'ship', control: 'R.index_1', press: 'tap' },
+      'gear',
+      padGame,
+    );
+    scheme = assign(scheme, { mode: 'srv', control: 'L.index_1', press: 'tap' }, 'lights', padGame);
+    const rows = padView(scheme).findings;
+    expect(rows.filter((r) => r.finding.rule === 'pad-default-unknown')).toHaveLength(2);
+    expect(new Set(rows.map((r) => r.key)).size).toBe(rows.length);
+  });
+
+  it('shows the control a button sends, and "Still sends RT" once its label is taken off', () => {
+    const labelled = padView(padScheme(), 'ship', 'R.index_1').panel;
+    expect(labelled?.sends).toBe('Xbox RT');
+    expect(labelled?.sendsNote).toBe('your pad bindings');
+    const cleared = clear(padScheme(), { mode: 'ship', control: 'R.index_1', press: 'tap' });
+    const panel = padView(cleared, 'ship', 'R.index_1').panel;
+    expect(panel?.title).toBe('Empty');
+    expect(panel?.sends).toBe('Xbox RT');
+    expect(panel?.sendsNote).toBe('Still sends RT');
   });
 });

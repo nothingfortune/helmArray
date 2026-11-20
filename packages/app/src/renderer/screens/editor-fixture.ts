@@ -1,7 +1,7 @@
 // A small two-mode game and schemes on it, for the editor's tests. Not shipped: nothing in the
 // app imports this file.
 import { BUILT_IN_DEVICES, resolve } from '@helmarray/core';
-import type { Action, Game, Plan, Role, Scheme, Signal } from '@helmarray/core';
+import type { Action, Game, PadControl, Plan, Role, Scheme, Signal } from '@helmarray/core';
 
 const act = (
   id: string,
@@ -92,3 +92,25 @@ export function deepFreeze<T>(value: T): T {
   }
   return value;
 }
+
+/**
+ * The same game with the Xbox controls it ships on, for controller output. `gear` and
+ * `lights` have none: their controller default is not known, as for every Helldivers 2 action.
+ */
+const PAD_DEFAULTS: Record<string, PadControl> = {
+  boost: 'RB',
+  fire: 'RT',
+  fsd: 'A',
+  hardpoints: 'Y',
+  silent: 'LB',
+  galaxy: 'START',
+  jump: 'RB',
+  srv_fire: 'RT',
+};
+export const padGame: Game = {
+  ...game,
+  actions: game.actions.map((a) => {
+    const pad = PAD_DEFAULTS[a.id];
+    return pad === undefined ? a : { ...a, native: { ...a.native, pad } };
+  }),
+};

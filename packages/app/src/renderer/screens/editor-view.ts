@@ -331,6 +331,10 @@ function panelFor(input: PanelInput): PanelView {
   const here = scheme.map[mode]?.[control] ?? {};
   const tap = here.tap;
   const sends = sendsFor(scheme, game, plan, mode, control, press);
+  // THE PAD RULE (editor-model.ts): taking the label off leaves the button sending its control.
+  const stillPad =
+    scheme.output === 'pad' && tap === undefined ? scheme.padMap[control] : undefined;
+  if (stillPad !== undefined && press === 'tap') sends.note = `Still sends ${padWord(stillPad)}`;
   return {
     control,
     where,
@@ -367,6 +371,52 @@ function panelFor(input: PanelInput): PanelView {
 export const assignable = (game: Game, mode: ModeId, actionId: ActionId): boolean =>
   game.actions.some((a) => a.id === actionId && a.mode === mode);
 
+/**
+ * The editor's own findings about controller output (THE PAD RULE in editor-model.ts). A button
+ * with no pad control at all is core's `sends-nothing`, so it is not repeated here. One that the
+ * player kept comes back marked with their reason.
+ */
+export function padFindings(scheme: Scheme, game: Game): Finding[] {
+  if (scheme.output !== 'pad') return [];
+  const out: Finding[] = [];
+  for (const mode of game.modes) {
+    for (const [control, presses] of Object.entries(scheme.map[mode.id] ?? {})) {
+      const action = presses.tap;
+      const sent = scheme.padMap[control];
+      if (action === undefined || sent === undefined || isStick(control)) continue;
+      const def = game.actions.find((a) => a.id === action && a.mode === mode.id);
+      const name = def?.name ?? action;
+      const native = def?.native?.pad;
+      let finding: Finding | undefined;
+      if (def !== undefined && native === undefined) {
+        finding = {
+          rule: 'pad-default-unknown',
+          severity: 'warning',
+          control,
+          action,
+          mode: mode.id,
+          message: `${game.name}'s controller default for ${name} isn't known: check it's on ${padWord(sent)} in the game's controls menu.`,
+        };
+      } else if (native !== undefined && native !== sent) {
+        finding = {
+          rule: 'pad-mismatch',
+          severity: 'warning',
+          control,
+          action,
+          mode: mode.id,
+          message: `${name} is on ${padWord(native)} in ${game.name} by default, but this button sends ${padWord(sent)} in every mode: move it to a button that sends ${padWord(native)}.`,
+        };
+      }
+      if (finding === undefined) continue;
+      const kept = scheme.accepted.find(
+        (a) => a.rule === finding.rule && a.control === control && a.action === action,
+      );
+      out.push(kept ? { ...finding, accepted: kept.reason } : finding);
+    }
+  }
+  return out;
+}
+
 const SEVERITY_ORDER = { error: 0, warning: 1 } as const;
 
 export function editorView(input: EditorViewInput): EditorView {
@@ -384,7 +434,7 @@ export function editorView(input: EditorViewInput): EditorView {
   // Core can report the same rule on the same control more than once (one per press, one per
   // stick direction), so a repeat gets a number to keep every key unique.
   const seen = new Map<string, number>();
-  const rows: FindingRow[] = plan.findings.map((finding) => {
+  const rows: FindingRow[] = [...plan.findings, ...padFindings(scheme, game)].map((finding) => {
     const base = keyFor(finding);
     const count = seen.get(base) ?? 0;
     seen.set(base, count + 1);

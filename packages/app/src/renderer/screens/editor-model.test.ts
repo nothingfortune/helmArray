@@ -24,7 +24,7 @@ import {
   undo,
 } from './editor-model';
 import type { Slot } from './editor-model';
-import { deepFreeze, game, keysScheme, padScheme, plan } from './editor-fixture';
+import { deepFreeze, game, keysScheme, padGame, padScheme, plan } from './editor-fixture';
 
 const slot = (mode: string, control: string, press: Slot['press'] = 'tap'): Slot => ({
   mode,
@@ -35,31 +35,31 @@ const frozen = (): Scheme => deepFreeze(keysScheme());
 
 describe('assign', () => {
   it('puts an action on a free button, in the current mode only', () => {
-    const next = assign(frozen(), slot('ship', 'L.index_2'), 'gear');
+    const next = assign(frozen(), slot('ship', 'L.index_2'), 'gear', game);
     expect(next.map['ship']?.['L.index_2']).toEqual({ tap: 'gear' });
     expect(next.map['srv']).toEqual(keysScheme().map['srv']);
   });
 
   it('replaces what the slot held; the old action is simply unplaced', () => {
-    const next = assign(frozen(), slot('ship', 'L.index_1'), 'galaxy');
+    const next = assign(frozen(), slot('ship', 'L.index_1'), 'galaxy', game);
     expect(actionAt(next, slot('ship', 'L.index_1'))).toBe('galaxy');
     expect(JSON.stringify(next.map['ship'])).not.toContain('boost');
   });
 
   it('is a move: the action leaves the slot it was on in this mode', () => {
-    const next = assign(frozen(), slot('ship', 'R.index_2'), 'boost');
+    const next = assign(frozen(), slot('ship', 'R.index_2'), 'boost', game);
     expect(actionAt(next, slot('ship', 'R.index_2'))).toBe('boost');
     expect(next.map['ship']?.['L.index_1']).toBeUndefined();
   });
 
   it('puts an action on a long press or a double tap without touching the tap', () => {
-    const a = assign(frozen(), slot('ship', 'L.index_1', 'long'), 'galaxy');
-    const b = assign(a, slot('ship', 'L.index_1', 'double'), 'gear');
+    const a = assign(frozen(), slot('ship', 'L.index_1', 'long'), 'galaxy', game);
+    const b = assign(a, slot('ship', 'L.index_1', 'double'), 'gear', game);
     expect(b.map['ship']?.['L.index_1']).toEqual({ tap: 'boost', long: 'galaxy', double: 'gear' });
   });
 
   it('keeps a press per mode: the same button holds different actions in each', () => {
-    const next = assign(frozen(), slot('srv', 'L.middle_1'), 'lights');
+    const next = assign(frozen(), slot('srv', 'L.middle_1'), 'lights', game);
     expect(next.map['srv']?.['L.middle_1']).toEqual({ tap: 'lights' });
     expect(next.map['ship']?.['L.middle_1']).toEqual({ tap: 'fsd' });
   });
@@ -68,27 +68,27 @@ describe('assign', () => {
     const scheme = frozen();
     const rest = Object.fromEntries(Object.entries(scheme.map).filter(([mode]) => mode !== 'srv'));
     const bare = deepFreeze({ ...scheme, map: rest });
-    expect(assign(bare, slot('srv', 'L.index_1'), 'jump').map['srv']).toEqual({
+    expect(assign(bare, slot('srv', 'L.index_1'), 'jump', game).map['srv']).toEqual({
       'L.index_1': { tap: 'jump' },
     });
   });
 
   it('returns the same scheme when nothing changes', () => {
     const scheme = frozen();
-    expect(assign(scheme, slot('ship', 'L.index_1'), 'boost')).toBe(scheme);
+    expect(assign(scheme, slot('ship', 'L.index_1'), 'boost', game)).toBe(scheme);
   });
 
   it('refuses the stick: it has directions, not presses', () => {
     const scheme = frozen();
-    expect(assign(scheme, slot('ship', 'L.stick'), 'boost')).toBe(scheme);
-    expect(assign(scheme, slot('ship', 'R.stick'), 'boost')).toBe(scheme);
+    expect(assign(scheme, slot('ship', 'L.stick'), 'boost', game)).toBe(scheme);
+    expect(assign(scheme, slot('ship', 'R.stick'), 'boost', game)).toBe(scheme);
   });
 
   it('never touches the ledger: a key once given stays given', () => {
     const ledger = { 'L.index_1': { tap: { kind: 'key', code: 'Insert' } } } as const;
     const scheme = deepFreeze({ ...keysScheme(), ledger });
     const next = clear(
-      assign(scheme, slot('ship', 'L.index_2'), 'boost'),
+      assign(scheme, slot('ship', 'L.index_2'), 'boost', game),
       slot('ship', 'L.index_2'),
     );
     expect(next.ledger).toBe(scheme.ledger);
@@ -97,7 +97,7 @@ describe('assign', () => {
 
 describe('clear', () => {
   it('takes one press off and leaves the others', () => {
-    const withLong = assign(frozen(), slot('ship', 'L.index_1', 'long'), 'galaxy');
+    const withLong = assign(frozen(), slot('ship', 'L.index_1', 'long'), 'galaxy', game);
     const next = clear(withLong, slot('ship', 'L.index_1', 'long'));
     expect(next.map['ship']?.['L.index_1']).toEqual({ tap: 'boost' });
   });
@@ -122,28 +122,28 @@ describe('clear', () => {
 
 describe('move', () => {
   it('moves an action to another button and leaves the first empty', () => {
-    const next = move(frozen(), slot('ship', 'L.index_1'), slot('ship', 'L.index_3'));
+    const next = move(frozen(), slot('ship', 'L.index_1'), slot('ship', 'L.index_3'), game);
     expect(next.map['ship']?.['L.index_3']).toEqual({ tap: 'boost' });
     expect(next.map['ship']?.['L.index_1']).toBeUndefined();
   });
 
   it('moves between presses of one button', () => {
-    const next = move(frozen(), slot('ship', 'L.index_1'), slot('ship', 'L.index_1', 'long'));
+    const next = move(frozen(), slot('ship', 'L.index_1'), slot('ship', 'L.index_1', 'long'), game);
     expect(next.map['ship']?.['L.index_1']).toEqual({ long: 'boost' });
   });
 
   it('drops what was on the target', () => {
-    const next = move(frozen(), slot('ship', 'L.index_1'), slot('ship', 'L.middle_1'));
+    const next = move(frozen(), slot('ship', 'L.index_1'), slot('ship', 'L.middle_1'), game);
     expect(next.map['ship']?.['L.middle_1']).toEqual({ tap: 'boost' });
     expect(JSON.stringify(next.map['ship'])).not.toContain('fsd');
   });
 
   it('does nothing from an empty slot, onto itself, across modes or onto the stick', () => {
     const scheme = frozen();
-    expect(move(scheme, slot('ship', 'L.index_5'), slot('ship', 'L.index_3'))).toBe(scheme);
-    expect(move(scheme, slot('ship', 'L.index_1'), slot('ship', 'L.index_1'))).toBe(scheme);
-    expect(move(scheme, slot('ship', 'L.index_1'), slot('srv', 'L.index_3'))).toBe(scheme);
-    expect(move(scheme, slot('ship', 'L.index_1'), slot('ship', 'L.stick'))).toBe(scheme);
+    expect(move(scheme, slot('ship', 'L.index_5'), slot('ship', 'L.index_3'), game)).toBe(scheme);
+    expect(move(scheme, slot('ship', 'L.index_1'), slot('ship', 'L.index_1'), game)).toBe(scheme);
+    expect(move(scheme, slot('ship', 'L.index_1'), slot('srv', 'L.index_3'), game)).toBe(scheme);
+    expect(move(scheme, slot('ship', 'L.index_1'), slot('ship', 'L.stick'), game)).toBe(scheme);
   });
 });
 
@@ -264,7 +264,7 @@ describe('fixes', () => {
 
   it('a long press on a combat button: remove the long press, in every mode', () => {
     const scheme = deepFreeze(
-      assign(keysScheme(), slot('ship', 'R.index_1', 'long'), 'hardpoints'),
+      assign(keysScheme(), slot('ship', 'R.index_1', 'long'), 'hardpoints', game),
     );
     const before = find(scheme, 'combat-tap-delayed') as Finding;
     const fix = fixFor(before, scheme, game, plan(scheme));
@@ -275,8 +275,8 @@ describe('fixes', () => {
   });
 
   it('names both presses when both are there', () => {
-    let scheme = assign(keysScheme(), slot('ship', 'R.index_1', 'long'), 'hardpoints');
-    scheme = assign(scheme, slot('ship', 'R.index_1', 'double'), 'gear');
+    let scheme = assign(keysScheme(), slot('ship', 'R.index_1', 'long'), 'hardpoints', game);
+    scheme = assign(scheme, slot('ship', 'R.index_1', 'double'), 'gear', game);
     const before = find(scheme, 'combat-tap-delayed') as Finding;
     expect(fixFor(before, scheme, game, plan(scheme))?.label).toBe(
       'Remove long press and double tap',
@@ -284,7 +284,9 @@ describe('fixes', () => {
   });
 
   it('a menu action on a combat button: take the menu action off', () => {
-    const scheme = deepFreeze(assign(keysScheme(), slot('ship', 'R.index_1', 'long'), 'galaxy'));
+    const scheme = deepFreeze(
+      assign(keysScheme(), slot('ship', 'R.index_1', 'long'), 'galaxy', game),
+    );
     const before = find(scheme, 'menu-with-combat') as Finding;
     const fix = fixFor(before, scheme, game, plan(scheme));
     expect(fix?.label).toBe('Take Galaxy map off');
@@ -294,7 +296,9 @@ describe('fixes', () => {
   });
 
   it('an action on a press that sends nothing: take it off', () => {
-    const scheme = deepFreeze(assign(padScheme(), slot('ship', 'L.index_1', 'long'), 'galaxy'));
+    const scheme = deepFreeze(
+      assign(padScheme(), slot('ship', 'L.index_1', 'long'), 'galaxy', game),
+    );
     const { after } = fixed(scheme, 'sends-nothing');
     expect(find(after, 'sends-nothing')).toBeUndefined();
     expect(after.map['ship']?.['L.index_1']).toEqual({ tap: 'boost' });
@@ -321,8 +325,8 @@ describe('fixes', () => {
 
 describe('history', () => {
   const a = frozen();
-  const b = assign(a, slot('ship', 'L.index_2'), 'gear');
-  const c = assign(b, slot('ship', 'L.index_3'), 'silent');
+  const b = assign(a, slot('ship', 'L.index_2'), 'gear', game);
+  const c = assign(b, slot('ship', 'L.index_3'), 'silent', game);
 
   it('starts with nothing to undo or redo', () => {
     const h = startHistory(a);
@@ -347,7 +351,7 @@ describe('history', () => {
 
   it('forgets the redo stack when a new edit follows an undo', () => {
     const h = undo(commit(commit(startHistory(a), b), c));
-    const d = assign(b, slot('ship', 'L.index_4'), 'hardpoints');
+    const d = assign(b, slot('ship', 'L.index_4'), 'hardpoints', game);
     const next = commit(h, d);
     expect(next.future).toEqual([]);
     expect(next.past).toEqual([a, b]);
@@ -357,7 +361,7 @@ describe('history', () => {
   it('counts a no-op as no edit: same history, nothing to undo', () => {
     const h = startHistory(a);
     expect(commit(h, a)).toBe(h);
-    expect(commit(h, assign(a, slot('ship', 'L.index_1'), 'boost'))).toBe(h);
+    expect(commit(h, assign(a, slot('ship', 'L.index_1'), 'boost', game))).toBe(h);
   });
 
   it('is kept per history object: undoing one never changes another', () => {
@@ -388,9 +392,9 @@ describe('no edit mutates its input', () => {
       message: 'x',
     };
     expect(() => {
-      let s = assign(scheme, slot('ship', 'L.index_2'), 'gear');
-      s = assign(s, slot('ship', 'L.index_1', 'long'), 'galaxy');
-      s = move(s, slot('ship', 'L.index_2'), slot('ship', 'L.index_3'));
+      let s = assign(scheme, slot('ship', 'L.index_2'), 'gear', game);
+      s = assign(s, slot('ship', 'L.index_1', 'long'), 'galaxy', game);
+      s = move(s, slot('ship', 'L.index_2'), slot('ship', 'L.index_3'), game);
       s = clear(s, slot('ship', 'L.index_3'));
       s = setTurbo(s, 'L.index_1', true);
       s = setLatch(s, 'L.index_1', true);
@@ -442,5 +446,115 @@ describe('isTextEntry', () => {
     expect(isTextEntry({ tagName: 'INPUT', type: 'radio' })).toBe(false);
     expect(isTextEntry({ tagName: 'BUTTON' })).toBe(false);
     expect(isTextEntry({ tagName: 'DIV' })).toBe(false);
+  });
+});
+
+describe('controller output: the pad rule', () => {
+  const pinSends = (scheme: Scheme, control: string, press: Slot['press'] = 'tap') => {
+    const p = plan(scheme, padGame);
+    return [...p.units.left.pins, ...p.units.right.pins].find((x) => x.control === control)
+      ?.presses[press];
+  };
+  const pad = (control: string) => ({ kind: 'pad', control });
+  const base = () => deepFreeze(padScheme());
+
+  it('rule 1: an action with a native pad control makes its button send that control', () => {
+    const next = assign(base(), slot('ship', 'L.index_3'), 'hardpoints', padGame);
+    expect(next.padMap['L.index_3']).toBe('Y');
+    expect(pinSends(next, 'L.index_3')).toEqual(pad('Y'));
+  });
+
+  it('rule 1: a moved action brings its control with it, and the old button keeps its own', () => {
+    const next = move(base(), slot('ship', 'L.index_1'), slot('ship', 'L.index_3'), padGame);
+    expect(next.padMap['L.index_3']).toBe('RB');
+    expect(pinSends(next, 'L.index_3')).toEqual(pad('RB'));
+    expect(next.map['ship']?.['L.index_1']).toBeUndefined();
+    expect(pinSends(next, 'L.index_1')).toEqual(pad('RB'));
+  });
+
+  it('rule 1: replaces the control a button sent before', () => {
+    const next = assign(base(), slot('ship', 'L.index_1'), 'hardpoints', padGame);
+    expect(next.padMap['L.index_1']).toBe('Y');
+    expect(pinSends(next, 'L.index_1')).toEqual(pad('Y'));
+  });
+
+  it('rule 1: two buttons may send the same control', () => {
+    const next = assign(base(), slot('ship', 'L.index_3'), 'boost', padGame);
+    expect(next.padMap['L.index_3']).toBe('RB');
+    expect(next.padMap['L.index_1']).toBe('RB');
+  });
+
+  it('rule 1: follows the action of the mode it is dropped in', () => {
+    const next = assign(base(), slot('srv', 'L.index_3'), 'srv_fire', padGame);
+    expect(next.padMap['L.index_3']).toBe('RT');
+  });
+
+  it('rule 2: an action with no native pad control keeps the button its own control', () => {
+    const next = assign(base(), slot('ship', 'L.index_1'), 'gear', padGame);
+    expect(next.padMap).toEqual(padScheme().padMap);
+    expect(next.map['ship']?.['L.index_1']).toEqual({ tap: 'gear' });
+    expect(pinSends(next, 'L.index_1')).toEqual(pad('RB'));
+  });
+
+  it('rule 2: on a button with no pad control it sends nothing, and core says so', () => {
+    const next = assign(base(), slot('ship', 'L.index_4'), 'gear', padGame);
+    expect('L.index_4' in next.padMap).toBe(false);
+    expect(pinSends(next, 'L.index_4')).toBeUndefined();
+    const found = plan(next, padGame).findings.find((f) => f.rule === 'sends-nothing');
+    expect(found?.control).toBe('L.index_4');
+  });
+
+  it('rule 4: clearing takes the label off and the button still sends its control', () => {
+    const next = clear(base(), slot('ship', 'L.index_1'));
+    expect(next.map['ship']?.['L.index_1']).toBeUndefined();
+    expect(next.padMap).toEqual(padScheme().padMap);
+    expect(pinSends(next, 'L.index_1')).toEqual(pad('RB'));
+  });
+
+  it('touches nothing with key output, and nothing for a press other than the tap', () => {
+    const keys = assign(deepFreeze(keysScheme()), slot('ship', 'L.index_3'), 'hardpoints', padGame);
+    expect(keys.padMap).toEqual({});
+    const long = assign(base(), slot('ship', 'L.index_3', 'long'), 'hardpoints', padGame);
+    expect('L.index_3' in long.padMap).toBe(false);
+  });
+
+  it('returns the same scheme when the action is already there and sends its control', () => {
+    const scheme = base();
+    expect(assign(scheme, slot('ship', 'L.index_1'), 'boost', padGame)).toBe(scheme);
+  });
+
+  it('undo and redo carry the pad map with the labels', () => {
+    const start = base();
+    const edited = assign(start, slot('ship', 'L.index_3'), 'hardpoints', padGame);
+    const h = commit(startHistory(start), edited);
+    expect(undo(h).present.padMap).toEqual(padScheme().padMap);
+    expect(redo(undo(h)).present.padMap['L.index_3']).toBe('Y');
+  });
+});
+
+describe('the sends-nothing fix on a fixed control', () => {
+  it('keeps a working tap and takes off only the press that sends nothing', () => {
+    const scheme = deepFreeze({
+      ...keysScheme(),
+      map: { ...keysScheme().map, ship: { 'key.J': { tap: 'fsd', long: 'galaxy' } } },
+    });
+    const before = plan(scheme).findings.find((f) => f.rule === 'sends-nothing');
+    expect(before?.control).toBe('key.J');
+    const fix = fixFor(before as Finding, scheme, game, plan(scheme));
+    const after = (fix as NonNullable<typeof fix>).apply(scheme);
+    expect(after.map['ship']?.['key.J']).toEqual({ tap: 'fsd' });
+    expect(plan(after).findings.find((f) => f.rule === 'sends-nothing')).toBeUndefined();
+  });
+
+  it('takes everything off a control none of the devices has', () => {
+    const scheme = deepFreeze({
+      ...keysScheme(),
+      map: { ...keysScheme().map, ship: { 'nope.1': { tap: 'fsd', long: 'galaxy' } } },
+    });
+    const before = plan(scheme).findings.filter((f) => f.rule === 'sends-nothing');
+    expect(before).toHaveLength(2);
+    const fix = fixFor(before[0] as Finding, scheme, game, plan(scheme));
+    const after = (fix as NonNullable<typeof fix>).apply(scheme);
+    expect(after.map['ship']?.['nope.1']).toBeUndefined();
   });
 });
