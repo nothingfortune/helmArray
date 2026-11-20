@@ -84,21 +84,66 @@ never moves" is kept: the resolver reads it first and only allocates for what's 
 ```
 resolve(scheme, game, devices) → Plan
 Plan = {
-  units:     { left: UnitProfile; right: UnitProfile }   // every pin, fully specified
-  gameFile?: { format; before; after }                    // a whole new file, not a patch list
-  bindSheet?: Row[]                                       // what to press in the game's menu
-  ledger:    Ledger                                       // updated with any new keys
-  findings:  Finding[]                                    // the checks
+  units:        { left?: UnitProfile; right?: UnitProfile } // the setup's units only, every pin
+  bindings:     Binding[]          // every control-press of the setup carrying an action
+  gameBindings: GameBinding[]      // the game's bindings for the setup, whole (below)
+  gameFile?:    { format }         // the file is written: its adapter writes gameBindings
+  bindSheet:    GameBinding[]      // it isn't: the gameBindings that differ from what it ships
+  ledger:       Ledger             // updated with any new keys
+  findings:     Finding[]          // the resolver's own, then the checks
+}
+GameBinding = {
+  set: "keyboard" | "controller"   // which of the game's two binding sets
+  mode; action
+  signal: Signal | null            // what the action is on; null: on nothing in this set
+  native: Signal | null            // what the game ships it on in this set
 }
 ```
+
+**Game bindings** (M4.5) are the representation M5's adapters consume. For each binding set the
+setup uses (controller: the controller, or Azerons sending Xbox controls; keyboard: the
+keyboard, the mouse, or Azerons sending keys) the plan lists **every** action of the game in its
+mode, not only what changed. The game holds whatever setup was applied last, so a setup applied
+after another must be able to put an action back where the game ships it; a diff against the
+shipped bindings could not. An adapter writes the whole set into the game's file (both sets, each
+in the file's own terms); the bind sheet is the rows that differ from what the game ships; the
+Apply drawer lists the rows that differ from the setup applied to the game last (the store's
+applied plans), falling back to what it ships. An action may have two rows in the keyboard set
+(two keys); in the controller set one, or the resolver's `pad-bound-twice` error.
+
+Each action lands on the first of these that applies (`GAME BINDINGS` in `resolve.ts`):
+
+1. A stick of the setup sends what the game ships it on (a key stick's direction keys; an Xbox
+   stick's directions, the Azerons' or the controller's): it stays there. A button carrying it
+   that sends anything else is `stick-key-rebind`.
+2. Placed: on what each control-press of the setup carrying it sends.
+3. Shipped on nothing in this set: on nothing.
+4. Shipped on something that, in this mode, carries an action the game also ships there: kept
+   (the game's own second use of one control: Helldivers 2's Climb on a held A, Interact on the
+   tap).
+5. Shipped on something that carries another action put there: on nothing (displaced).
+6. Shipped on an Xbox control the setup sends, or on a key or mouse button of the setup's own
+   keyboard or mouse, carrying nothing in this mode: on nothing. A control shown empty does
+   nothing.
+7. Otherwise kept: nothing of the setup sends it, or only an Azeron button sending keys for an
+   action of another mode (J4 on the game's own keys).
+
+**One controller set.** A pad control is one live control: the controller's own button and every
+Azeron button sending it (`padSignalOf`). The editor keeps one action per pad control per mode
+(assigning displaces what else was on it; clearing takes the action off every control sending
+it), every control sending it shows that action, and `key-collision` flags any two actions on one
+pad control that get past it. An action moves within one binding set: Fire can be on an Azeron
+button sending RT and on the mouse's left button at once.
 
 How each control-press gets its signal, in order:
 
 1. **Pad output.** The signal is the pad control from the scheme's Azeron→pad map. The game's
    **controller bindings** are rewritten so each pad control does the action the scheme put on
-   it: through the game's file where writable, otherwise as bind sheet rows. The controller, when
-   the setup has one, edits the same controller bindings (the game can't tell it from the
-   Azerons), so the two can't disagree.
+   it: through the game's file where writable, otherwise as bind sheet rows (game bindings,
+   below). The controller, when the setup has one, edits the same controller bindings (the game
+   can't tell it from the Azerons), so the two can't disagree. A button sending no pad control
+   gets a free one when an action is put on it: the one the game ships the action on if free,
+   else the first free one; a button emptied in every mode stops sending.
    Keyboard and mouse controls in the setup attach the same way through the **keyboard
    bindings**: the action's key becomes the key the scheme put it on.
 2. **Keys, game file writable.** Ledger first; otherwise the next free key from the pool
@@ -169,7 +214,9 @@ open Play view, quit.
 ## Storage
 
 - `%APPDATA%/helmArray/`: `games/<id>.json`, `schemes/<id>.json`, `settings.json`.
-  Each file carries `schemaVersion`; migrations run on load, one function per version.
+  Each file carries `schemaVersion`; migrations run on load, one function per version. (Scheme
+  version 3 added `devices`: an older scheme is both Azerons and nothing else. Applied plan
+  version 2 added `gameBindings`: an older plan claims none.)
 - **Snapshots:** every Apply saves the scheme and the plan it produced. History is a list in
   the UI, restore is one click.
 - **Undo** in the editor is in memory, per scheme. Edits autosave; Apply is separate.

@@ -5,7 +5,10 @@
 import { clone } from './clone';
 import type { AppSettings, Game, Scheme } from './model';
 import type { Plan } from './plan';
-import { DEFAULT_TURBO_INTERVAL } from './model';
+import { AZERONS_ONLY, DEFAULT_TURBO_INTERVAL } from './model';
+
+/** Rules that no longer exist: the editor's findings about the game's fixed pad bindings (M4). */
+const RETIRED_RULES: readonly string[] = ['pad-mismatch', 'pad-default-unknown'];
 
 /** What a stored file holds, by kind. */
 export interface StoredKinds {
@@ -41,10 +44,39 @@ export const MIGRATIONS: Readonly<Record<StoredKind, readonly Migration[]>> = {
       }
       return doc;
     },
+    // 2 → 3: setups. A scheme saved before them always meant both Azerons and nothing else. The
+    // editor's two findings about the game's fixed pad bindings are gone with that model, so what
+    // was kept of them is dropped.
+    (doc) => {
+      const accepted = (doc['accepted'] ?? []) as { rule?: unknown }[];
+      return {
+        ...doc,
+        devices: { ...AZERONS_ONLY },
+        accepted: accepted.filter((a) => !RETIRED_RULES.includes(String(a.rule))),
+      };
+    },
   ],
   game: [],
   settings: [],
-  applied: [],
+  applied: [
+    // 1 → 2: game bindings. A plan saved before them claims none; its bind sheet rows (key output
+    // only, so keys) say which set they are in, and that the shipped binding wasn't recorded.
+    (doc) => {
+      const rows = (doc['bindSheet'] ?? []) as Record<string, unknown>[];
+      return {
+        ...doc,
+        gameBindings: [],
+        bindSheet: rows.map((row) => ({
+          set:
+            (row['signal'] as { kind?: unknown } | undefined)?.kind === 'pad'
+              ? 'controller'
+              : 'keyboard',
+          ...row,
+          native: null,
+        })),
+      };
+    },
+  ],
 };
 
 /** The version this app writes, by kind. */

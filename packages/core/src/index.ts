@@ -11,4 +11,5 @@ export * from './presets/keys';
 export * from './checks';
 export * from './signal';
 export * from './schema';
+export * from './setup';
 export * from './games/helldivers2';

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { BUILT_IN_DEVICES } from './devices/index';
 import { helldivers2 } from './games/helldivers2';
 import type { Game, Scheme, Signal, StickDirections } from './model';
+import { AZERONS_ONLY } from './model';
 import type { Plan } from './plan';
 import { gameKeysPreset } from './presets/keys';
 import { xboxControllerPreset } from './presets/xbox';
@@ -68,8 +69,9 @@ function fileWritten(game: Game, over: Over = {}): Scheme {
 }
 const run = (scheme: Scheme, game: Game) => resolve(scheme, game, BUILT_IN_DEVICES);
 const sent = (plan: Plan, control: string) =>
-  [...plan.units.left.pins, ...plan.units.right.pins].find((p) => p.control === control)?.presses
-    .tap;
+  [...(plan.units.left?.pins ?? []), ...(plan.units.right?.pins ?? [])].find(
+    (p) => p.control === control,
+  )?.presses.tap;
 const found = (plan: Plan, rule: string) => plan.findings.filter((f) => f.rule === rule);
 const bothSticks = { 'L.stick': keysStick(WASD), 'R.stick': keysStick(WASD) };
 
@@ -112,10 +114,11 @@ describe('stick keys, rule 3: one action on a button and a stick is allowed', ()
 });
 
 describe('stick keys, rule 4: different actions on one key collide', () => {
-  const clash = (map: Scheme['map'], ledger: Scheme['ledger']) =>
+  const clash = (map: Scheme['map'], ledger: Scheme['ledger'], keyboard = false) =>
     found(
       run(
         fileWritten(skiff, {
+          devices: { ...AZERONS_ONLY, keyboard },
           behaviour: { 'L.stick': keysStick({ ...WASD, up: key('Tab') }) },
           ledger,
           map,
@@ -132,7 +135,7 @@ describe('stick keys, rule 4: different actions on one key collide', () => {
   });
 
   it('is an error when a keyboard key sends it for another action', () => {
-    expect(clash({ ship: { 'key.Tab': { tap: 'map' } } }, {})).toEqual([
+    expect(clash({ ship: { 'key.Tab': { tap: 'map' } } }, {}, true)).toEqual([
       expect.objectContaining({ control: 'L.stick', mode: 'ship' }),
     ]);
   });
@@ -190,8 +193,8 @@ describe('stick keys, rule 1: a stick not in key mode sends nothing', () => {
       skiff,
     );
     expect(sent(plan, 'L.index_1')).toEqual(key('Insert'));
-    expect(plan.units.left.stick.mode).toBe('pad-left');
-    expect(plan.units.left.stick).not.toHaveProperty('directions');
+    expect(plan.units.left?.stick.mode).toBe('pad-left');
+    expect(plan.units.left?.stick).not.toHaveProperty('directions');
   });
 
   it('is not collided: its old directions clash with nothing', () => {
@@ -263,7 +266,15 @@ describe('stick keys, rule 5: nothing moves an action off a key the stick sends'
       }),
       helldivers2,
     );
-    expect(plan.bindSheet).toEqual([{ mode: 'default', action: 'sprint', signal: key('Insert') }]);
+    expect(plan.bindSheet).toEqual([
+      {
+        set: 'keyboard',
+        mode: 'default',
+        action: 'sprint',
+        signal: key('Insert'),
+        native: key('LShift'),
+      },
+    ]);
   });
 
   it('says so with the game file written too', () => {
@@ -290,7 +301,7 @@ describe('stick keys and the presets', () => {
   it('the Xbox controller preset has pad sticks and no directions, so no stick key is reserved or checked', () => {
     const plan = run(xboxControllerPreset(helldivers2), helldivers2);
     for (const unit of [plan.units.left, plan.units.right]) {
-      expect(unit.stick).not.toHaveProperty('directions');
+      expect(unit?.stick).not.toHaveProperty('directions');
     }
     expect(found(plan, 'stick-no-directions')).toEqual([]);
     expect(found(plan, 'stick-key-rebind')).toEqual([]);

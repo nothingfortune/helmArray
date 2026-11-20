@@ -148,13 +148,13 @@ themselves. Nothing from the previous UI is kept.
 
 | Rule                                                                           | Level   |
 | ------------------------------------------------------------------------------ | ------- |
-| Two actions live at once on the same key                                       | error   |
-| A button whose action sends nothing                                            | error   |
-| A required action on no button                                                 | error   |
+| Two actions live at once on the same key (an Xbox control counts once: the controller's button and an Azeron button sending it are one) | error   |
+| A button whose action sends nothing (or is on a device the setup doesn't use)  | error   |
+| A required action on no button (a button that only happens to send its shipped Xbox control doesn't count: the game is rebound to the setup) | error   |
 | A menu action (Escape) on a combat button you mash                             | error   |
 | Long press / double tap on a combat button (they delay the tap)                | warning |
 | Hold-to-latch on movement or boost                                             | warning |
-| Xbox output and keys mixed in one scheme (Everspace 2 stutters)                | warning |
+| Xbox output and keys mixed in one scheme (Everspace 2 stutters): a stick, or a setup's devices | warning |
 | Stick not in key mode, for a game that needs it (Everspace 2)                  | error   |
 
 ## Facts the design has to respect

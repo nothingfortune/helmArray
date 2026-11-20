@@ -8,7 +8,6 @@ import type {
   Device,
   Game,
   ModeId,
-  PadControl,
   Role,
   Scheme,
   Signal,
@@ -17,6 +16,8 @@ import type {
 import { PRESSES, STICK_DIRECTIONS } from './model';
 import type { Finding, PinPlan, Plan, UnitProfile } from './plan';
 import { signalId } from './signal';
+import type { Setup } from './setup';
+import { inSetup, setsUsed, setupOf, stickSends } from './setup';
 
 /** Every check, in the order its findings are listed. */
 export const CHECK_RULES = [
@@ -54,6 +55,7 @@ interface KnownControl {
 interface Context {
   scheme: Scheme;
   game: Game;
+  setup: Setup;
   plan: Unchecked;
   /** Findings the resolver already made: a slot it reported isn't reported again. */
   resolved: readonly Finding[];
@@ -146,10 +148,19 @@ function actionsOn(ctx: Context, control: ControlId): ActionId[] {
   return out;
 }
 
-const pinsInOrder = (plan: Unchecked) => [...plan.units.left.pins, ...plan.units.right.pins];
+/** The pins of the units the setup uses, left first. */
+const pinsInOrder = (plan: Unchecked) => [
+  ...(plan.units.left?.pins ?? []),
+  ...(plan.units.right?.pins ?? []),
+];
+/** The sticks of the units the setup uses, left first. */
 const sticks = (plan: Unchecked): [ControlId, UnitProfile['stick']][] => [
-  ['L.stick', plan.units.left.stick],
-  ['R.stick', plan.units.right.stick],
+  ...(plan.units.left
+    ? [['L.stick', plan.units.left.stick] as [ControlId, UnitProfile['stick']]]
+    : []),
+  ...(plan.units.right
+    ? [['R.stick', plan.units.right.stick] as [ControlId, UnitProfile['stick']]]
+    : []),
 ];
 
 /** Every key a stick in key mode sends, with the stick and direction that sends it. */
@@ -174,12 +185,10 @@ function keyCollision(ctx: Context): Finding[] {
       const id = signalId(signal);
       bySignal.set(id, [...(bySignal.get(id) ?? []), { control, action, signal }]);
     };
+    // The units' control-presses and the setup's fixed controls (a key, a mouse button, a
+    // controller button): a controller button and an Azeron button sending the same pad control
+    // are one live control in the game's shared controller set.
     for (const b of ctx.plan.bindings) if (b.mode === mode.id) add(b.control, b.action, b.signal);
-    for (const control of controlsIn(ctx, mode.id)) {
-      const sends = ctx.known.get(control)?.sends;
-      const action = ctx.scheme.map[mode.id]?.[control]?.tap;
-      if (sends && action !== undefined) add(control, action, sends);
-    }
     const reported = new Set<ControlId>();
     for (const control of [...ctx.known.keys()]) {
       for (const group of bySignal.values()) {
@@ -217,11 +226,6 @@ function keyCollision(ctx: Context): Finding[] {
       const live: { action: ActionId; signal: Signal }[] = ctx.plan.bindings.filter(
         (b) => b.mode === mode.id,
       );
-      for (const fixed of controlsIn(ctx, mode.id)) {
-        const sends = ctx.known.get(fixed)?.sends;
-        const action = ctx.scheme.map[mode.id]?.[fixed]?.tap;
-        if (sends && action !== undefined) live.push({ action, signal: sends });
-      }
       const clash = live.find(
         (b) => signalId(b.signal) === signalId(signal) && !reached.has(b.action),
       );
@@ -247,6 +251,8 @@ function sendsNothing(ctx: Context): Finding[] {
     let why: string | undefined;
     if (!known) {
       why = 'is on a control none of your devices has';
+    } else if (!inSetup(ctx.setup, control)) {
+      why = "is on a control this setup doesn't use";
     } else if (known.azeron && known.button) {
       if (ctx.pins.get(control)?.presses[press] || flagged.has(control)) continue;
       why =
@@ -273,35 +279,35 @@ function sendsNothing(ctx: Context): Finding[] {
   return out;
 }
 
-const LEFT_STICK: readonly PadControl[] = ['LS_UP', 'LS_DOWN', 'LS_LEFT', 'LS_RIGHT'];
-const RIGHT_STICK: readonly PadControl[] = ['RS_UP', 'RS_DOWN', 'RS_LEFT', 'RS_RIGHT'];
-
-/** A required action that is on no button in its mode. */
+/**
+ * A required action that is on no button in its mode. The game is rebound to the setup, so an
+ * action is reached only by a control of the setup carrying it, or by a stick of the setup sending
+ * what the game ships it on (a key stick's direction keys; an Xbox stick, the Azerons' or the
+ * controller's, and its four directions). What a button happens to send is never enough: the
+ * game's controller bindings follow the setup, not the other way round.
+ */
 function missingRequired(ctx: Context): Finding[] {
   const onButton = new Set<string>();
-  for (const p of placed(ctx)) onButton.add(`${p.mode}|${p.action}`);
-  // With Xbox output the game listens to its own pad layout: an action is reachable when a
-  // button or a stick sends the pad control it ships on.
-  const padSent = new Set<PadControl>();
-  if (ctx.scheme.output === 'pad') {
-    for (const pin of pinsInOrder(ctx.plan)) {
-      const tap = pin.presses.tap;
-      if (tap?.kind === 'pad') padSent.add(tap.control);
-    }
-    for (const [, stick] of sticks(ctx.plan)) {
-      if (stick.mode === 'pad-left') LEFT_STICK.forEach((c) => padSent.add(c));
-      if (stick.mode === 'pad-right') RIGHT_STICK.forEach((c) => padSent.add(c));
-    }
+  for (const p of placed(ctx)) {
+    if (inSetup(ctx.setup, p.control)) onButton.add(`${p.mode}|${p.action}`);
   }
-  // A key stick reaches an action when a direction sends the key the game ships it on.
-  const stickSent = new Set(stickKeys(ctx.plan).map((k) => signalId(k.signal)));
+  const used = setsUsed(ctx.scheme);
+  const stickSent = stickSends(ctx.plan, ctx.setup);
+  const reached = (signal: Signal | undefined) =>
+    signal !== undefined && stickSent.has(signalId(signal));
   const out: Finding[] = [];
   for (const mode of ctx.game.modes) {
     for (const action of ctx.game.actions) {
       if (action.mode !== mode.id || !action.required) continue;
       if (onButton.has(`${mode.id}|${action.id}`)) continue;
-      if (action.native?.key !== undefined && stickSent.has(signalId(action.native.key))) continue;
-      if (action.native?.pad !== undefined && padSent.has(action.native.pad)) continue;
+      if (used.includes('keyboard') && reached(action.native?.key)) continue;
+      const pad = action.native?.pad;
+      if (
+        used.includes('controller') &&
+        pad !== undefined &&
+        reached({ kind: 'pad', control: pad })
+      )
+        continue;
       out.push({
         rule: 'missing-required',
         severity: 'error',
@@ -375,9 +381,21 @@ function holdOnMovement(ctx: Context): Finding[] {
   return out;
 }
 
-/** A stick that sends keyboard or mouse while the buttons send Xbox, or the other way round. */
+/**
+ * Xbox output and keys mixed in one setup: a stick that sends keyboard or mouse while the buttons
+ * send Xbox, or the other way round; and a setup whose devices send both (a controller, or Azerons
+ * as one, with a keyboard, a mouse, or Azerons sending keys).
+ */
 function mixedInput(ctx: Context): Finding[] {
   const out: Finding[] = [];
+  if (setsUsed(ctx.scheme).length === 2) {
+    out.push({
+      rule: 'mixed-input',
+      severity: 'warning',
+      message:
+        'This setup mixes an Xbox controller with keyboard and mouse. Some games stutter switching between the two.',
+    });
+  }
   for (const [control, stick] of sticks(ctx.plan)) {
     const padStick = stick.mode === 'pad-left' || stick.mode === 'pad-right';
     if ((ctx.scheme.output === 'pad') === padStick) continue;
@@ -448,6 +466,7 @@ export function runChecks(
   const ctx: Context = {
     scheme,
     game,
+    setup: setupOf(scheme.devices),
     plan,
     resolved,
     known: knownControls(devices),

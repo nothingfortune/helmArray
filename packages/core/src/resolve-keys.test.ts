@@ -95,7 +95,9 @@ const key = (code: string): Signal => ({ kind: 'key', code }) as Signal;
 const resolverFindings = (plan: Plan) =>
   plan.findings.filter((f) => !(CHECK_RULES as readonly string[]).includes(f.rule));
 const sent = (plan: Plan, control: string) =>
-  [...plan.units.left.pins, ...plan.units.right.pins].find((p) => p.control === control)?.presses;
+  [...(plan.units.left?.pins ?? []), ...(plan.units.right?.pins ?? [])].find(
+    (p) => p.control === control,
+  )?.presses;
 
 describe('keys, game file written', () => {
   const s = scheme({
@@ -390,6 +392,10 @@ describe('the pool', () => {
   });
 });
 
+// What the made-up game ships Shoot and Zoom on: its bind sheet rows say what they change from.
+const LEFT_CLICK = { kind: 'mouse', button: 'left' } as const;
+const SCROLL_UP = { kind: 'scroll', dir: 'up', speed: 33 } as const;
+
 describe("keys, the game's own", () => {
   const own = (map: Scheme['map']) =>
     resolve(scheme({ writeGameFile: false, map }), game, BUILT_IN_DEVICES);
@@ -409,7 +415,9 @@ describe("keys, the game's own", () => {
     });
     expect(sent(plan, 'L.index_1')).toEqual({ tap: { kind: 'mouse', button: 'left' } });
     expect(sent(plan, 'R.index_1')).toEqual({ tap: key('Insert') });
-    expect(plan.bindSheet).toEqual([{ mode: 'foot', action: 'shoot', signal: key('Insert') }]);
+    expect(plan.bindSheet).toEqual([
+      { set: 'keyboard', mode: 'foot', action: 'shoot', signal: key('Insert'), native: LEFT_CLICK },
+    ]);
   });
 
   it('sends a scroll on a tap, as the game has it', () => {
@@ -423,14 +431,16 @@ describe("keys, the game's own", () => {
     expect(sent(plan, 'L.index_1')).toEqual({ long: key('Insert') });
     expect(sent(plan, 'L.index_2')).toEqual({ double: key('Home') });
     expect(plan.bindSheet).toEqual([
-      { mode: 'ship', action: 'zoom', signal: key('Insert') },
-      { mode: 'ship', action: 'zoom', signal: key('Home') },
+      { set: 'keyboard', mode: 'ship', action: 'zoom', signal: key('Insert'), native: SCROLL_UP },
+      { set: 'keyboard', mode: 'ship', action: 'zoom', signal: key('Home'), native: SCROLL_UP },
     ]);
   });
 
   it('puts an action with no key of its own on the bind sheet', () => {
     const plan = own({ foot: { 'L.index_1': { tap: 'emote' } } });
-    expect(plan.bindSheet).toEqual([{ mode: 'foot', action: 'emote', signal: key('Insert') }]);
+    expect(plan.bindSheet).toEqual([
+      { set: 'keyboard', mode: 'foot', action: 'emote', signal: key('Insert'), native: null },
+    ]);
   });
 
   it("keeps one key across modes: the first mode's, and a row for the other", () => {
@@ -439,7 +449,15 @@ describe("keys, the game's own", () => {
       foot: { 'L.index_1': { tap: 'sprint' } },
     });
     expect(sent(plan, 'L.index_1')).toEqual({ tap: key('Tab') });
-    expect(plan.bindSheet).toEqual([{ mode: 'foot', action: 'sprint', signal: key('Tab') }]);
+    expect(plan.bindSheet).toEqual([
+      {
+        set: 'keyboard',
+        mode: 'foot',
+        action: 'sprint',
+        signal: key('Tab'),
+        native: key('LShift'),
+      },
+    ]);
   });
 });
 

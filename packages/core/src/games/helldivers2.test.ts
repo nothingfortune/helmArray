@@ -110,8 +110,8 @@ describe('Helldivers 2 through the presets and the resolver', () => {
   it('resolves the Xbox controller preset with no errors: every required action is reachable', () => {
     const plan = resolve(xboxControllerPreset(helldivers2), helldivers2, BUILT_IN_DEVICES);
     expect(plan.findings.filter((f) => f.severity === 'error')).toEqual([]);
-    expect(plan.units.left.stick.mode).toBe('pad-left');
-    expect(plan.units.right.stick.mode).toBe('pad-right');
+    expect(plan.units.left?.stick.mode).toBe('pad-left');
+    expect(plan.units.right?.stick.mode).toBe('pad-right');
   });
 
   it('puts the tap action on a control that two actions share, not the hold or double tap', () => {

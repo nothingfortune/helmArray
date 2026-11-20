@@ -191,20 +191,51 @@ export interface Behaviour {
 
 export type RuleId = string;
 
+/** Which Azerons a setup uses. `left` is the left unit and the mouse: always the left unit. */
+export type AzeronUse = 'both' | 'left' | 'none';
+export const AZERON_USES: readonly AzeronUse[] = ['both', 'left', 'none'];
+
+/** What a setup plays with (docs/plans/01-features.md, *Setups*). */
+export interface SetupDevices {
+  azerons: AzeronUse;
+  keyboard: boolean;
+  /** Always true in effect with `azerons: 'left'` (see `setupOf`). */
+  mouse: boolean;
+  controller: boolean;
+}
+
+/** What a scheme saved before setups had devices meant: both Azerons, nothing else. */
+export const AZERONS_ONLY: Readonly<SetupDevices> = {
+  azerons: 'both',
+  keyboard: false,
+  mouse: false,
+  controller: false,
+};
+
+/**
+ * A setup: the app keeps several per game, and Apply puts one onto the devices and the game.
+ * Putting an action on a control rebinds the game: its controller bindings for the controller and
+ * for Azerons sending Xbox controls, its keyboard bindings for the keyboard, the mouse and Azerons
+ * sending keys. The game's shipped bindings (`Action.native`) are only where a new setup starts.
+ */
 export interface Scheme {
   id: string;
   gameId: string;
   name: string;
+  devices: SetupDevices;
+  /** What the Azerons send: Xbox controls (`pad`) or keys. */
   output: 'pad' | 'keys';
   /**
-   * Pad output: which Xbox control each Azeron button sends. The same in every mode; the
-   * game's own pad bindings decide what it does. Edited in the app; presets fill it.
+   * Pad output: which Xbox control each Azeron button sends, the same in every mode. The scheme's
+   * own, edited in the app: the game's controller bindings are rewritten to follow it, never the
+   * other way round. Presets fill it.
    */
   padMap: Record<ControlId, PadControl>;
   /**
-   * Key output only. True: the units send keys from the pool and the game's file is written to
-   * listen for them. False: the units send the game's own keys and its file is left alone; what
-   * can't be matched becomes a bind sheet row. Ignored for a game with no writable file.
+   * True: the game's file is written with the setup's bindings (and, with key output, the units
+   * send keys from the pool). False: the file is left alone; with key output the units send the
+   * game's own keys, and every binding the setup changes becomes a bind sheet row. Ignored for a
+   * game with no writable file.
    */
   writeGameFile: boolean;
   /** Per mode, per control, per press: which action. */
