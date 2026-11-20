@@ -199,9 +199,9 @@ function keyCollision(ctx: Context): Finding[] {
       }
     }
   }
-  // A stick direction is live in every mode: a button sending its key does both at once, unless
-  // it is the same action (a button and a stick both sending the game's own key for it is a
-  // second way to do one thing). The stick reaches the actions the game ships on its key.
+  // A stick direction is live in every mode (rules in resolve.ts: STICK DIRECTION KEYS). A button
+  // or fixed control sending its key does both at once, unless it is the same action: a second
+  // way to do one thing. The stick reaches the actions the game ships on its key.
   for (const { control, direction, signal } of stickKeys(ctx.plan)) {
     for (const mode of ctx.game.modes) {
       const reached = new Set(
@@ -214,9 +214,16 @@ function keyCollision(ctx: Context): Finding[] {
           )
           .map((a) => a.id),
       );
-      const clash = ctx.plan.bindings.find(
-        (b) =>
-          b.mode === mode.id && signalId(b.signal) === signalId(signal) && !reached.has(b.action),
+      const live: { action: ActionId; signal: Signal }[] = ctx.plan.bindings.filter(
+        (b) => b.mode === mode.id,
+      );
+      for (const fixed of controlsIn(ctx, mode.id)) {
+        const sends = ctx.known.get(fixed)?.sends;
+        const action = ctx.scheme.map[mode.id]?.[fixed]?.tap;
+        if (sends && action !== undefined) live.push({ action, signal: sends });
+      }
+      const clash = live.find(
+        (b) => signalId(b.signal) === signalId(signal) && !reached.has(b.action),
       );
       if (!clash) continue;
       out.push({
