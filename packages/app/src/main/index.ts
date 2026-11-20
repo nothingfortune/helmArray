@@ -211,7 +211,7 @@ async function startServices(): Promise<() => Promise<void>> {
       await helm.activeChanged();
     },
     previewApply: (schemeId) => apply.preview(schemeId),
-    apply: (schemeId) => apply.apply(schemeId),
+    apply: (schemeId, fingerprint) => apply.apply(schemeId, fingerprint),
   });
 
   helm.start();

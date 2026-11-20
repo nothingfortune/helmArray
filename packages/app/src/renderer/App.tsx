@@ -20,6 +20,7 @@ export function App({ state }: { state: AppState | null }) {
             setScreen({ name: 'library' });
           }}
           onApply={() => setApplying(true)}
+          historyOff={applying}
         />
         <ApplyDrawer
           schemeId={screen.schemeId}

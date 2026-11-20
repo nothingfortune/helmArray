@@ -70,8 +70,13 @@ export function ApplyDrawer({ schemeId, open, onClose, state }: ApplyDrawerProps
     }
     if (drawer.phase !== 'ready') return;
     dispatch({ type: 'apply' });
-    window.helm.apply(schemeId).then(
-      (result) => dispatch({ type: 'applied', result }),
+    // Exactly the layout that was shown: if the scheme changed since, main refuses and the
+    // drawer looks again.
+    window.helm.apply(schemeId, drawer.preview.fingerprint).then(
+      (result) => {
+        dispatch({ type: 'applied', result });
+        if (result.changed === true) look();
+      },
       (error: unknown) =>
         dispatch({
           type: 'applyFailed',
@@ -96,6 +101,11 @@ export function ApplyDrawer({ schemeId, open, onClose, state }: ApplyDrawerProps
           </div>
 
           <div className="apply-body" aria-busy={drawer.phase === 'applying'}>
+            {view.notice !== null && (
+              <p className="notice tone-warning" role="status">
+                {view.notice}
+              </p>
+            )}
             {view.loading !== null && <p className="hint">{view.loading}</p>}
             {view.unavailable !== null && (
               <p className="notice tone-error" role="alert">

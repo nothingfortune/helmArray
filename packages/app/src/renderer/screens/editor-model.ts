@@ -354,6 +354,14 @@ export function historyShortcut(e: {
   return null;
 }
 
+/** `historyShortcut`, or nothing at all while the shortcuts are off. */
+export function historyAction(
+  e: Parameters<typeof historyShortcut>[0],
+  enabled: boolean,
+): 'undo' | 'redo' | null {
+  return enabled ? historyShortcut(e) : null;
+}
+
 const NON_TEXT_INPUTS = [
   'checkbox',
   'radio',

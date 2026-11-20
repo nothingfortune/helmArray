@@ -5,10 +5,11 @@
 import type { AppState, ApplyPreview, ApplyResult, ApplyUnitChange } from '../../shared/api';
 
 export type DrawerState =
-  | { phase: 'loading' }
+  /** `notice`: why it is looking again (the scheme changed under the drawer). */
+  | { phase: 'loading'; notice?: string }
   /** The preview could not be had at all (the main process did not answer). */
   | { phase: 'unavailable'; message: string }
-  | { phase: 'ready'; preview: ApplyPreview }
+  | { phase: 'ready'; preview: ApplyPreview; notice?: string }
   | { phase: 'applying'; preview: ApplyPreview }
   | { phase: 'done'; preview: ApplyPreview; result: ApplyResult };
 
@@ -33,9 +34,14 @@ export function reduce(state: DrawerState, event: DrawerEvent): DrawerState {
       return START;
     case 'preview':
       // A fresh look replaces a stale one, but never what is being written or has been shown.
-      return state.phase === 'loading' || state.phase === 'unavailable' || state.phase === 'ready'
-        ? { phase: 'ready', preview: event.preview }
-        : state;
+      if (state.phase === 'loading' || state.phase === 'ready') {
+        return {
+          phase: 'ready',
+          preview: event.preview,
+          ...(state.notice !== undefined && { notice: state.notice }),
+        };
+      }
+      return state.phase === 'unavailable' ? { phase: 'ready', preview: event.preview } : state;
     case 'previewFailed':
       return state.phase === 'loading' || state.phase === 'unavailable'
         ? { phase: 'unavailable', message: event.message }
@@ -45,9 +51,11 @@ export function reduce(state: DrawerState, event: DrawerEvent): DrawerState {
         ? { phase: 'applying', preview: state.preview }
         : state;
     case 'applied':
-      return state.phase === 'applying'
-        ? { phase: 'done', preview: state.preview, result: event.result }
-        : state;
+      if (state.phase !== 'applying') return state;
+      // Refused because the scheme changed since the preview: nothing was written. Look again,
+      // and say why the layout shown is not the one that was.
+      if (event.result.changed === true) return { phase: 'loading', notice: event.result.message };
+      return { phase: 'done', preview: state.preview, result: event.result };
     case 'applyFailed':
       return state.phase === 'applying'
         ? {
@@ -93,6 +101,8 @@ export interface DrawerView {
   loading: string | null;
   /** The preview could not be had, in one sentence, else null. */
   unavailable: string | null;
+  /** Why the layout shown is not the one before (it changed since), else null. */
+  notice: string | null;
   checks: { ok: boolean; text: string }[];
   sections: UnitSection[];
   /** Shown while it writes, else null. */
@@ -147,13 +157,14 @@ export function unitSection(unit: ApplyUnitChange, azeronOpen: boolean): UnitSec
 
 export function drawerView(state: DrawerState): DrawerView {
   const closed: Pick<DrawerView, 'sections' | 'checks'> = { sections: [], checks: [] };
-  const idle = { progress: null, result: null, loading: null, unavailable: null };
+  const idle = { progress: null, result: null, loading: null, unavailable: null, notice: null };
   if (state.phase === 'loading') {
     return {
       title: 'Apply',
       subtitle: 'What changes',
       ...idle,
       loading: 'Reading your Azerons…',
+      notice: state.notice ?? null,
       ...closed,
       cancel: { label: 'Cancel', disabled: false },
       apply: { label: 'Apply', disabled: true },
@@ -182,6 +193,7 @@ export function drawerView(state: DrawerState): DrawerView {
     return {
       ...head,
       ...idle,
+      notice: state.notice ?? null,
       checks: preview.checks,
       sections,
       cancel: { label: 'Cancel', disabled: false },

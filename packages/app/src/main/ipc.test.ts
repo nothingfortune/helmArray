@@ -35,6 +35,7 @@ const PREVIEW: ApplyPreview = {
   schemeId: SCHEME.id,
   schemeName: 'Skiff',
   gameName: 'Skiff',
+  fingerprint: 'abc',
   ready: true,
   azeronOpen: false,
   busy: false,
@@ -173,14 +174,16 @@ describe('the IPC channels', () => {
   it('passes a scheme id to Apply and its preview, and refuses what is not an id', async () => {
     const { call, calls } = setup();
     expect(await call(CHANNELS.previewApply, 'skiff-own-keys')).toEqual(PREVIEW);
-    expect(await call(CHANNELS.apply, 'skiff-own-keys')).toEqual({
+    expect(await call(CHANNELS.apply, 'skiff-own-keys', 'abc')).toEqual({
       ok: true,
       message: 'Done.',
       units: [],
     });
     expect(calls.previewApply).toHaveBeenCalledWith('skiff-own-keys');
-    expect(calls.apply).toHaveBeenCalledWith('skiff-own-keys');
-    await expect(call(CHANNELS.apply, '../x')).rejects.toThrow(TypeError);
+    expect(calls.apply).toHaveBeenCalledWith('skiff-own-keys', 'abc');
+    await expect(call(CHANNELS.apply, '../x', 'abc')).rejects.toThrow(TypeError);
+    await expect(call(CHANNELS.apply, 'skiff-own-keys')).rejects.toThrow(TypeError);
+    await expect(call(CHANNELS.apply, 'skiff-own-keys', 7)).rejects.toThrow(TypeError);
     await expect(call(CHANNELS.previewApply, 42)).rejects.toThrow(TypeError);
     expect(calls.apply).toHaveBeenCalledTimes(1);
   });

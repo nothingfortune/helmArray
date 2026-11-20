@@ -22,6 +22,7 @@ const preview = (over: Partial<ApplyPreview> = {}): ApplyPreview => ({
   schemeId: 'skiff-main',
   schemeName: 'Main',
   gameName: 'Skiff',
+  fingerprint: 'f1',
   ready: true,
   azeronOpen: false,
   busy: false,
@@ -137,6 +138,50 @@ describe('the Apply drawer flow', () => {
     expect(view.result?.lines).toEqual(['The left unit runs the layout in slot 1.']);
     expect(view.apply).toEqual({ label: 'Try again', disabled: false });
     expect(reduce(done, { type: 'retry' })).toBe(START);
+  });
+
+  describe('when the scheme changed since the preview', () => {
+    const CHANGED: ApplyResult = {
+      ok: false,
+      changed: true,
+      message: 'The layout changed since the preview: look again.',
+      units: [],
+    };
+
+    it('goes back to looking, with the reason, instead of ending as a failure', () => {
+      const state = reduce(reduce(ready(), { type: 'apply' }), {
+        type: 'applied',
+        result: CHANGED,
+      });
+      expect(state).toEqual({ phase: 'loading', notice: CHANGED.message });
+      expect(drawerView(state)).toMatchObject({
+        loading: 'Reading your Azerons…',
+        notice: CHANGED.message,
+        result: null,
+      });
+    });
+
+    it('shows the new preview with the reason kept, and Apply allowed again', () => {
+      const looking = reduce(reduce(ready(), { type: 'apply' }), {
+        type: 'applied',
+        result: CHANGED,
+      });
+      const next = reduce(looking, { type: 'preview', preview: preview({ fingerprint: 'f2' }) });
+      expect(next).toMatchObject({ phase: 'ready', notice: CHANGED.message });
+      expect(canApply(next)).toBe(true);
+      expect(drawerView(next).notice).toBe(CHANGED.message);
+      // The next apply is of the layout now shown.
+      expect(next.phase === 'ready' && next.preview.fingerprint).toBe('f2');
+    });
+
+    it('says nothing of a change on an ordinary preview, or a later apply', () => {
+      expect(drawerView(ready()).notice).toBeNull();
+      const applying = reduce(
+        reduce(reduce(ready(), { type: 'apply' }), { type: 'applied', result: CHANGED }),
+        { type: 'preview', preview: preview() },
+      );
+      expect(drawerView(reduce(applying, { type: 'apply' })).notice).toBeNull();
+    });
   });
 
   it('does not offer to retry after a success', () => {

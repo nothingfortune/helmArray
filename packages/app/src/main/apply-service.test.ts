@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Game, Plan, Scheme } from '@helmarray/core';
 import { BUILT_IN_DEVICES, gameKeysPreset, resolve } from '@helmarray/core';
 import { Command, FakeUnit, parseHostReport } from '@helmarray/azeron';
+import { planFingerprint } from './plan-fingerprint';
 import { createApplyService } from './apply-service';
 import type { ApplyServiceDeps } from './apply-service';
 import type { ClosableTransport } from './devices';
@@ -38,6 +39,8 @@ const scheme: Scheme = {
   },
 };
 const plan: Plan = resolve(scheme, game, BUILT_IN_DEVICES);
+/** What a preview of the scheme would have given: the layout the person agreed to. */
+const fp = (s: Scheme) => planFingerprint(resolve(s, game, BUILT_IN_DEVICES));
 
 const LEFT = 49229;
 const RIGHT = 29993;
@@ -184,7 +187,7 @@ describe('Apply as the windows ask for it', () => {
 
   it('applies: both units hold the layout, and only then is it remembered and made active', async () => {
     r = await rig();
-    const result = await r.service.apply(scheme.id);
+    const result = await r.service.apply(scheme.id, fp(scheme));
     expect(result.ok).toBe(true);
     expect(result.message).toBe('Both units now run the layout.');
     expect(result.units.map((u) => [u.hand, u.status])).toEqual([
@@ -209,8 +212,8 @@ describe('Apply as the windows ask for it', () => {
 
   it('is nothing to do on a second apply of the same scheme, and still remembers it', async () => {
     r = await rig();
-    await r.service.apply(scheme.id);
-    const again = await r.service.apply(scheme.id);
+    await r.service.apply(scheme.id, fp(scheme));
+    const again = await r.service.apply(scheme.id, fp(scheme));
     expect(again).toMatchObject({ ok: true, message: 'Both units already held the layout.' });
     expect(r.saveApplied).toHaveBeenCalledTimes(2);
     expect((await r.service.preview(scheme.id)).anyChange).toBe(false);
@@ -230,7 +233,7 @@ describe('Apply as the windows ask for it', () => {
       // Not "unplugged": the units were not looked at.
       expect(preview.checks.some((c) => /isn't connected/.test(c.text))).toBe(false);
 
-      const result = await r.service.apply(scheme.id);
+      const result = await r.service.apply(scheme.id, fp(scheme));
       expect(result).toEqual({
         ok: false,
         message: 'Close the Azeron app first: it talks to the units too.',
@@ -260,47 +263,74 @@ describe('Apply as the windows ask for it', () => {
       expect(preview.checks[0]?.text).toBe(
         "helmArray couldn't tell whether the Azeron app is open.",
       );
-      expect((await r.service.apply(scheme.id)).ok).toBe(false);
+      expect((await r.service.apply(scheme.id, fp(scheme))).ok).toBe(false);
       expect(r.saveApplied).not.toHaveBeenCalled();
     });
 
-    it('opening between the units stops the second, sends no unit another command, remembers nothing', async () => {
-      let looks = 0;
-      let atOpening: number[] | undefined;
-      const rigged = await rig({
+    /**
+     * One apply with a look that never says open, to find where things fall: how many looks the
+     * whole apply made, and the number of the look that came first from the right unit's flow
+     * (its own guard, then the gate's look before its first command).
+     */
+    async function dryRun() {
+      const seen: { right: number; at: number }[] = [];
+      let total = 0;
+      const dry = await rig({
         azeron: () => {
-          // Apply's readiness look, then the left unit's seven (start, write, switch, the other
-          // slots, two deletes, the read back); it opens the moment the left unit is done.
-          const open = ++looks > 8;
-          if (open && !atOpening)
-            atOpening = [...rigged.units.values()].map((u) => u.received.length);
-          return Promise.resolve(open);
+          seen.push({ right: dry.right?.received.length ?? 0, at: ++total });
+          return Promise.resolve(false);
         },
       });
-      r = rigged;
-      const result = await rigged.service.apply(scheme.id);
-      expect(result.ok).toBe(false);
-      expect(result.units.map((u) => u.status)).toEqual(['applied', 'failed']);
-      expect(result.message).toMatch(/right unit failed: the Azeron app is open/);
-      expect(rigged.saveApplied).not.toHaveBeenCalled();
-      expect(rigged.setActive).not.toHaveBeenCalled();
-      expect(rigged.right && writesTo(rigged.right)).toEqual([]);
-      // Not one command to either unit after the Azeron app appeared, the read afterwards included.
-      expect(atOpening).toBeDefined();
-      expect([...rigged.units.values()].map((u) => u.received.length)).toEqual(atOpening);
-      // What the left unit holds is no longer known, and the pill is not told it is: its slots are
-      // gone from the service and the units are said not to have been read.
-      expect(rigged.devices.snapshot().units.map((u) => u.slots)).toEqual([undefined, undefined]);
-      expect((await rigged.service.preview(scheme.id)).ready).toBe(false);
-    });
+      const before = dry.right?.received.length ?? 0;
+      await dry.service.apply(scheme.id, fp(scheme));
+      const first = seen.find((x) => x.right > before);
+      await dry.devices.stop();
+      return { total, rightsFirstReport: first?.at ?? total };
+    }
+
+    it.each([
+      ['at its own check', 2],
+      ['at the session look before its first command', 1],
+    ])(
+      'opening between the units, %s: no unit is sent another command, nothing is remembered',
+      async (_which, back) => {
+        const { rightsFirstReport } = await dryRun();
+        const opens = rightsFirstReport - back;
+        let looks = 0;
+        let atOpening: number[] | undefined;
+        const rigged = await rig({
+          azeron: () => {
+            const open = ++looks >= opens;
+            if (open && !atOpening)
+              atOpening = [...rigged.units.values()].map((u) => u.received.length);
+            return Promise.resolve(open);
+          },
+        });
+        r = rigged;
+        const result = await rigged.service.apply(scheme.id, fp(scheme));
+        expect(result.ok).toBe(false);
+        expect(result.units.map((u) => u.status)).toEqual(['applied', 'failed']);
+        expect(result.message).toMatch(/right unit failed: .*Azeron app/);
+        expect(rigged.saveApplied).not.toHaveBeenCalled();
+        expect(rigged.setActive).not.toHaveBeenCalled();
+        expect(rigged.right && writesTo(rigged.right)).toEqual([]);
+        // Not one command to either unit after the Azeron app appeared, the read afterwards included.
+        expect(atOpening).toBeDefined();
+        expect([...rigged.units.values()].map((u) => u.received.length)).toEqual(atOpening);
+        // What the units hold is no longer known, and the pill is not told it is.
+        expect(rigged.devices.snapshot().units.map((u) => u.slots)).toEqual([undefined, undefined]);
+        expect((await rigged.service.preview(scheme.id)).ready).toBe(false);
+      },
+    );
 
     it('does not read the units again after an apply when the app cannot be ruled out', async () => {
+      const { total } = await dryRun();
       let looks = 0;
       let atFailure: number[] | undefined;
       const rigged = await rig({
         azeron: () => {
-          // Fails to tell from the look after the readiness one and the left unit's seven.
-          if (++looks > 8) {
+          // Everything of the apply itself looks fine; the looks of the read afterwards fail.
+          if (++looks > total - 6) {
             atFailure ??= [...rigged.units.values()].map((u) => u.received.length);
             return Promise.reject(new Error('tasklist failed'));
           }
@@ -308,31 +338,88 @@ describe('Apply as the windows ask for it', () => {
         },
       });
       r = rigged;
-      const result = await rigged.service.apply(scheme.id);
-      expect(result.ok).toBe(false);
+      const result = await rigged.service.apply(scheme.id, fp(scheme));
+      expect(result.ok).toBe(true);
       expect([...rigged.units.values()].map((u) => u.received.length)).toEqual(atFailure);
       expect(rigged.devices.snapshot().units.every((u) => u.slots === undefined)).toBe(true);
     });
 
-    it('reads the units again after a good apply only while the app is still closed, unit by unit', async () => {
+    it('reads the units again after a good apply only while the app is still closed, operation by operation', async () => {
+      const { total } = await dryRun();
       let looks = 0;
       let atOpening: number[] | undefined;
       const rigged = await rig({
         azeron: () => {
-          // Readiness, left (7) and right (6) take 14 looks; the refresh then asks once per unit,
-          // and the app opens between the two.
-          const open = ++looks > 15;
+          // The read afterwards makes six looks, three a unit; the app opens at the right unit's first.
+          const open = ++looks > total - 3;
           if (open) atOpening ??= [...rigged.units.values()].map((u) => u.received.length);
           return Promise.resolve(open);
         },
       });
       r = rigged;
-      const result = await rigged.service.apply(scheme.id);
+      const result = await rigged.service.apply(scheme.id, fp(scheme));
       expect(result.ok).toBe(true);
       const [left, right] = rigged.devices.snapshot().units;
       expect(left?.slots?.map((x) => x.slot)).toEqual([1]);
       expect(right?.slots).toBeUndefined();
       expect([...rigged.units.values()].map((u) => u.received.length)).toEqual(atOpening);
+    });
+  });
+
+  describe('writing exactly what was previewed', () => {
+    it('gives a fingerprint with the preview, the same for the same layout and another for another', async () => {
+      r = await rig();
+      const preview = await r.service.preview(scheme.id);
+      expect(preview.fingerprint).toMatch(/^[0-9a-f]{32}$/);
+      expect(preview.fingerprint).toBe(fp(scheme));
+      expect(fp({ ...scheme, map: { ship: { 'L.index_1': { tap: 'boost' } } } })).not.toBe(
+        preview.fingerprint,
+      );
+      expect((await r.service.preview('nope')).fingerprint).toBe('');
+    });
+
+    it('refuses, in one sentence, a layout other than the one previewed, and writes nothing', async () => {
+      r = await rig();
+      const reports = r.reports();
+      const result = await r.service.apply(scheme.id, 'a fingerprint of some other layout');
+      expect(result).toEqual({
+        ok: false,
+        changed: true,
+        message: 'The layout changed since the preview: look again.',
+        units: [],
+      });
+      expect(r.reports()).toBe(reports);
+      expect(r.saveApplied).not.toHaveBeenCalled();
+      expect(r.setActive).not.toHaveBeenCalled();
+      expect(r.service.busy()).toBe(false);
+    });
+
+    it('refuses a scheme edited after the preview, and applies it after a new preview', async () => {
+      let current = scheme;
+      r = await rig();
+      // The store hands back whatever the scheme is now: an undo under the drawer changes it.
+      const live = createApplyService({
+        plans: {
+          getScheme: () => Promise.resolve(current),
+          getGame: () => Promise.resolve(game),
+        },
+        devices: r.devices,
+        hands: { get: (id) => HANDS[id as keyof typeof HANDS] },
+        azeronAppRunning: () => Promise.resolve(false),
+        saveApplied: r.saveApplied,
+        setActive: r.setActive,
+      });
+      const seen = await live.preview(scheme.id);
+      current = {
+        ...scheme,
+        map: { ship: { ...scheme.map['ship'], 'L.index_1': { tap: 'fire' } } },
+      };
+      const stale = await live.apply(scheme.id, seen.fingerprint);
+      expect(stale).toMatchObject({ ok: false, changed: true });
+      expect(r.saveApplied).not.toHaveBeenCalled();
+      const again = await live.preview(scheme.id);
+      expect(again.fingerprint).not.toBe(seen.fingerprint);
+      expect((await live.apply(scheme.id, again.fingerprint)).ok).toBe(true);
     });
   });
 
@@ -349,7 +436,7 @@ describe('Apply as the windows ask for it', () => {
       expect(preview.right.connected).toBe(false);
 
       const before = writesTo(r.left).length;
-      const result = await r.service.apply(scheme.id);
+      const result = await r.service.apply(scheme.id, fp(scheme));
       expect(result).toEqual({
         ok: false,
         message: "The right Azeron isn't connected.",
@@ -363,7 +450,7 @@ describe('Apply as the windows ask for it', () => {
   describe('the scheme itself', () => {
     it('refuses a scheme that is not there, in a sentence', async () => {
       r = await rig();
-      expect(await r.service.apply('nope')).toEqual({
+      expect(await r.service.apply('nope', 'whatever')).toEqual({
         ok: false,
         message: 'There is no such scheme.',
         units: [],
@@ -387,7 +474,7 @@ describe('Apply as the windows ask for it', () => {
         text: 'Fire is needed to play Ship, and it is on no button.',
       });
       const reports = r.reports();
-      const result = await r.service.apply(unplaced.id);
+      const result = await r.service.apply(unplaced.id, fp(unplaced));
       expect(result.ok).toBe(false);
       expect(result.message).toBe('Fire is needed to play Ship, and it is on no button.');
       expect(r.saveApplied).not.toHaveBeenCalled();
@@ -404,7 +491,7 @@ describe('Apply as the windows ask for it', () => {
       };
       r = await rig({ scheme: accepted });
       expect((await r.service.preview(accepted.id)).ready).toBe(true);
-      expect((await r.service.apply(accepted.id)).ok).toBe(true);
+      expect((await r.service.apply(accepted.id, fp(accepted))).ok).toBe(true);
     });
   });
 
@@ -421,11 +508,11 @@ describe('Apply as the windows ask for it', () => {
           return false;
         },
       });
-      const running = r.service.apply(scheme.id);
+      const running = r.service.apply(scheme.id, fp(scheme));
       await vi.advanceTimersByTimeAsync(0);
       expect(r.service.busy()).toBe(true);
 
-      const second = await r.service.apply(scheme.id);
+      const second = await r.service.apply(scheme.id, fp(scheme));
       expect(second).toEqual({
         ok: false,
         message: 'An apply is already running. Wait for it to finish.',
@@ -442,7 +529,10 @@ describe('Apply as the windows ask for it', () => {
 
     it('two requests in the same moment: one runs, one is refused', async () => {
       r = await rig();
-      const [a, b] = await Promise.all([r.service.apply(scheme.id), r.service.apply(scheme.id)]);
+      const [a, b] = await Promise.all([
+        r.service.apply(scheme.id, fp(scheme)),
+        r.service.apply(scheme.id, fp(scheme)),
+      ]);
       expect([a.ok, b.ok].sort()).toEqual([false, true]);
       expect(r.saveApplied).toHaveBeenCalledTimes(1);
     });
@@ -450,16 +540,16 @@ describe('Apply as the windows ask for it', () => {
     it('is free again after a failed one', async () => {
       let look = 0;
       r = await rig({ azeron: () => Promise.resolve(++look === 2) });
-      const failed = await r.service.apply(scheme.id);
+      const failed = await r.service.apply(scheme.id, fp(scheme));
       expect(failed.ok).toBe(false);
       expect(r.service.busy()).toBe(false);
-      const next = await r.service.apply(scheme.id);
+      const next = await r.service.apply(scheme.id, fp(scheme));
       expect(next.ok).toBe(true);
     });
 
     it('is free again, and the devices service released, after something throws', async () => {
       r = await rig({ saveApplied: () => Promise.reject(new Error('disk full')) });
-      const result = await r.service.apply(scheme.id);
+      const result = await r.service.apply(scheme.id, fp(scheme));
       expect(result.ok).toBe(false);
       expect(r.service.busy()).toBe(false);
       const listed = r.bench.listed;
@@ -471,7 +561,7 @@ describe('Apply as the windows ask for it', () => {
   describe('remembering', () => {
     it('says so when the units are set but the note could not be kept, and does not make it active', async () => {
       r = await rig({ saveApplied: () => Promise.reject(new Error('disk full')) });
-      const result = await r.service.apply(scheme.id);
+      const result = await r.service.apply(scheme.id, fp(scheme));
       expect(result.ok).toBe(false);
       expect(result.message).toBe(
         "Both units now run the layout, but helmArray couldn't keep a note of it (disk full), so it can't say they are in sync.",
@@ -482,7 +572,7 @@ describe('Apply as the windows ask for it', () => {
 
     it('says so when it could not be made the current scheme', async () => {
       r = await rig({ setActive: () => Promise.reject(new Error('no such game')) });
-      const result = await r.service.apply(scheme.id);
+      const result = await r.service.apply(scheme.id, fp(scheme));
       expect(result.ok).toBe(false);
       expect(result.message).toMatch(/couldn't be made the current scheme \(no such game\)/);
       expect(r.saveApplied).toHaveBeenCalledTimes(1);
@@ -515,7 +605,7 @@ describe('Apply as the windows ask for it', () => {
       held.rig = service;
       r = service;
       const listedBefore = service.bench.listed;
-      const result = await service.service.apply(scheme.id);
+      const result = await service.service.apply(scheme.id, fp(scheme));
       expect(result.ok).toBe(true);
       expect(probes.length).toBeGreaterThan(5);
       for (const probe of probes) {
@@ -534,7 +624,7 @@ describe('Apply as the windows ask for it', () => {
     r = await rig();
     const [preview, applied] = await Promise.all([
       r.service.preview(scheme.id),
-      r.service.apply(scheme.id),
+      r.service.apply(scheme.id, fp(scheme)),
     ]);
     expect(applied.ok).toBe(true);
     expect(preview.schemeName).toBe('Main');

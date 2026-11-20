@@ -52,6 +52,7 @@ export function createHelmApi(bridge: IpcBridge): HelmApi {
     },
     previewApply: (schemeId) =>
       bridge.invoke(CHANNELS.previewApply, schemeId) as Promise<ApplyPreview>,
-    apply: (schemeId) => bridge.invoke(CHANNELS.apply, schemeId) as Promise<ApplyResult>,
+    apply: (schemeId, fingerprint) =>
+      bridge.invoke(CHANNELS.apply, schemeId, fingerprint) as Promise<ApplyResult>,
   };
 }

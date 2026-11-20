@@ -16,7 +16,6 @@
 // Nothing here throws at a caller: every refusal and failure comes back as a sentence.
 // Pure: the store, the units and the running programs are handed in.
 
-import type { UnitSession } from '@helmarray/azeron';
 import type { Hand, Plan } from '@helmarray/core';
 import type {
   ApplyPreview,
@@ -29,14 +28,17 @@ import { applyUnits, previewUnits } from './apply-units';
 import type { UnitsDeps } from './apply-units';
 import { heldUnits } from './app-state';
 import type { DevicesSnapshot, HoldTools } from './devices';
+import type { UnitOps } from './gated-session';
 import type { HandStore } from './hands';
 import { handsFor } from './hands';
 import type { PlanSource } from './scheme-plan';
+import { planFingerprint } from './plan-fingerprint';
 import { planFor } from './scheme-plan';
 
 /** A look at the units no older than this is used as it is when the drawer opens. */
 export const PREVIEW_MAX_AGE_MS = 3000;
 
+export const CHANGED_SENTENCE = 'The layout changed since the preview: look again.';
 export const BUSY_SENTENCE = 'An apply is already running. Wait for it to finish.';
 const APP_OPEN_SENTENCE = 'Close the Azeron app first: it talks to the units too.';
 const APP_UNKNOWN_SENTENCE = "helmArray couldn't tell whether the Azeron app is open.";
@@ -44,7 +46,7 @@ const APP_UNKNOWN_SENTENCE = "helmArray couldn't tell whether the Azeron app is 
 /** The part of the devices service Apply uses. */
 export interface ApplyDevices {
   snapshot(): DevicesSnapshot;
-  session(deviceId: number): UnitSession | undefined;
+  session(deviceId: number): UnitOps | undefined;
   refresh(options?: { olderThanMs?: number }): Promise<void>;
   exclusive<T>(job: (tools: HoldTools) => Promise<T>): Promise<T>;
 }
@@ -67,7 +69,7 @@ export interface ApplyServiceDeps {
 
 export interface ApplyService {
   preview(schemeId: string): Promise<ApplyPreview>;
-  apply(schemeId: string): Promise<ApplyResult>;
+  apply(schemeId: string, fingerprint: string): Promise<ApplyResult>;
   /** An apply is running. */
   busy(): boolean;
 }
@@ -168,6 +170,7 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
       schemeId,
       schemeName: '',
       gameName: '',
+      fingerprint: '',
       azeronOpen: false,
       busy: false,
       anyChange: false,
@@ -178,7 +181,11 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
     if (!resolved.ok) {
       return { ...base, ready: false, checks: [{ ok: false, text: sentence(resolved.reason) }] };
     }
-    const names = { schemeName: resolved.scheme.name, gameName: resolved.game.name };
+    const names = {
+      schemeName: resolved.scheme.name,
+      gameName: resolved.game.name,
+      fingerprint: planFingerprint(resolved.plan),
+    };
     if (running) {
       return {
         ...base,
@@ -245,7 +252,7 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
     return null;
   };
 
-  const apply = async (schemeId: string): Promise<ApplyResult> => {
+  const apply = async (schemeId: string, fingerprint: string): Promise<ApplyResult> => {
     // Claimed before anything is awaited: a second request in the same moment is refused.
     if (running) return refused(BUSY_SENTENCE);
     running = true;
@@ -253,6 +260,11 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
       const resolved = await planFor(schemeId, deps.plans);
       if (!resolved.ok) return refused(sentence(resolved.reason));
       const { plan, scheme, game } = resolved;
+      // Exactly what was previewed: the scheme may have changed under the drawer since (an edit,
+      // an undo), and the person agreed to the layout they were shown, not to another.
+      if (planFingerprint(plan) !== fingerprint) {
+        return { ok: false, changed: true, message: CHANGED_SENTENCE, units: [] };
+      }
 
       const open = await azeronOpen();
       const blocking = readiness(open, plan).find((c) => !c.ok);
@@ -315,6 +327,7 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
           schemeId,
           schemeName: '',
           gameName: '',
+          fingerprint: '',
           ready: false,
           busy: false,
           azeronOpen: false,

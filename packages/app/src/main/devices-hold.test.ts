@@ -2,7 +2,7 @@
 // close or read any of them, and must catch up when the hold ends.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { FakeUnit } from '@helmarray/azeron';
+import { FakeUnit, UnitError, UnitSession } from '@helmarray/azeron';
 import type { ClosableTransport } from './devices';
 import { Devices, POLL_MS } from './devices';
 
@@ -226,11 +226,35 @@ describe('the devices service held by a job', () => {
       expect(devices.snapshot().units.every((u) => u.state !== 'ready')).toBe(true);
     });
 
+    it('hands out only gated sessions: with the app open, no operation reaches the unit', async () => {
+      await connected();
+      const session = devices.session(LEFT);
+      expect(session).toBeDefined();
+      // Not the raw session the service built, and not a subclass of it.
+      expect(session instanceof UnitSession).toBe(false);
+      bench.azeron = () => Promise.resolve(true);
+      const reports = bench.reports;
+      const operations = [
+        () => session?.identify(),
+        () => session?.readSlots(),
+        () => session?.runningSlot(),
+        () => session?.write(1, 'Main', [], LEFT),
+        () => session?.switchTo(1),
+        () => session?.deleteSlot(0),
+      ];
+      for (const run of operations) {
+        await expect(run()).rejects.toBeInstanceOf(UnitError);
+      }
+      expect(bench.reports).toBe(reports);
+      // And what the service knew of that unit is no longer offered as read.
+      expect(devices.snapshot().units[0]?.slots).toBeUndefined();
+    });
+
     it('reads again only the units it may, asking before each, and forgets what it could not read', async () => {
       await connected();
       const reports = bench.reports;
       let looks = 0;
-      bench.azeron = () => Promise.resolve(++looks > 1); // fine for the first unit, open after
+      bench.azeron = () => Promise.resolve(++looks > 3); // the first unit's three looks pass
       await devices.refresh();
       const [left, right] = devices.snapshot().units;
       expect(left?.slots).toBeDefined();

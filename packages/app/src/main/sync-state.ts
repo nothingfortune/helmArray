@@ -15,6 +15,7 @@
 
 import type { Verdict } from '@helmarray/azeron';
 import type { Hand, Plan } from '@helmarray/core';
+import { canonical } from './plan-fingerprint';
 
 export interface HandSync {
   connected: boolean;
@@ -123,19 +124,6 @@ export function syncDetail(input: SyncInput): string | undefined {
     return `${name(hand)} unit: ${inputs(verdict ? distinctInputs(verdict) : 0)} not as applied.`;
   });
   return lines.length > 0 ? lines.join(' ') : undefined;
-}
-
-/** Key order and missing-versus-undefined must not matter: a plan read back from disk is compared. */
-function canonical(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
-  if (typeof value === 'object' && value !== null) {
-    const entries = Object.entries(value)
-      .filter(([, v]) => v !== undefined)
-      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-      .map(([k, v]) => `${JSON.stringify(k)}:${canonical(v)}`);
-    return `{${entries.join(',')}}`;
-  }
-  return JSON.stringify(value) ?? 'null';
 }
 
 const STICK = { left: 'L.stick', right: 'R.stick' } as const;

@@ -124,6 +124,11 @@ export interface ApplyPreview {
   schemeId: string;
   schemeName: string;
   gameName: string;
+  /**
+   * Stands for the layout this preview is of. `apply` takes it back and writes only that layout:
+   * if the scheme has changed since, it refuses. Empty when the scheme could not be worked out.
+   */
+  fingerprint: string;
   /** Every check passes: Apply may be pressed. */
   ready: boolean;
   /** The Azeron app is open (so the units were not looked at). */
@@ -153,6 +158,8 @@ export interface ApplyResult {
   ok: boolean;
   /** One plain sentence; on failure, what failed and what is left as it was. */
   message: string;
+  /** Refused because the scheme changed since the preview: nothing was written; look again. */
+  changed?: boolean;
   /** Left, then right; empty when nothing was attempted. */
   units: ApplyUnitResult[];
 }
@@ -187,8 +194,11 @@ export interface HelmApi {
   setActive(gameId: string, schemeId: string | null): Promise<void>;
   /** What Apply would do for this scheme, and whether it is ready. Writes nothing. */
   previewApply(schemeId: string): Promise<ApplyPreview>;
-  /** Writes the scheme to the units. Never rejects for a refusal: the result says why. */
-  apply(schemeId: string): Promise<ApplyResult>;
+  /**
+   * Writes the scheme to the units, exactly the layout the preview showed (its `fingerprint`).
+   * Never rejects for a refusal: the result says why.
+   */
+  apply(schemeId: string, fingerprint: string): Promise<ApplyResult>;
 }
 
 /** IPC channel names, shared by main and preload. */

@@ -12,6 +12,7 @@ import {
   clear,
   commit,
   fixFor,
+  historyAction,
   historyShortcut,
   isAcceptable,
   isTextEntry,
@@ -428,6 +429,21 @@ describe('historyShortcut', () => {
     expect(press('a', { ctrlKey: true })).toBeNull();
     expect(press('z', { ctrlKey: true, altKey: true })).toBeNull();
     expect(press('y', { ctrlKey: true, shiftKey: true })).toBeNull();
+  });
+});
+
+describe('historyAction', () => {
+  const key = { key: 'z', ctrlKey: true, metaKey: false, shiftKey: false };
+
+  it('is the shortcut while the editor owns the keyboard', () => {
+    expect(historyAction(key, true)).toBe('undo');
+    expect(historyAction({ ...key, key: 'y' }, true)).toBe('redo');
+  });
+
+  it('is nothing while something is over the editor, whatever the keys', () => {
+    expect(historyAction(key, false)).toBeNull();
+    expect(historyAction({ ...key, key: 'y' }, false)).toBeNull();
+    expect(historyAction({ ...key, shiftKey: true }, false)).toBeNull();
   });
 });
 

@@ -5,6 +5,8 @@
 
 import type { StoredSlot, Transport, UnitIdentity } from '@helmarray/azeron';
 import { UnitSession } from '@helmarray/azeron';
+import { gatedSession, isGateRefusal } from './gated-session';
+import type { UnitOps } from './gated-session';
 
 /** A transport that can be let go. The service closes every one it opens. */
 export type ClosableTransport = Transport & { close(): Promise<void> };
@@ -23,8 +25,9 @@ export interface DeviceDeps {
   now?(): number;
   /**
    * A fresh look at whether the Azeron app is running, every call; a look that fails throws.
-   * Asked before every command the service itself sends a unit (on connecting it, on reading it
-   * again): anything but a plain "no" and the unit is left alone. Without it, nothing is asked.
+   * Every session the service has (and hands out) asks it before each operation: anything but a
+   * plain "no" and the operation is refused before a report is sent (see gated-session.ts).
+   * Without it, nothing is asked.
    */
   azeronAppRunning?(): Promise<boolean>;
 }
@@ -61,7 +64,8 @@ interface Entry {
   identity?: UnitIdentity;
   slots?: StoredSlot[];
   error?: string;
-  session?: UnitSession;
+  /** Only ever the gated form: no raw session leaves this service, or is kept in it. */
+  session?: UnitOps;
   transport?: ClosableTransport;
   closing?: Promise<void>;
   /** Settles when `openUnit` has finished, opened or not: stop waits on it to close the unit. */
@@ -140,7 +144,7 @@ export class Devices {
   }
 
   /** The session of a ready unit, for writing to it. Undefined for a unit that isn't ready. */
-  session(deviceId: number): UnitSession | undefined {
+  session(deviceId: number): UnitOps | undefined {
     for (const entry of this.entries.values()) {
       if (entry.state === 'ready' && entry.identity?.deviceId === deviceId) return entry.session;
     }
@@ -183,13 +187,6 @@ export class Devices {
       if (entry.state !== 'ready' || entry.dropped || !entry.session) continue;
       if (olderThanMs !== undefined && now() - (entry.readAt ?? 0) < olderThanMs) continue;
       changed = true;
-      // Fresh, for each unit: the Azeron app may open between one and the next. A unit not looked
-      // at keeps nothing it held: it is no longer said to be read, and the next look reads it.
-      if (!(await this.mayTalk(entry.path))) {
-        delete entry.slots;
-        delete entry.readAt;
-        continue;
-      }
       try {
         const identity = await entry.session.identify();
         const slots = await entry.session.readSlots();
@@ -200,6 +197,12 @@ export class Devices {
         entry.readAt = now();
       } catch (error) {
         if (entry.dropped) continue;
+        // The gate refused (the Azeron app is open, or could not be ruled out): the unit was not
+        // spoken to, it is not at fault, and the next look reads it.
+        if (isGateRefusal(error)) {
+          this.forget(entry);
+          continue;
+        }
         // What the unit holds is not known now: it is no longer offered as ready or as read.
         entry.state = 'failed';
         entry.error = messageOf(error);
@@ -279,13 +282,15 @@ export class Devices {
       }
       entry.transport = transport;
       if (entry.dropped) return void (await this.close(entry));
-      const session = new UnitSession(transport, (line) => this.trace(path, line));
-      if (!(await this.mayTalk(path))) return this.giveUp(entry);
+      const session = gatedSession(new UnitSession(transport, (line) => this.trace(path, line)), {
+        look: () => this.deps.azeronAppRunning?.() ?? Promise.resolve(false),
+        stale: () => this.forget(entry),
+        trace: (line) => this.trace(path, line),
+      });
       const identity = await session.identify();
       if (entry.dropped) return;
       entry.identity = identity;
       this.emit();
-      if (!(await this.mayTalk(path))) return this.giveUp(entry);
       const slots = await session.readSlots();
       if (entry.dropped) return;
       entry.session = session;
@@ -295,6 +300,8 @@ export class Devices {
       this.emit();
     } catch (error) {
       if (entry.dropped) return;
+      // Refused by the gate: the unit was not spoken to. It is let go and a later poll tries it.
+      if (isGateRefusal(error)) return this.giveUp(entry);
       entry.state = 'failed';
       entry.error = messageOf(error);
       this.trace(path, `failed: ${entry.error}`);
@@ -303,20 +310,10 @@ export class Devices {
     }
   }
 
-  /** Whether a command may be sent to this unit: only when the Azeron app is known not to run. */
-  private async mayTalk(path: string): Promise<boolean> {
-    const look = this.deps.azeronAppRunning;
-    if (!look) return true;
-    try {
-      if (!(await look())) return true;
-      this.trace(path, 'left alone: the Azeron app is open');
-    } catch (error) {
-      this.trace(
-        path,
-        `left alone: couldn't tell whether the Azeron app is open (${messageOf(error)})`,
-      );
-    }
-    return false;
+  /** What is cached of a unit is not to be trusted any more: it is not said to be read. */
+  private forget(entry: Entry): void {
+    delete entry.slots;
+    delete entry.readAt;
   }
 
   /** Lets a unit go that was not to be talked to; a later poll tries it again. */
