@@ -90,6 +90,9 @@ describe('J1: the Xbox controller preset on Helldivers 2, applied', () => {
   });
 });
 
+// A scheme with errors nobody kept. The Xbox controller preset has none on Helldivers 2 now (the
+// game ships its pad defaults), so this uses the game's own keys, with nothing placed: it has the
+// same six missing required actions, and its two sticks send nothing.
 describe('J1: a scheme whose errors were not kept', () => {
   let world: World;
 
@@ -103,7 +106,7 @@ describe('J1: a scheme whose errors were not kept', () => {
   });
 
   it('is not ready to apply, and the drawer says why in the game’s words', async () => {
-    const fresh = await world.createScheme('xbox');
+    const fresh = await world.createScheme('keys');
     const preview = await world.helm.previewApply(fresh.id);
     expect(preview.checks.filter((check) => !check.ok).map((check) => check.text)).toEqual([
       'Move forward is needed to play Default, and it is on no button.',
@@ -112,18 +115,21 @@ describe('J1: a scheme whose errors were not kept', () => {
       'Strafe right is needed to play Default, and it is on no button.',
       'Fire is needed to play Default, and it is on no button.',
       'Stratagem (hold) is needed to play Default, and it is on no button.',
+      // Key output with nothing placed: the sticks have no keys either.
+      'The left stick sends nothing: give its directions keys or set it to a controller stick.',
+      'The right stick sends nothing: give its directions keys or set it to a controller stick.',
     ]);
   });
 
   it('is refused by Apply itself, whatever the drawer showed', async () => {
-    const fresh = await world.createScheme('xbox');
+    const fresh = await world.createScheme('keys');
     const preview = await world.helm.previewApply(fresh.id);
     const result = await world.helm.apply(fresh.id, preview.fingerprint);
     expect([result.ok, result.units]).toEqual([false, []]);
   });
 
   it('writes nothing to either unit when Apply is pressed on it, though both were read', async () => {
-    const fresh = await world.createScheme('xbox');
+    const fresh = await world.createScheme('keys');
     const preview = await world.helm.previewApply(fresh.id);
     await world.helm.apply(fresh.id, preview.fingerprint);
     const sent = [world.left, world.right].map((unit) => unit.commands());
@@ -131,5 +137,27 @@ describe('J1: a scheme whose errors were not kept', () => {
       [true, []],
       [true, []],
     ]);
+  });
+});
+
+describe('J1: the Xbox controller preset, with nothing to keep', () => {
+  let world: World;
+
+  beforeAll(async () => {
+    world = await World.create();
+    await world.boot();
+  });
+
+  afterAll(async () => {
+    await world.dispose();
+  });
+
+  it('is ready to apply as it is made, with no check failing', async () => {
+    const fresh = await world.createScheme('xbox');
+    const preview = await world.helm.previewApply(fresh.id);
+    expect({
+      ready: preview.ready,
+      failing: preview.checks.filter((check) => !check.ok).map((check) => check.text),
+    }).toEqual({ ready: true, failing: [] });
   });
 });

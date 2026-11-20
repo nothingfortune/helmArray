@@ -8,6 +8,7 @@ import {
   CLOSE_AZERON_FIRST,
   applyInDrawer,
   drawer,
+  flagAnAction,
   keepEveryCheck,
   startFrom,
 } from './screens';
@@ -46,7 +47,7 @@ test.describe('axe: no serious or critical violations', () => {
   test('the Editor, with findings', async ({ helm }) => {
     const { page } = helm;
     await startFrom(page, 'Xbox controller');
-    await expect(page.getByRole('button', { name: 'Keep, I know' }).first()).toBeVisible();
+    await flagAnAction(page);
     expect(await seriousViolations(page)).toEqual([]);
   });
 
