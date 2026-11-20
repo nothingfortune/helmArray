@@ -20,6 +20,7 @@ import {
   commit,
   historyShortcut,
   isStick,
+  isTextEntry,
   redo,
   setLatch,
   setTurbo,
@@ -178,13 +179,7 @@ function EditorBody({ scheme: loaded, game, onBack, onApply }: BodyProps) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const target = e.target;
-      if (
-        target instanceof HTMLElement &&
-        (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
-      ) {
-        return;
-      }
+      if (e.target instanceof HTMLElement && isTextEntry(e.target)) return;
       const wanted = historyShortcut(e);
       if (wanted === null) return;
       e.preventDefault();

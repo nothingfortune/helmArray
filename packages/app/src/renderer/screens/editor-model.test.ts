@@ -14,6 +14,7 @@ import {
   fixFor,
   historyShortcut,
   isAcceptable,
+  isTextEntry,
   move,
   redo,
   setLatch,
@@ -423,5 +424,23 @@ describe('historyShortcut', () => {
     expect(press('a', { ctrlKey: true })).toBeNull();
     expect(press('z', { ctrlKey: true, altKey: true })).toBeNull();
     expect(press('y', { ctrlKey: true, shiftKey: true })).toBeNull();
+  });
+});
+
+describe('isTextEntry', () => {
+  it('is true where typing means something', () => {
+    expect(isTextEntry({ tagName: 'INPUT', type: 'text' })).toBe(true);
+    expect(isTextEntry({ tagName: 'INPUT', type: 'search' })).toBe(true);
+    expect(isTextEntry({ tagName: 'input' })).toBe(true);
+    expect(isTextEntry({ tagName: 'TEXTAREA' })).toBe(true);
+    expect(isTextEntry({ tagName: 'SELECT' })).toBe(true);
+    expect(isTextEntry({ tagName: 'DIV', isContentEditable: true })).toBe(true);
+  });
+
+  it('is false on a ticked checkbox or a button, so undo still works after a click there', () => {
+    expect(isTextEntry({ tagName: 'INPUT', type: 'checkbox' })).toBe(false);
+    expect(isTextEntry({ tagName: 'INPUT', type: 'radio' })).toBe(false);
+    expect(isTextEntry({ tagName: 'BUTTON' })).toBe(false);
+    expect(isTextEntry({ tagName: 'DIV' })).toBe(false);
   });
 });
