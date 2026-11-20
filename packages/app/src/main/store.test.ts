@@ -219,6 +219,8 @@ describe('what is handed in is what is written', () => {
     const active = data.active();
     active.gameId = 'changed';
     expect(data.active().gameId).toBe('skiff');
+    // The edits above are still waiting to be written; let them land before the folder goes.
+    await data.flush();
   });
 
   it('refuses at once, writing nothing, a plan that can’t be turned into a file', async () => {
@@ -262,9 +264,13 @@ describe('flush', () => {
   it('waits for a change that is refused, and doesn’t throw for it', async () => {
     const { data } = await openStore();
     const refused = data.setActive('nowhere', null);
-    const seen = expect(refused).rejects.toThrow(StoreError);
+    // Caught at once, so the rejection is never unhandled while flush() is waited for.
+    const seen = refused.then(
+      () => 'resolved',
+      (error: unknown) => error,
+    );
     await expect(data.flush()).resolves.toBeUndefined();
-    await seen;
+    expect(await seen).toBeInstanceOf(StoreError);
   });
 
   it('writes an edit made while a change was still being worked out', async () => {
@@ -667,19 +673,28 @@ describe('writing', () => {
     const scheme = await data.createSchemeFromPreset('skiff', 'xbox');
     const file = path('schemes', `${scheme.id}.json`);
     const seen: string[][] = [];
+    const unreadable: string[] = [];
     // While a flush is running the folder holds either the old file or the new one, whole.
     data.saveScheme({ ...scheme, name: 'Whole' });
     const writing = data.flush();
     for (let i = 0; i < 20; i++) {
       seen.push(await readdir(path('schemes')));
       const text = await readFile(file, 'utf8').catch(() => null);
-      if (text !== null) expect(() => JSON.parse(text)).not.toThrow();
+      if (text !== null) {
+        try {
+          JSON.parse(text);
+        } catch {
+          unreadable.push(text);
+        }
+      }
     }
     await writing;
-    for (const list of seen) {
-      for (const name of list)
-        expect(name === `${scheme.id}.json` || name.endsWith('.tmp')).toBe(true);
-    }
+    // No read ever found a cut-short file.
+    expect(unreadable).toEqual([]);
+    const strangers = seen
+      .flat()
+      .filter((name) => name !== `${scheme.id}.json` && !name.endsWith('.tmp'));
+    expect(strangers).toEqual([]);
   });
 
   it('keeps a damaged file aside before replacing it, and says so', async () => {

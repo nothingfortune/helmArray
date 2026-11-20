@@ -25,8 +25,8 @@ pin an older version of the package rather than adding an exclusion.
 | Command        | Does                                                                                    |
 | -------------- | --------------------------------------------------------------------------------------- |
 | `pnpm dev`     | Starts the app with hot reload. Close the Azeron app first: helmArray waits while it runs. |
-| `pnpm check`   | The gate: typecheck, lint, format and tests. CI runs exactly this.                      |
-| `pnpm test`    | The tests on their own.                                                                 |
+| `pnpm check`   | The gate: typecheck, lint, format, tests with coverage, coverage drift. CI runs exactly this. |
+| `pnpm test`    | The tests on their own, without coverage.                                               |
 | `pnpm format`  | Rewrites files to the house format (`pnpm check` only reports).                          |
 | `pnpm tokens`  | Rewrites `styles/tokens.css` from `src/shared/tokens.ts` after a token changes.          |
 
@@ -35,6 +35,8 @@ starts straight into play.
 
 No test talks to a real unit, game file or your settings, so `pnpm check` is safe with
 everything plugged in.
+
+How the tests are written and what the gate holds them to: [`testing.md`](testing.md).
 
 ## Where the app keeps things
 

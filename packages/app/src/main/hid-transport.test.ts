@@ -129,7 +129,7 @@ describe('opening a unit', () => {
   it('refuses a unit that was unplugged since it was found', async () => {
     const backend = new FakeBackend([]);
     backend.devices.set(LEFT, new ScriptedDevice());
-    await expect(openUnit(backend, LEFT)).rejects.toThrow();
+    await expect(openUnit(backend, LEFT)).rejects.toThrow(/not an Azeron unit/);
     expect(backend.opened).toEqual([]);
   });
 

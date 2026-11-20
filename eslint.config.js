@@ -1,5 +1,6 @@
 import { builtinModules } from 'node:module';
 import js from '@eslint/js';
+import vitest from '@vitest/eslint-plugin';
 import reactHooks from 'eslint-plugin-react-hooks';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
@@ -136,4 +137,26 @@ export default tseslint.config(
     rules: reactHooks.configs.recommended.rules,
   },
   ...boundaries,
+  // Test-integrity rules: each bans a shape of test that can be green while checking nothing.
+  // All are errors, because `eslint --max-warnings=0` is the only thing that holds them.
+  // docs/testing.md says why, and what to write instead.
+  {
+    files: ['**/*.test.{ts,tsx}', 'test/**/*.ts'],
+    plugins: { vitest },
+    rules: {
+      // A test with no assertion at all.
+      'vitest/expect-expect': 'error',
+      // `toThrow()` with no matcher passes for any error, including one the setup threw.
+      'vitest/require-to-throw-message': 'error',
+      // An assertion inside a catch or an if never runs when the branch is not taken, so the
+      // test passes by not asserting. Use `thrown()` / `thrownAsync()` (test/thrown.ts).
+      'vitest/no-conditional-expect': 'error',
+      // maxArgs 2 because vitest, unlike jest, takes a failure message as the second argument.
+      'vitest/valid-expect': ['error', { maxArgs: 2 }],
+      'vitest/no-identical-title': 'error',
+      // A focused or skipped test that reaches main silently stops covering.
+      'vitest/no-focused-tests': 'error',
+      'vitest/no-disabled-tests': 'error',
+    },
+  },
 );

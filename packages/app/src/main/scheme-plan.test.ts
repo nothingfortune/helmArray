@@ -47,7 +47,9 @@ describe('a scheme worked out into its plan', () => {
       getScheme: () => Promise.resolve(broken),
       getGame: () => Promise.resolve(game),
     });
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.reason).toMatch(/^This scheme can't be worked out: /);
+    expect(result).toEqual({
+      ok: false,
+      reason: expect.stringMatching(/^This scheme can't be worked out: /),
+    });
   });
 });

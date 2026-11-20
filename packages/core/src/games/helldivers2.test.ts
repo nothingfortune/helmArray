@@ -34,10 +34,11 @@ describe('the Helldivers 2 definition', () => {
 
   it('names only real keys, and no key twice', () => {
     const seen = new Map<string, string>();
+    const notKeys: string[] = [];
     for (const a of helldivers2.actions) {
       const signal: Signal | undefined = a.native?.key;
       if (!signal) continue;
-      if (signal.kind === 'key') expect(isKeyCode(signal.code), a.id).toBe(true);
+      if (signal.kind === 'key' && !isKeyCode(signal.code)) notKeys.push(`${a.id}: ${signal.code}`);
       const id =
         signal.kind === 'key'
           ? signal.code
@@ -45,6 +46,7 @@ describe('the Helldivers 2 definition', () => {
       expect(seen.get(id), `${a.id} and ${seen.get(id)} share ${id}`).toBeUndefined();
       seen.set(id, a.id);
     }
+    expect(notKeys).toEqual([]);
   });
 
   it('requires only what cannot be played without: moving, firing and calling stratagems', () => {

@@ -150,7 +150,7 @@ describe('the hand store', () => {
 
   it('still fails for an error that is not a missing or broken file', async () => {
     // A folder where the file should be: reading it is an error that must not be hidden.
-    await expect(openHandStore(jsonFileStorage(dir))).rejects.toThrow();
+    await expect(openHandStore(jsonFileStorage(dir))).rejects.toThrow(/EISDIR/);
   });
 
   it('reads a file written by hand', async () => {
