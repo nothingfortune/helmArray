@@ -34,13 +34,14 @@ test.describe('axe: no serious or critical violations', () => {
   });
 
   test('the Library, the dimmed tile of a game that is not supported yet', async ({ helm }) => {
-    // KNOWN PROBLEM, found by this suite: the tile is drawn at 0.6 opacity (`.unsupported
-    // .cover` in library.css), which takes its "No cover" text to a contrast of 3.0:1, under
-    // the 4.5:1 a small text needs. Fixing it changes how the owner's canvas draws that tile, so
-    // it is left to them; remove `test.fail` when it is settled.
-    test.fail();
+    // Only the cover art is dimmed; the "No cover" text keeps full contrast (it was 3.0:1).
     await expect(helm.page.getByRole('heading', { name: 'Games' })).toBeVisible();
     expect(await seriousViolations(helm.page)).toEqual([]);
+  });
+
+  test('the Library has one top-level heading, Games', async ({ helm }) => {
+    await expect(helm.page.getByRole('heading', { level: 1, name: 'Games' })).toBeVisible();
+    await expect(helm.page.getByRole('heading', { level: 1 })).toHaveCount(1);
   });
 
   test('the Editor, with findings', async ({ helm }) => {
