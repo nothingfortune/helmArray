@@ -3,9 +3,15 @@
 // Pure: every input is handed in, so tests build them by hand.
 
 import type { AppState, DeviceChip, HandQuestion as ApiQuestion } from '../shared/api';
+import type { Hand } from '@helmarray/core';
+import type { ActivePlans } from './active-plans';
+import { NO_PLANS } from './active-plans';
+import { verifyUnits } from './apply-units';
+import type { HeldUnits } from './apply-units';
 import type { DevicesSnapshot, UnitSnapshot } from './devices';
 import type { HandQuestion, HandsResult } from './hands';
-import { syncState } from './sync-state';
+import { pendingChanges, syncDetail, syncState } from './sync-state';
+import type { SyncInput } from './sync-state';
 
 /**
  * The question to put to the person now, or null. Nothing is asked while a unit is still
@@ -37,6 +43,29 @@ function questionOf(ask: HandQuestion | null): ApiQuestion {
     : { kind: 'choose', unitId: ask.id, prompt: ask.prompt };
 }
 
+/**
+ * What each hand's unit holds as last read: only units that are ready, and only those whose hand
+ * is known. A unit that is still connecting, failed, or not yet told apart holds nothing here.
+ */
+export function heldUnits(devices: DevicesSnapshot, hands: HandsResult): HeldUnits {
+  const held: HeldUnits = {};
+  for (const unit of devices.units) {
+    const { identity, slots } = unit;
+    if (unit.state !== 'ready' || !identity || !slots) continue;
+    const hand: Hand | 'unknown' | undefined = hands.units.find(
+      (u) => u.id === identity.deviceId,
+    )?.hand;
+    if (hand !== 'left' && hand !== 'right') continue;
+    held[hand] = {
+      deviceId: identity.deviceId,
+      slots,
+      running: identity.runningSlot,
+      slotLimit: identity.slotLimit,
+    };
+  }
+  return held;
+}
+
 export interface AppStateInput {
   devices: DevicesSnapshot;
   /** `settleHands` over the ids of the units that have identified themselves. */
@@ -45,25 +74,38 @@ export interface AppStateInput {
   writeBlock: string | null;
   /** The active game and scheme; none until the store says. */
   active?: { gameId: string | null; schemeId: string | null } | undefined;
+  /**
+   * The active scheme's applied plan and what it resolves to now. The pill is the units against
+   * the applied plan, and the scheme against the applied plan; nothing else. Without it the pill
+   * has nothing to compare, and says so.
+   */
+  plans?: ActivePlans | undefined;
 }
 
 export function composeAppState(input: AppStateInput): AppState {
   const { devices, hands, writeBlock, active } = input;
+  const plans = input.plans ?? NO_PLANS;
   // `sort` is stable: units of one rank stay in the order the service lists them.
   const chips = devices.units
     .map((unit) => chipOf(unit, hands))
     .sort((a, b) => RANK[a.hand] - RANK[b.hand]);
   const there = (hand: 'left' | 'right') => chips.some((chip) => chip.hand === hand);
-  // Nothing is applied to a unit until M4, so there is nothing to compare a unit against and no
-  // edit to be waiting: the pill says, truthfully, that it hasn't checked.
-  const { label, tone } = syncState({
-    left: { connected: there('left'), verdict: null },
-    right: { connected: there('right'), verdict: null },
-    pendingChanges: 0,
-  });
+  // Read from the units, never from what the app last did: each unit's running slot against the
+  // plan last applied for the active scheme, and the scheme as it is now against that same plan.
+  const verdicts = plans.applied
+    ? verifyUnits(plans.applied, heldUnits(devices, hands))
+    : { left: null, right: null };
+  const syncInput: SyncInput = {
+    left: { connected: there('left'), verdict: verdicts.left },
+    right: { connected: there('right'), verdict: verdicts.right },
+    pendingChanges: plans.active ? pendingChanges(plans.applied, plans.current) : 0,
+    nothingApplied: plans.active && plans.applied === null,
+  };
+  const { label, tone } = syncState(syncInput);
+  const detail = syncDetail(syncInput);
   return {
     devices: chips,
-    sync: { label, tone },
+    sync: { label, tone, ...(detail !== undefined && { detail }) },
     writeBlock,
     question: questionOf(pendingAsk(devices, hands)),
     activeGameId: active?.gameId ?? null,

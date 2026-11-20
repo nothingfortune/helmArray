@@ -56,6 +56,7 @@ describe('the merged library', () => {
         gameId: 'helldivers2',
         schemes: [{ id: hd2Scheme.id, name: 'Xbox controller', output: 'pad' }],
         activeSchemeId: hd2Scheme.id,
+        applied: null,
         nativeKeys: true,
         hasCover: true,
         hasHeader: true,
@@ -76,6 +77,7 @@ describe('the merged library', () => {
       gameId: null,
       schemes: [],
       activeSchemeId: null,
+      applied: null,
       nativeKeys: false,
       hasCover: true,
       hasHeader: false,
@@ -140,6 +142,38 @@ describe('the merged library', () => {
     expect(entry?.schemes).toHaveLength(1);
   });
 
+  it('carries the scheme applied last and when, only while that scheme is still the game own', () => {
+    const own = gameKeysPreset(SKIFF);
+    const input = (schemeId: string) => ({
+      steam: [],
+      games: [{ game: SKIFF, builtIn: false }],
+      schemes: new Map([['skiff', [own]]]),
+      activeSchemeOf: () => null,
+      appliedOf: () => ({ schemeId, at: 1234 }),
+    });
+    expect(mergeLibrary(input(own.id))[0]?.applied).toEqual({ schemeId: own.id, at: 1234 });
+    expect(mergeLibrary(input('gone'))[0]?.applied).toBeNull();
+    expect(mergeLibrary({ ...input(own.id), appliedOf: () => null })[0]?.applied).toBeNull();
+  });
+
+  it('asks the store which scheme of each game was applied last', async () => {
+    const own = gameKeysPreset(SKIFF);
+    const lastApplied = vi.fn((gameId: string) =>
+      Promise.resolve(gameId === 'skiff' ? { schemeId: own.id, at: 77 } : null),
+    );
+    const { library } = service({
+      games: () => Promise.resolve([HD2, { game: SKIFF, builtIn: false }]),
+      listSchemes: (gameId) => Promise.resolve(gameId === 'skiff' ? [own] : []),
+      lastApplied,
+    });
+    const entries = await library.list();
+    expect(entries.find((e) => e.gameId === 'skiff')?.applied).toEqual({
+      schemeId: own.id,
+      at: 77,
+    });
+    expect(entries.find((e) => e.gameId === 'helldivers2')?.applied).toBeNull();
+  });
+
   it('sends no file path to a window', () => {
     const text = JSON.stringify(
       mergeLibrary({
@@ -175,6 +209,7 @@ function service(over: Partial<LibraryDeps> = {}) {
     games: () => Promise.resolve([HD2]),
     listSchemes: () => Promise.resolve(schemes),
     activeSchemeOf: () => null,
+    lastApplied: () => Promise.resolve(null),
     ...over,
   };
   return {

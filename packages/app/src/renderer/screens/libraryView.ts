@@ -73,24 +73,54 @@ export function summary(entries: readonly LibraryEntry[]): string {
 
 export interface CurrentCard {
   entry: LibraryEntry;
-  /** The game's active scheme, or null when it has none. */
+  /** The scheme shown: the one applied last, else the game's active one; null when neither. */
   scheme: LibrarySchemeRef | null;
-  /** The line under the title: what the scheme sends, or what to do next. */
+  /** The shown scheme is what was applied to the units (not merely the one picked). */
+  applied: boolean;
+  /** The line under the title: whether it is applied and what it sends, or what to do next. */
   detail: string;
 }
 
-/** The "On your Azerons now" card: the active game and scheme, or null when there is no game. */
+const sends = (scheme: LibrarySchemeRef) =>
+  scheme.output === 'pad' ? 'Controller buttons' : 'Keys';
+
+/**
+ * The "On your Azerons now" card. Once something has been applied it is that, the most recent
+ * apply over all games, whichever scheme is picked since: the units hold what was applied. Until
+ * then it is the active game's active scheme, worded as not applied yet. Null when there is
+ * neither.
+ */
 export function currentCard(
   entries: readonly LibraryEntry[],
   state: Pick<AppState, 'activeGameId'> | null,
 ): CurrentCard | null {
+  let latest: LibraryEntry | null = null;
+  for (const entry of entries) {
+    if (entry.applied === null) continue;
+    if (latest === null || entry.applied.at > (latest.applied?.at ?? 0)) latest = entry;
+  }
+  const appliedScheme = latest?.applied
+    ? (latest.schemes.find((s) => s.id === latest.applied?.schemeId) ?? null)
+    : null;
+  if (latest !== null && appliedScheme !== null) {
+    return {
+      entry: latest,
+      scheme: appliedScheme,
+      applied: true,
+      detail: `Applied · ${sends(appliedScheme)}`,
+    };
+  }
+
   const gameId = state?.activeGameId ?? null;
   if (gameId === null) return null;
   const entry = entries.find((e) => e.gameId === gameId);
   if (!entry) return null;
   // The active scheme only: with none picked the card says so, whatever a click would open.
   const scheme = activeScheme(entry);
-  const detail =
-    scheme === null ? 'No scheme picked' : scheme.output === 'pad' ? 'Controller buttons' : 'Keys';
-  return { entry, scheme, detail };
+  return {
+    entry,
+    scheme,
+    applied: false,
+    detail: scheme === null ? 'No scheme picked' : `Not applied yet · ${sends(scheme)}`,
+  };
 }

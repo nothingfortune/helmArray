@@ -101,12 +101,58 @@ describe('the card of what is current', () => {
   it('shows the active game and its active scheme', () => {
     const card = currentCard(entries, { activeGameId: 'helldivers2' });
     expect(card?.scheme).toBe(KEYS);
-    expect(card?.detail).toBe('Keys');
+    expect(card?.applied).toBe(false);
+    expect(card?.detail).toBe('Not applied yet · Keys');
     expect(
       currentCard([entry({ schemes: [XBOX], activeSchemeId: XBOX.id })], {
         activeGameId: 'helldivers2',
       })?.detail,
-    ).toBe('Controller buttons');
+    ).toBe('Not applied yet · Controller buttons');
+  });
+
+  describe('once something has been applied', () => {
+    const picked = entry({
+      schemes: [XBOX, KEYS],
+      activeSchemeId: KEYS.id,
+      applied: { schemeId: XBOX.id, at: 100 },
+    });
+
+    it('shows the scheme applied, not the one picked since', () => {
+      const card = currentCard([picked], { activeGameId: 'helldivers2' });
+      expect(card?.scheme).toBe(XBOX);
+      expect(card?.applied).toBe(true);
+      expect(card?.detail).toBe('Applied · Controller buttons');
+    });
+
+    it('shows it with no active game at all', () => {
+      expect(currentCard([picked], null)?.scheme).toBe(XBOX);
+    });
+
+    it('follows the most recent apply over all games, not the active game', () => {
+      const older = entry({
+        gameId: 'older',
+        name: 'Older',
+        schemes: [KEYS],
+        activeSchemeId: KEYS.id,
+        applied: { schemeId: KEYS.id, at: 50 },
+      });
+      const card = currentCard([older, picked], { activeGameId: 'older' });
+      expect(card?.entry.gameId).toBe('helldivers2');
+      expect(currentCard([picked, older], { activeGameId: 'older' })?.entry.gameId).toBe(
+        'helldivers2',
+      );
+    });
+
+    it('falls back to the picked scheme, as not applied, when the applied one is not listed', () => {
+      const lost = entry({
+        schemes: [KEYS],
+        activeSchemeId: KEYS.id,
+        applied: { schemeId: 'gone', at: 1 },
+      });
+      const card = currentCard([lost], { activeGameId: 'helldivers2' });
+      expect(card?.applied).toBe(false);
+      expect(card?.detail).toBe('Not applied yet · Keys');
+    });
   });
 
   it('says what to do when the active game has no scheme', () => {

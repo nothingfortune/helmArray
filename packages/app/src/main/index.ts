@@ -4,6 +4,8 @@ import { BrowserWindow, Menu, Tray, app, ipcMain, nativeImage, protocol, shell }
 import { CHANNELS } from '../shared/api';
 import { COVER_SCHEME } from '../shared/cover';
 import { BUILT_IN_GAMES } from './built-in-games';
+import { createActivePlans } from './active-plans';
+import { createApplyService } from './apply-service';
 import { answerCover } from './cover-protocol';
 import { createCoordinator } from './coordinator';
 import type { Coordinator } from './coordinator';
@@ -17,7 +19,7 @@ import { findUnits, openUnit } from './hid-transport';
 import { registerHelmIpc } from './ipc';
 import { createLibraryService } from './library';
 import { listProcesses } from './process-list';
-import { watchProcesses } from './processes';
+import { azeronAppRunning, watchProcesses } from './processes';
 import { readSteamLibrary } from './steam-library';
 import { steamReaders } from './steam-readers';
 import { DataStore } from './store';
@@ -128,6 +130,7 @@ async function startServices(): Promise<() => Promise<void>> {
     games: () => data.listGames(),
     listSchemes: (gameId) => data.listSchemes(gameId),
     activeSchemeOf: (gameId) => data.activeSchemeOf(gameId),
+    lastApplied: (gameId) => data.lastApplied(gameId),
   });
   protocol.handle(COVER_SCHEME, async (request) => {
     const answer = await answerCover(request.url, await library.coverFiles(), (path) =>
@@ -144,6 +147,13 @@ async function startServices(): Promise<() => Promise<void>> {
     openUnit: (path) => openUnit(hid, path),
     trace: (path, line) => log.write(path, line),
   });
+  // Apply, and what the pill compares the units with. Both read the store as it is now, edits
+  // not yet written to disk included.
+  const plans = {
+    getScheme: (id: string) => data.getScheme(id),
+    getGame: async (gameId: string) =>
+      (await data.listGames()).find((entry) => entry.game.id === gameId)?.game,
+  };
   const gate = createDevicesGate(devices, (error) => log.write('(app)', String(error)));
   const helm: Coordinator = createCoordinator({
     devices: {
@@ -154,9 +164,27 @@ async function startServices(): Promise<() => Promise<void>> {
     gate,
     readLog: (lines) => log.recent(lines),
     active: () => data.active(),
+    plans: createActivePlans({
+      ...plans,
+      active: () => data.active(),
+      getApplied: (id) => data.getApplied(id),
+    }),
+    // No state is worked out half way through a write; Apply asks for it when it is done.
+    suspended: () => apply.busy(),
     trace: (unit, line) => log.write(unit, line),
   });
   helm.onState(broadcast);
+  const apply = createApplyService({
+    plans,
+    devices,
+    hands,
+    // A fresh listing every time, never the watcher's last answer; a listing that fails throws.
+    azeronAppRunning: async () => azeronAppRunning(await listProcesses()),
+    saveApplied: (schemeId, plan) => data.saveApplied(schemeId, plan),
+    setActive: (gameId, schemeId) => data.setActive(gameId, schemeId),
+    settled: () => helm.plansChanged(),
+    trace: (line) => log.write('(apply)', line),
+  });
 
   registerHelmIpc(ipcMain, {
     state: () => helm.state(),
@@ -171,11 +199,17 @@ async function startServices(): Promise<() => Promise<void>> {
     getScheme: (id) => data.getScheme(id),
     listSchemes: (gameId) => data.listSchemes(gameId),
     createScheme: (gameId, preset) => data.createSchemeFromPreset(gameId, preset),
-    saveScheme: (scheme) => Promise.resolve().then(() => data.saveScheme(scheme)),
+    saveScheme: async (scheme) => {
+      data.saveScheme(scheme);
+      // The pill compares the edit with what was applied, at once; the file follows later.
+      void helm.plansChanged();
+    },
     setActive: async (gameId, schemeId) => {
       await data.setActive(gameId, schemeId);
       await helm.activeChanged();
     },
+    previewApply: (schemeId) => apply.preview(schemeId),
+    apply: (schemeId) => apply.apply(schemeId),
   });
 
   helm.start();

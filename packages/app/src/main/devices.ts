@@ -19,6 +19,8 @@ export interface DeviceDeps {
   schedule?(fn: () => void, ms: number): () => void;
   /** Time between the end of one poll and the start of the next. Defaults to `POLL_MS`. */
   pollMs?: number;
+  /** The clock, in milliseconds. Defaults to `Date.now`. */
+  now?(): number;
 }
 
 export const POLL_MS = 1000;
@@ -56,6 +58,17 @@ interface Entry {
   opening?: Promise<void>;
   /** Unplugged (or the service stopped) while it was being set up: nothing more is done to it. */
   dropped: boolean;
+  /** When the slots and the running slot were last read from the unit. */
+  readAt?: number;
+}
+
+/** What a job holding the service is handed. */
+export interface HoldTools {
+  /**
+   * Reads every ready unit again (who it is, its slots, the slot it runs), skipping a unit read
+   * within the last `olderThanMs`. Tells the listeners once, if any unit was read.
+   */
+  refresh(olderThanMs?: number): Promise<void>;
 }
 
 const LOG = '(devices)';
@@ -71,6 +84,10 @@ export class Devices {
   private cancelNext: (() => void) | null = null;
   /** Counts notices, so a nested one supersedes the one it interrupted. */
   private emitted = 0;
+  /** Jobs holding the service (see `exclusive`), those waiting for their turn included. */
+  private holding = 0;
+  /** Settles when the last job to ask for the service has let go of it. */
+  private holdTail: Promise<void> = Promise.resolve();
 
   constructor(private readonly deps: DeviceDeps) {}
 
@@ -88,6 +105,11 @@ export class Devices {
     this.generation++;
     this.cancelNext?.();
     this.cancelNext = null;
+    // A job writing to the units is never cut off by the units being let go: it is waited for.
+    // Its own checks stop it at the next step if the Azeron app has opened meanwhile.
+    while (this.holding > 0) await this.holdTail;
+    // Started again while waiting: that start supersedes this stop.
+    if (this.running) return;
     // Every unit let go is tracked until its open and close have finished, so a second stop
     // waits for them too and a restart can't open a path still being let go.
     const hadUnits = this.entries.size > 0;
@@ -115,6 +137,64 @@ export class Devices {
     return undefined;
   }
 
+  /**
+   * Holds the service for `job`: while it runs nothing else reads from a unit or lists them.
+   * Polling is skipped (the next one comes at its usual time after the job), a unit newly seen
+   * is not opened, none is closed because a listing missed it, and `stop` waits. Jobs run one
+   * at a time, in the order asked. The hold is let go of when the job ends, however it ends.
+   *
+   * What the job itself does to the units goes through `session()`; to put what the service
+   * knows of them right afterwards, it uses `tools.refresh()`.
+   */
+  async exclusive<T>(job: (tools: HoldTools) => Promise<T>): Promise<T> {
+    // Claimed now, not when the turn comes: a poll between the call and the turn is skipped too.
+    this.holding++;
+    const earlier = this.holdTail;
+    let release!: () => void;
+    this.holdTail = new Promise<void>((resolve) => (release = resolve));
+    try {
+      await earlier;
+      return await job({ refresh: (olderThanMs) => this.readAgain(olderThanMs) });
+    } finally {
+      this.holding--;
+      release();
+    }
+  }
+
+  /** Reads the ready units again, unless read within `olderThanMs`. One job at a time. */
+  refresh(options: { olderThanMs?: number } = {}): Promise<void> {
+    return this.exclusive((tools) => tools.refresh(options.olderThanMs));
+  }
+
+  private async readAgain(olderThanMs?: number): Promise<void> {
+    const now = this.deps.now ?? Date.now;
+    let changed = false;
+    for (const entry of [...this.entries.values()]) {
+      if (entry.state !== 'ready' || entry.dropped || !entry.session) continue;
+      if (olderThanMs !== undefined && now() - (entry.readAt ?? 0) < olderThanMs) continue;
+      changed = true;
+      try {
+        const identity = await entry.session.identify();
+        const slots = await entry.session.readSlots();
+        const running = await entry.session.runningSlot();
+        if (entry.dropped) continue;
+        entry.identity = { ...identity, runningSlot: running };
+        entry.slots = slots;
+        entry.readAt = now();
+      } catch (error) {
+        if (entry.dropped) continue;
+        // What the unit holds is not known now: it is no longer offered as ready or as read.
+        entry.state = 'failed';
+        entry.error = messageOf(error);
+        delete entry.session;
+        delete entry.slots;
+        this.trace(entry.path, `reading it again failed: ${entry.error}`);
+        await this.close(entry);
+      }
+    }
+    if (changed) this.emit();
+  }
+
   /** One poll, then the next after the interval: never two at once. */
   private async tick(generation: number): Promise<void> {
     await this.poll(generation);
@@ -127,6 +207,8 @@ export class Devices {
   }
 
   private async poll(generation: number): Promise<void> {
+    // A job holds the service: not even a listing is asked for. The next poll is on time.
+    if (this.holding > 0) return;
     let paths: string[];
     try {
       paths = (await this.deps.findUnits()).map((unit) => unit.path);
@@ -136,6 +218,8 @@ export class Devices {
       return;
     }
     if (generation !== this.generation) return;
+    // A hold began while the listing was out: it is dropped, so no unit is opened or closed.
+    if (this.holding > 0) return;
     this.reconcile(new Set(paths));
   }
 
@@ -187,6 +271,7 @@ export class Devices {
       if (entry.dropped) return;
       entry.session = session;
       entry.slots = slots;
+      entry.readAt = (this.deps.now ?? Date.now)();
       entry.state = 'ready';
       this.emit();
     } catch (error) {

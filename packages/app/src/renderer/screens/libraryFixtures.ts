@@ -8,6 +8,7 @@ export const entry = (over: Partial<LibraryEntry> = {}): LibraryEntry => ({
   gameId: 'helldivers2',
   schemes: [],
   activeSchemeId: null,
+  applied: null,
   nativeKeys: true,
   hasCover: true,
   hasHeader: true,
