@@ -1,4 +1,5 @@
 import type { ControlId, Hand } from '@helmarray/core';
+import { own } from '@helmarray/core';
 
 // The geometry of the Azeron unit board (docs/design/canvas/Unit.dc.html). Pure numbers: no
 // React, no DOM. Geometry is fixed per position and never depends on what is assigned, so an
@@ -69,7 +70,7 @@ const SPECIAL_NAMES: Record<string, string> = {
 
 /** `index_1` -> "Index 1", `dpad_up` -> "D-pad ↑". */
 export function positionName(pos: string): string {
-  const special = SPECIAL_NAMES[pos];
+  const special = own(SPECIAL_NAMES, pos);
   if (special !== undefined) return special;
   const [column = '', n = ''] = pos.split('_');
   return `${column.charAt(0).toUpperCase()}${column.slice(1)} ${n}`.trim();
@@ -143,7 +144,7 @@ export function unitLayout(hand: Hand): UnitLayout {
   const keys: KeyPlace[] = [];
   for (const [pos] of left) {
     // For a mirrored hand a direction key takes the place its opposite has on the left unit.
-    const source = (right && SWAPPED_WHEN_MIRRORED[pos]) || pos;
+    const source = (right && own(SWAPPED_WHEN_MIRRORED, pos)) || pos;
     const box = left.get(source);
     // The map was built from these same names, so a miss is a typo in this file.
     if (box === undefined) throw new Error(`no box for ${source}`);

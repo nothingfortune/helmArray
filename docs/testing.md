@@ -200,6 +200,10 @@ the tests that ran and passed. Each one is one of:
   makes a test hang, a killed runner never reaches its teardown, and in the real temp folder that
   left a `helm-test-*` folder behind for each restart. Inside the sandbox they go when Stryker
   removes it, and a test that leaks still fails the run.
+- Stryker's own glob option replaces the config's `mutate` list, `!` exclusions included, so a bare
+  glob would mutate the tests and the fake unit. Every run over a glob, the workflow included,
+  goes through `pnpm test:mutation:file`, which puts the exclusions back;
+  `test/mutation-entry-points.test.ts` fails if a workflow, package script or doc bypasses it.
 - `incremental: true`, with `reports/mutation/incremental.json` committed: a re-run tests only the
   mutants whose code or tests changed. `pnpm exec stryker run --force` ignores it
   and tests everything.

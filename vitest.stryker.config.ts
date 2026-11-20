@@ -15,7 +15,7 @@ const source = (path: string): string => fileURLToPath(new URL(path, import.meta
 //  - test/lint-test-integrity.test.ts, test/boundaries.test.ts: run ESLint over planted code;
 //    nothing under mutation changes what they say.
 //  - test/no-disabled-tests.test.ts, test/stryker-disable-comments.test.ts,
-//    test/workflow-hygiene.test.ts, test/mutation-file.test.ts: read the repository's own files
+//    test/workflow-hygiene.test.ts, test/mutation-file.test.ts, test/mutation-entry-points.test.ts: read the repository's own files
 //    and scripts, not the code under mutation.
 // `test/integration` stays in: it drives the real wiring and kills most main-process mutants.
 const config = mergeConfig(
@@ -43,6 +43,7 @@ const config = mergeConfig(
         'test/stryker-disable-comments.test.ts',
         'test/workflow-hygiene.test.ts',
         'test/mutation-file.test.ts',
+        'test/mutation-entry-points.test.ts',
       ],
       coverage: { enabled: false },
     },

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Game, Scheme } from '@helmarray/core';
-import { BUILT_IN_DEVICES, CYBORG2_LEFT, gameKeysPreset, resolve } from '@helmarray/core';
+import { BUILT_IN_DEVICES, CYBORG2_LEFT, gameKeysPreset, resolve, unitOf } from '@helmarray/core';
 import { FakeUnit, storedFromWritten } from './fake';
 import { unitRecords } from './profile';
 import type { ButtonRecord, UnitRecord } from './records';
@@ -42,7 +42,7 @@ const scheme: Scheme = {
   },
   behaviour: { 'L.index_1': { latch: true }, 'L.middle_1': { turbo: { interval: 40 } } },
 };
-const records = unitRecords(resolve(scheme, game, BUILT_IN_DEVICES).units.left, CYBORG2_LEFT);
+const records = unitRecords(unitOf(resolve(scheme, game, BUILT_IN_DEVICES), 'left'), CYBORG2_LEFT);
 
 // This package's tests get no DOM or Node types; the timer is the platform's own.
 const later = (globalThis as unknown as { setTimeout: (fn: () => void, ms: number) => unknown })

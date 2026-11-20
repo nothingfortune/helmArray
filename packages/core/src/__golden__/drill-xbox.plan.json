@@ -655,6 +655,106 @@
       }
     }
   ],
+  "gameBindings": [
+    {
+      "set": "controller",
+      "mode": "foot",
+      "action": "jump",
+      "signal": {
+        "kind": "pad",
+        "control": "A"
+      },
+      "native": {
+        "kind": "pad",
+        "control": "A"
+      }
+    },
+    {
+      "set": "controller",
+      "mode": "foot",
+      "action": "reload",
+      "signal": {
+        "kind": "pad",
+        "control": "X"
+      },
+      "native": {
+        "kind": "pad",
+        "control": "X"
+      }
+    },
+    {
+      "set": "controller",
+      "mode": "foot",
+      "action": "fire",
+      "signal": {
+        "kind": "pad",
+        "control": "RT"
+      },
+      "native": {
+        "kind": "pad",
+        "control": "RT"
+      }
+    },
+    {
+      "set": "controller",
+      "mode": "foot",
+      "action": "map",
+      "signal": {
+        "kind": "pad",
+        "control": "BACK"
+      },
+      "native": {
+        "kind": "pad",
+        "control": "BACK"
+      }
+    },
+    {
+      "set": "controller",
+      "mode": "foot",
+      "action": "emote",
+      "signal": {
+        "kind": "pad",
+        "control": "DPAD_RIGHT"
+      },
+      "native": {
+        "kind": "pad",
+        "control": "DPAD_RIGHT"
+      }
+    },
+    {
+      "set": "controller",
+      "mode": "foot",
+      "action": "unbound",
+      "signal": null,
+      "native": null
+    },
+    {
+      "set": "controller",
+      "mode": "rover",
+      "action": "boost",
+      "signal": {
+        "kind": "pad",
+        "control": "A"
+      },
+      "native": {
+        "kind": "pad",
+        "control": "A"
+      }
+    },
+    {
+      "set": "controller",
+      "mode": "rover",
+      "action": "horn",
+      "signal": {
+        "kind": "pad",
+        "control": "DPAD_UP"
+      },
+      "native": {
+        "kind": "pad",
+        "control": "DPAD_UP"
+      }
+    }
+  ],
   "bindSheet": [],
   "ledger": {},
   "findings": []

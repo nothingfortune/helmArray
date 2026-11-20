@@ -2,7 +2,15 @@
 // each stop shows where the focus is (an outline or a box-shadow on the focused element). The
 // keys are Playwright's, sent into the page.
 import { expect, test } from './helm';
-import { applyInDrawer, drawer, keepEveryCheck, startFrom, unseen, walkTabOrder } from './screens';
+import {
+  applyInDrawer,
+  drawer,
+  keepEveryCheck,
+  startFrom,
+  startWithChecks,
+  unseen,
+  walkTabOrder,
+} from './screens';
 
 test.describe('keyboard: Tab order and visible focus', () => {
   test('the Library', async ({ helm }) => {
@@ -23,7 +31,7 @@ test.describe('keyboard: Tab order and visible focus', () => {
 
   test('the Editor', async ({ helm }) => {
     const { page } = helm;
-    await startFrom(page, 'Xbox controller');
+    await startWithChecks(page);
     const stops = await walkTabOrder(page);
     const labels = stops.map((s) => s.label);
     expect(labels).toEqual(

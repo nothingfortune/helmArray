@@ -251,7 +251,7 @@ export function Library({
 
       <section className="games">
         <div className="games-head">
-          <h2 className="section-title">Games</h2>
+          <h1 className="section-title">Games</h1>
           <span className="hint">{summary(entries)}</span>
           <button
             type="button"

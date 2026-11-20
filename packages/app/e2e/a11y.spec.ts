@@ -8,8 +8,11 @@ import {
   CLOSE_AZERON_FIRST,
   applyInDrawer,
   drawer,
+  helldivers,
+  leftUnit,
   keepEveryCheck,
   startFrom,
+  startWithChecks,
 } from './screens';
 
 // Legacy mode runs axe inside the page itself: the default opens a second page, which an
@@ -34,18 +37,83 @@ test.describe('axe: no serious or critical violations', () => {
   });
 
   test('the Library, the dimmed tile of a game that is not supported yet', async ({ helm }) => {
-    // KNOWN PROBLEM, found by this suite: the tile is drawn at 0.6 opacity (`.unsupported
-    // .cover` in library.css), which takes its "No cover" text to a contrast of 3.0:1, under
-    // the 4.5:1 a small text needs. Fixing it changes how the owner's canvas draws that tile, so
-    // it is left to them; remove `test.fail` when it is settled.
-    test.fail();
+    // Only the cover art is dimmed; the "No cover" text keeps full contrast (it was 3.0:1).
     await expect(helm.page.getByRole('heading', { name: 'Games' })).toBeVisible();
     expect(await seriousViolations(helm.page)).toEqual([]);
   });
 
-  test('the Editor, with findings', async ({ helm }) => {
+  test('the Library has one top-level heading, Games', async ({ helm }) => {
+    await expect(helm.page.getByRole('heading', { level: 1, name: 'Games' })).toBeVisible();
+    await expect(helm.page.getByRole('heading', { level: 1 })).toHaveCount(1);
+  });
+
+  test('the Library, with the start-from choices open', async ({ helm }) => {
+    const { page } = helm;
+    await helldivers(page).click();
+    await expect(page.getByRole('button', { name: 'Xbox controller' })).toBeVisible();
+    expect(await seriousViolations(page)).toEqual([]);
+  });
+
+  test('the Library, with a scheme started and its other-scheme choices open', async ({ helm }) => {
     const { page } = helm;
     await startFrom(page, 'Xbox controller');
+    await page.getByRole('button', { name: 'Library' }).click();
+    await page.getByRole('button', { name: 'Other scheme' }).click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    expect(await seriousViolations(page)).toEqual([]);
+  });
+
+  test('Settings, open', async ({ helm }) => {
+    const { page } = helm;
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+    expect(await seriousViolations(page)).toEqual([]);
+  });
+
+  test('the Editor, with the side panel open on a button that has an action', async ({ helm }) => {
+    const { page } = helm;
+    await startFrom(page, 'Xbox controller');
+    await leftUnit(page)
+      .getByRole('button', { name: /^Interact, / })
+      .click();
+    await expect(page.getByRole('button', { name: /^Tap/ }).first()).toBeVisible();
+    expect(await seriousViolations(page)).toEqual([]);
+  });
+
+  test('the Editor, with the side panel open on an empty button', async ({ helm }) => {
+    const { page } = helm;
+    await startFrom(page, 'Xbox controller');
+    await leftUnit(page)
+      .getByRole('button', { name: /^Empty, middle 2/ })
+      .click();
+    await expect(page.getByRole('button', { name: /^Tap/ }).first()).toBeVisible();
+    expect(await seriousViolations(page)).toEqual([]);
+  });
+
+  test('the Editor, with the side panel open on the stick', async ({ helm }) => {
+    const { page } = helm;
+    await startFrom(page, 'Xbox controller');
+    // The stick press sits over the stick's own button, so the keyboard selects it.
+    await leftUnit(page)
+      .getByRole('button', { name: /^Stick/ })
+      .press('Enter');
+    await expect(page.getByText('The stick sends its four directions.')).toBeVisible();
+    expect(await seriousViolations(page)).toEqual([]);
+  });
+
+  test('the Editor, with findings', async ({ helm }) => {
+    const { page } = helm;
+    await startWithChecks(page);
+    expect(await seriousViolations(page)).toEqual([]);
+  });
+
+  test('the Editor, with findings and the side panel open', async ({ helm }) => {
+    const { page } = helm;
+    await startWithChecks(page);
+    // A drop opens the side panel on the button it landed on.
+    const action = page.locator('.ed-actions').getByRole('button', { name: 'Throw grenade' });
+    await action.dragTo(leftUnit(page).getByRole('button', { name: 'Empty, middle 2' }));
+    await expect(page.locator('.ed-panel-title')).toHaveText('Throw grenade');
     await expect(page.getByRole('button', { name: 'Keep, I know' }).first()).toBeVisible();
     expect(await seriousViolations(page)).toEqual([]);
   });

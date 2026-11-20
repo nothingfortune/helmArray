@@ -74,7 +74,7 @@ const game: Game = {
 };
 
 const pinOf = (plan: ReturnType<typeof resolve>, hand: 'left' | 'right', position: string) =>
-  plan.units[hand].pins.find((p) => p.position === position);
+  plan.units[hand]?.pins.find((p) => p.position === position);
 
 describe('the Xbox controller preset', () => {
   const scheme = xboxControllerPreset(game);
@@ -111,7 +111,7 @@ describe('resolve, pad output', () => {
       ['left', CYBORG2_LEFT],
       ['right', CYBORG2_RIGHT],
     ] as const) {
-      expect(plan.units[hand].pins.map((p) => p.position)).toEqual(
+      expect(plan.units[hand]?.pins.map((p) => p.position)).toEqual(
         unit.positions.filter((p) => p.name !== 'stick').map((p) => p.name),
       );
     }
@@ -131,8 +131,8 @@ describe('resolve, pad output', () => {
   });
 
   it("makes the left stick the Xbox left stick and the right stick the right, with each unit's facts", () => {
-    expect(plan.units.left.stick).toEqual({ mode: 'pad-left', angle: -1, invertX: false });
-    expect(plan.units.right.stick).toEqual({ mode: 'pad-right', angle: 176, invertX: false });
+    expect(plan.units.left?.stick).toEqual({ mode: 'pad-left', angle: -1, invertX: false });
+    expect(plan.units.right?.stick).toEqual({ mode: 'pad-right', angle: 176, invertX: false });
   });
 
   it('lists what each mapped action receives, mode by mode', () => {
@@ -191,7 +191,7 @@ describe('resolve, behaviour', () => {
     const plan = resolve(scheme, game, BUILT_IN_DEVICES);
     expect(pinOf(plan, 'left', 'index_2')).toMatchObject({ turbo: { interval: 40 }, latch: false });
     expect(pinOf(plan, 'right', 'thumb_aux_upper')).toMatchObject({ turbo: false, latch: true });
-    expect(plan.units.right.stick).toEqual({
+    expect(plan.units.right?.stick).toEqual({
       mode: 'mouse',
       sensitivity: 7,
       invertX: true,

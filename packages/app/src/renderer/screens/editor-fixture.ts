@@ -1,6 +1,6 @@
 // A small two-mode game and schemes on it, for the editor's tests. Not shipped: nothing in the
 // app imports this file.
-import { BUILT_IN_DEVICES, resolve } from '@helmarray/core';
+import { AZERONS_ONLY, BUILT_IN_DEVICES, resolve } from '@helmarray/core';
 import type { Action, Game, PadControl, Plan, Role, Scheme, Signal } from '@helmarray/core';
 
 const act = (
@@ -50,6 +50,7 @@ export function keysScheme(): Scheme {
     id: 'lite-main',
     gameId: 'lite',
     name: 'Main',
+    devices: { ...AZERONS_ONLY },
     output: 'keys',
     padMap: {},
     writeGameFile: false,

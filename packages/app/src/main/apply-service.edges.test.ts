@@ -195,8 +195,10 @@ describe('a preview of a scheme that cannot be worked out', () => {
       azeronOpen: false,
       anyChange: false,
       checks: [{ ok: false, text }],
+      game: { rows: [], via: 'sheet' },
       left: {
         hand: 'left',
+        used: true,
         connected: false,
         differs: false,
         inputsChanged: 0,
@@ -207,6 +209,7 @@ describe('a preview of a scheme that cannot be worked out', () => {
       },
       right: {
         hand: 'right',
+        used: true,
         connected: false,
         differs: false,
         inputsChanged: 0,

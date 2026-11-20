@@ -169,6 +169,11 @@ export async function composeServices(options: ComposeOptions): Promise<Services
     saveApplied: (schemeId, plan) => data.saveApplied(schemeId, plan),
     saveScheme: (scheme) => data.saveScheme(scheme),
     setActive: (gameId, schemeId) => data.setActive(gameId, schemeId),
+    // The game holds the bindings of the setup applied to it last, of any of its schemes.
+    gameHolds: async (gameId) => {
+      const last = await data.lastApplied(gameId);
+      return last === null ? null : data.getApplied(last.schemeId);
+    },
     settled: () => helm.plansChanged(),
     trace: (line) => log.write('(apply)', line),
   });

@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 2,
+  "id": "drill-xbox-1",
+  "gameId": "drill",
+  "name": "Xbox controller",
+  "output": "pad",
+  "writeGameFile": false,
+  "padMap": {
+    "L.index_1": "RB",
+    "L.index_2": "RT",
+    "L.index_3": "A",
+    "L.index_4": "B",
+    "L.middle_1": "X",
+    "L.middle_2": "Y",
+    "L.middle_3": "LB",
+    "L.middle_4": "LT",
+    "L.dpad_up": "DPAD_UP",
+    "L.dpad_down": "DPAD_DOWN",
+    "L.dpad_left": "DPAD_LEFT",
+    "L.dpad_right": "DPAD_RIGHT",
+    "L.stick_press": "LS",
+    "L.thumb_aux_upper": "BACK",
+    "R.stick_press": "RS",
+    "R.thumb_aux_upper": "START"
+  },
+  "map": {
+    "foot": {
+      "L.index_3": {
+        "tap": "jump"
+      },
+      "L.middle_1": {
+        "tap": "reload"
+      },
+      "L.middle_2": {
+        "tap": "grenade"
+      }
+    }
+  },
+  "behaviour": {
+    "L.stick": {
+      "stick": {
+        "mode": "pad-left"
+      }
+    },
+    "R.stick": {
+      "stick": {
+        "mode": "pad-right"
+      }
+    }
+  },
+  "ledger": {},
+  "accepted": [
+    {
+      "rule": "pad-default-unknown",
+      "control": "L.middle_2",
+      "action": "grenade",
+      "reason": "Kept on purpose"
+    },
+    {
+      "rule": "pad-mismatch",
+      "control": "L.index_1",
+      "action": "reload",
+      "reason": "Kept on purpose"
+    },
+    {
+      "rule": "mixed-input",
+      "control": "R.stick",
+      "reason": "Kept on purpose"
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 // What the main process tells the windows, and what a window may ask of it. Plain data only:
 // it crosses IPC by structured clone. The preload exposes `HelmApi` as `window.helm`.
 
-import type { Game, Scheme } from '@helmarray/core';
+import type { BindingSet, Game, Scheme, Signal } from '@helmarray/core';
 
 export type Hand = 'left' | 'right';
 
@@ -110,6 +110,11 @@ export interface ReadyCheck {
 /** What Apply would do to one unit. */
 export interface ApplyUnitChange {
   hand: Hand;
+  /**
+   * The setup uses this unit. One it doesn't (the right unit, for *left Azeron + mouse*) is never
+   * written, and has no lines and no problem here.
+   */
+  used: boolean;
   /** Ready to be written: plugged in, read, and known by hand. */
   connected: boolean;
   /** The layout differs from what the unit runs now. */
@@ -124,6 +129,34 @@ export interface ApplyUnitChange {
   changes: string[];
   /** Why this unit can't be done at all, in one sentence, or null. */
   problem: string | null;
+}
+
+/** One of the game's bindings Apply changes. Words are the drawer's: these are the facts. */
+export interface ApplyGameRow {
+  /** The game's keyboard bindings or its controller bindings. */
+  set: BindingSet;
+  mode: string;
+  modeName: string;
+  action: string;
+  actionName: string;
+  /** What the action goes on; null: on nothing (it comes off what it is on). */
+  to: Signal | null;
+  /**
+   * What the game has it on now, as far as helmArray knows: what the setup applied to it last
+   * says, else what the game ships. Null: on nothing.
+   */
+  from: Signal | null;
+}
+
+/** The game's half of Apply. */
+export interface ApplyGame {
+  /**
+   * How the rows reach the game: `file`, written by helmArray (from M5); `sheet`, set by hand in
+   * the game's own controls menu.
+   */
+  via: 'file' | 'sheet';
+  /** Every binding that changes, in set, then mode, then the game's action order. */
+  rows: ApplyGameRow[];
 }
 
 /** What the Apply drawer shows before anything is written. */
@@ -147,6 +180,8 @@ export interface ApplyPreview {
   anyChange: boolean;
   left: ApplyUnitChange;
   right: ApplyUnitChange;
+  /** What changes in the game's bindings. */
+  game: ApplyGame;
 }
 
 export type ApplyUnitStatus = 'applied' | 'unchanged' | 'failed' | 'not-attempted';
@@ -167,7 +202,7 @@ export interface ApplyResult {
   message: string;
   /** Refused because the scheme changed since the preview: nothing was written; look again. */
   changed?: boolean;
-  /** Left, then right; empty when nothing was attempted. */
+  /** Left, then right: the units the setup uses; empty when nothing was attempted. */
   units: ApplyUnitResult[];
 }
 

@@ -126,9 +126,14 @@ export function composeAppState(input: AppStateInput): AppState {
         ),
       )
     : { left: null, right: null };
+  // The units the setup uses: those of the plan applied, else of the scheme as it is now. With
+  // neither there is no setup to go by, and both are judged.
+  const setupPlan = plans.applied ?? plans.current;
+  const used = (hand: 'left' | 'right') =>
+    setupPlan === null || setupPlan.units[hand] !== undefined;
   const syncInput: SyncInput = {
-    left: { connected: there('left'), verdict: verdicts.left },
-    right: { connected: there('right'), verdict: verdicts.right },
+    left: { used: used('left'), connected: there('left'), verdict: verdicts.left },
+    right: { used: used('right'), connected: there('right'), verdict: verdicts.right },
     pendingChanges: plans.active ? pendingChanges(plans.applied, plans.current) : 0,
     nothingApplied: plans.active && plans.applied === null,
   };

@@ -21,6 +21,19 @@ export async function startFrom(page: Page, preset: 'Xbox controller' | "Game's 
   await expect(page.getByRole('heading', { name: 'Helldivers 2' })).toBeVisible();
 }
 
+/** The left unit's board in the Editor. */
+export const leftUnit = (page: Page) => page.locator('.unit[data-hand="left"]');
+
+/**
+ * Opens Helldivers 2 on a setup with checks the player can keep: the game's own keys with nothing
+ * placed yet flags the required actions (and the sticks, which send no keys). The Xbox controller
+ * preset has none, and putting an action on a button no longer raises one: the game is rebound.
+ */
+export async function startWithChecks(page: Page) {
+  await startFrom(page, "Game's own keys");
+  await expect(page.getByRole('button', { name: 'Keep, I know' }).first()).toBeVisible();
+}
+
 /** "Keep, I know" on every check that is still flagged. Returns how many were kept. */
 export async function keepEveryCheck(page: Page): Promise<number> {
   const keep = page.getByRole('button', { name: 'Keep, I know' });

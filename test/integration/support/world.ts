@@ -12,8 +12,9 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Game, Hand, Plan, Scheme } from '@helmarray/core';
-import { BUILT_IN_DEVICES, CYBORG2_LEFT, CYBORG2_RIGHT, resolve } from '@helmarray/core';
+import { BUILT_IN_DEVICES, CYBORG2_LEFT, CYBORG2_RIGHT, resolve, unitOf } from '@helmarray/core';
 import { encodeRecord, storedFromWritten, toHex, unitRecords } from '@helmarray/azeron';
+import type { FakeUnitOptions } from '@helmarray/azeron';
 import { createHelmApi } from '../../../packages/app/src/preload/api';
 import type { IpcBridge } from '../../../packages/app/src/preload/api';
 import { CHANNELS } from '../../../packages/app/src/shared/api';
@@ -145,6 +146,8 @@ export interface WorldOptions {
    * folder where the file should be, so it can't be read.
    */
   hands?: Record<number, Hand> | null | 'unreadable';
+  /** What the unit with RIGHT_ID holds and runs when it is plugged in. Default: stock. */
+  right?: Pick<FakeUnitOptions, 'slots' | 'running'>;
 }
 
 export class World {
@@ -169,9 +172,10 @@ export class World {
   private constructor(
     /** The folder everything of this world is in. */
     readonly root: string,
+    right: WorldOptions['right'] = {},
   ) {
     this.left = this.hid.plugUnit({ serial: '8&2a1b3c4d&0&0000', deviceId: LEFT_ID });
-    this.right = this.hid.plugUnit({ serial: '8&1f2e3d4c&0&0000', deviceId: RIGHT_ID });
+    this.right = this.hid.plugUnit({ serial: '8&1f2e3d4c&0&0000', deviceId: RIGHT_ID, ...right });
     this.pedals = this.hid.plugBystander('The rudder pedals', PEDALS.vendorId, PEDALS.productId, 1);
     this.xboxPad = this.hid.plugBystander(
       'The Xbox controller',
@@ -182,7 +186,7 @@ export class World {
   }
 
   static async create(options: WorldOptions = {}): Promise<World> {
-    const world = new World(await mkdtemp(join(tmpdir(), 'helm-integration-')));
+    const world = new World(await mkdtemp(join(tmpdir(), 'helm-integration-')), options.right);
     const hands =
       options.hands === undefined ? { [LEFT_ID]: 'left', [RIGHT_ID]: 'right' } : options.hands;
     await mkdir(world.dataDir, { recursive: true });
@@ -437,7 +441,7 @@ export class World {
 /** What a fake unit stores for `hand`'s half of `plan`, written into `slot`, by input id, in hex. */
 export function expectedSlot(plan: Plan, hand: Hand, slot: number): Record<number, string> {
   return Object.fromEntries(
-    unitRecords(plan.units[hand], DEVICE[hand]).map((record) => {
+    unitRecords(unitOf(plan, hand), DEVICE[hand]).map((record) => {
       const written = encodeRecord(slot, record);
       return [written[1] ?? 0, toHex(storedFromWritten(written))];
     }),

@@ -47,3 +47,10 @@ and are the owner's to settle before the milestone that builds them:
    Windows (the app checks it) and dead zone, scale and invert written into the game's file.
 5. **"Check firmware"** on a unit. No firmware command may be sent; reading the version is fine.
 6. **Settings: "Check for updates"** matches M7's auto-update.
+
+## Where the plan now goes beyond the canvas
+
+The setups model (01-features.md, *Setups*, 2026-11-19) follows the Editor board's *Scheme*
+picker, *Azerons | Keyboard* toggle and *Azerons send: Keys | Controller*. Two parts are not
+drawn yet: a *Controller* device in that toggle, and a setup of the **left** Azeron with the
+mouse (the right unit not drawn, or drawn idle). M4.5 builds them to the canvas's style.

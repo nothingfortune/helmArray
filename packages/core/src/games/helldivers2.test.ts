@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BUILT_IN_DEVICES } from '../devices/index';
 import { isKeyCode } from '../keys';
-import type { Role, Signal, StickDirections } from '../model';
+import type { PadControl, Role, Signal, StickDirections } from '../model';
 import type { Plan } from '../plan';
 import { xboxControllerPreset } from '../presets/xbox';
 import { gameKeysPreset } from '../presets/keys';
@@ -60,27 +60,70 @@ describe('the Helldivers 2 definition', () => {
     ]);
   });
 
-  it('claims no Xbox default: none is stated by any source, and the owner confirms them', () => {
-    for (const a of helldivers2.actions) expect(a.native?.pad, a.id).toBeUndefined();
+  // Arrowhead's own default bindings file, the PadXBOX entries (helldivers2.ts lists the URL).
+  // A sourced default is pinned per action, so changing one is a visible, deliberate edit.
+  const SOURCED_PAD_DEFAULTS: readonly (readonly [string, PadControl])[] = [
+    ['move_forward', 'LS_UP'],
+    ['move_back', 'LS_DOWN'],
+    ['strafe_left', 'LS_LEFT'],
+    ['strafe_right', 'LS_RIGHT'],
+    ['sprint', 'LS'],
+    ['jump', 'A'], // Climb: hold A
+    ['crouch', 'B'], // tap B
+    ['prone', 'B'], // hold B
+    ['dive', 'B'], // double tap B (unconfirmed: another guide says tap L3)
+    ['fire_primary', 'RT'],
+    ['aim', 'LT'],
+    ['reload', 'X'], // tap X
+    ['melee', 'RS'],
+    ['grenade_slot', 'DPAD_RIGHT'],
+    ['backpack', 'DPAD_DOWN'], // tap Down (unconfirmed: one source)
+    ['stim', 'DPAD_UP'], // (unconfirmed: one source)
+    ['stratagem', 'LB'], // hold LB
+    ['drop', 'DPAD_DOWN'], // hold Down (unconfirmed: one source)
+    ['interact', 'A'],
+    ['ping', 'RB'], // tap spots, hold opens the wheel
+    ['map', 'BACK'],
+    ['emote', 'DPAD_LEFT'], // hold Left
+    ['menu_main', 'START'], // (unconfirmed: one source, matched by function)
+  ];
+
+  it.each(SOURCED_PAD_DEFAULTS)('puts %s on Xbox %s by default', (id, control) => {
+    expect(helldivers2.actions.find((a) => a.id === id)?.native?.pad).toBe(control);
+  });
+
+  it('gives no Xbox default to an action no source places on a pad control', () => {
+    const withDefault = helldivers2.actions.filter((a) => a.native?.pad !== undefined);
+    const without = helldivers2.actions.filter((a) => a.native?.pad === undefined);
+    expect(without.map((a) => a.id)).toEqual([
+      'grenade',
+      'weapon_1',
+      'weapon_2',
+      'weapon_3',
+      'push_to_talk',
+    ]);
+    expect(withDefault).toHaveLength(SOURCED_PAD_DEFAULTS.length);
   });
 });
 
 describe('Helldivers 2 through the presets and the resolver', () => {
-  it('resolves the Xbox controller preset; the only errors are the required actions with no pad default', () => {
+  it('resolves the Xbox controller preset with no errors: every required action is reachable', () => {
     const plan = resolve(xboxControllerPreset(helldivers2), helldivers2, BUILT_IN_DEVICES);
-    const errors = plan.findings.filter((f) => f.severity === 'error');
-    // With no pad default known, no action lands on a button, so each required one is reported.
-    expect(errors.every((f) => f.rule === 'missing-required')).toBe(true);
-    expect(errors.map((f) => f.action)).toEqual([
-      'move_forward',
-      'move_back',
-      'strafe_left',
-      'strafe_right',
-      'fire_primary',
-      'stratagem',
+    expect(plan.findings.filter((f) => f.severity === 'error')).toEqual([]);
+    expect(plan.units.left?.stick.mode).toBe('pad-left');
+    expect(plan.units.right?.stick.mode).toBe('pad-right');
+  });
+
+  it('puts the tap action on a control that two actions share, not the hold or double tap', () => {
+    const { map } = xboxControllerPreset(helldivers2);
+    const placed = (control: string) => map['default']?.[control]?.tap;
+    // A: Interact (press) and Climb / vault (hold). B: Crouch (tap), Prone (hold), Dive (double
+    // tap). Down: Backpack (tap) and Drop (hold).
+    expect([placed('L.index_3'), placed('L.index_4'), placed('L.dpad_down')]).toEqual([
+      'interact',
+      'crouch',
+      'backpack',
     ]);
-    expect(plan.units.left.stick.mode).toBe('pad-left');
-    expect(plan.units.right.stick.mode).toBe('pad-right');
   });
 
   it("resolves a scheme on the game's own keys, sending each action's own key", () => {

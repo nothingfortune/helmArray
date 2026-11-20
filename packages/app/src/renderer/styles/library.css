@@ -196,7 +196,8 @@
   font-weight: 600;
   color: var(--color-muted);
 }
-.unsupported .cover {
+/* Dim the art only: the "No cover" text keeps its contrast. */
+.unsupported .cover .art {
   opacity: 0.6;
 }
 .game-name {

@@ -10,6 +10,7 @@ import {
   CYBORG2_RIGHT,
   gameKeysPreset,
   resolve,
+  unitOf,
 } from '@helmarray/core';
 import {
   Command,
@@ -58,7 +59,7 @@ const holding = (hand: Hand, id: number) =>
       0: { name: 'Default' },
       1: {
         name: 'Main',
-        records: unitRecords(plan.units[hand], DEVICE[hand]).map((r) =>
+        records: unitRecords(unitOf(plan, hand), DEVICE[hand]).map((r) =>
           storedFromWritten(encodeRecord(1, r)),
         ),
       },
