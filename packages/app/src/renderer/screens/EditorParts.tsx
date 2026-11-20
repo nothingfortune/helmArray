@@ -1,0 +1,577 @@
+// The Editor's parts, as the canvas draws them (docs/design/canvas/Editor.dc.html): the header's
+// Scheme picker and device chooser, the device area, the checks, the side panel and the actions not
+// on a button yet. Each draws what it is given and says what was asked of it; the Editor owns the
+// state. Pure enough to be drawn in a test without a window.
+import { useState } from 'react';
+import { Popover } from 'radix-ui';
+import type { AzeronUse, ControlId, Game, PadControl, Press, Role, Scheme } from '@helmarray/core';
+import type { Preset } from '../../shared/api';
+import { Controller, Keyboard, Mouse } from '../devices/Devices';
+import { dragAction } from '../devices/drag';
+import { Unit } from '../unit/Unit';
+import type { UnitProps } from '../unit/Unit';
+import {
+  NAME_LIMIT,
+  chooseAzerons,
+  chooseController,
+  chooseKeyboard,
+  hasDevices,
+} from './editor-model';
+import type { EditorView, FindingRow, PanelView, UnitSide } from './editor-view';
+
+const roleColour = (role: Role | undefined): string =>
+  role === undefined ? 'var(--color-muted)' : `var(--color-${role})`;
+
+export function BackLink({ onBack }: { onBack(): void }) {
+  return (
+    <button type="button" className="btn ghost ed-back" onClick={onBack}>
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.8" />
+      </svg>
+      Library
+    </button>
+  );
+}
+
+function unitProps(side: UnitSide): Pick<UnitProps, 'keys' | 'conflicts' | 'stick'> {
+  return {
+    keys: side.keys,
+    conflicts: side.conflicts,
+    ...(side.stick === undefined ? {} : { stick: side.stick }),
+  };
+}
+
+export function Checks({
+  view,
+  onFix,
+  onKeep,
+  onFlag,
+}: {
+  view: EditorView;
+  onFix(row: FindingRow): void;
+  onKeep(row: FindingRow): void;
+  onFlag(row: FindingRow): void;
+}) {
+  return (
+    <section className="ed-checks" aria-label="Checks">
+      {view.findings.length === 0 && (
+        <p className="ed-clear">
+          <span className="dot tone-ok" aria-hidden="true" />
+          Nothing to fix.
+        </p>
+      )}
+      {view.findings.map((row) => (
+        <div key={row.key} className={`ed-check tone-${row.finding.severity}`}>
+          <span
+            className={`dot tone-${row.finding.severity === 'error' ? 'error' : 'warning'}`}
+            aria-hidden="true"
+          />
+          <span className="ed-check-text">{row.finding.message}</span>
+          {row.fix && (
+            <button type="button" className="btn ed-fix" onClick={() => onFix(row)}>
+              {row.fix.label}
+            </button>
+          )}
+          {row.canKeep && (
+            <button type="button" className="btn ghost" onClick={() => onKeep(row)}>
+              Keep, I know
+            </button>
+          )}
+        </div>
+      ))}
+      {view.kept.length > 0 && (
+        <details className="ed-kept">
+          <summary>{view.kept.length} kept</summary>
+          {view.kept.map((row) => (
+            <div key={row.key} className="ed-check is-kept">
+              <span className="dot tone-ok" aria-hidden="true" />
+              <span className="ed-check-text">{row.finding.message}</span>
+              <button type="button" className="btn ghost" onClick={() => onFlag(row)}>
+                Flag it again
+              </button>
+            </div>
+          ))}
+        </details>
+      )}
+    </section>
+  );
+}
+
+export function Panel({
+  panel,
+  onClose,
+  onMode,
+  onTarget,
+  onClear,
+  onTurbo,
+  onLatch,
+  onPad,
+}: {
+  panel: PanelView;
+  onClose(): void;
+  onMode(mode: string): void;
+  onTarget(press: Press): void;
+  onClear(press: Press): void;
+  onTurbo(on: boolean): void;
+  onLatch(on: boolean): void;
+  onPad(pad: PadControl): void;
+}) {
+  return (
+    <div className="ed-panel">
+      <div className="ed-panel-head">
+        <div className="ed-panel-names">
+          <span className="ed-lbl">{panel.where}</span>
+          <span className="ed-panel-title">{panel.title}</span>
+        </div>
+        <button type="button" className="btn ghost icon" aria-label="Close" onClick={onClose}>
+          <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+            <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.8" />
+          </svg>
+        </button>
+      </div>
+
+      {panel.across.length > 1 && (
+        <div className="ed-group">
+          <span className="ed-lbl">In each mode</span>
+          {panel.across.map((row) => (
+            <button
+              key={row.mode}
+              type="button"
+              className={`ed-across${row.active ? ' is-active' : ''}${row.label === null ? ' is-empty' : ''}`}
+              aria-current={row.active ? 'true' : undefined}
+              onClick={() => onMode(row.mode)}
+            >
+              <span className="ed-across-mode">{row.name}</span>
+              <span>{row.label ?? 'Empty'}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {panel.stick ? (
+        <p className="ed-hint">
+          The stick sends its four directions. Changing them isn&apos;t possible here yet.
+        </p>
+      ) : (
+        <>
+          <div className="ed-group">
+            <span className="ed-lbl">Press</span>
+            {panel.presses.map((row) => (
+              <div key={row.press} className={`ed-slot${row.target ? ' is-target' : ''}`}>
+                <button
+                  type="button"
+                  className="ed-slot-main"
+                  aria-pressed={row.target}
+                  aria-disabled={!row.available}
+                  // No aria-label: the visible words ("Tap", then the action, "Add" or "Not on a
+                  // controller") name the button, so the name begins with what is seen.
+                  onClick={() => row.available && onTarget(row.press)}
+                >
+                  <span className="ed-slot-word">{row.word}</span>
+                  {row.action ? (
+                    <span className="ed-slot-name">{row.action.name}</span>
+                  ) : (
+                    <span className="ed-slot-empty">
+                      {row.available ? 'Add' : panel.unavailable}
+                    </span>
+                  )}
+                </button>
+                {row.action && (
+                  <button
+                    type="button"
+                    className="btn ghost icon"
+                    aria-label={`Clear ${row.word.toLowerCase()}`}
+                    onClick={() => onClear(row.press)}
+                  >
+                    <svg width="11" height="11" viewBox="0 0 12 12" aria-hidden="true">
+                      <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.8" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+          {panel.behaviour && (
+            <div className="ed-group">
+              <span className="ed-lbl">Behaviour</span>
+              <div className="ed-checks-row">
+                <label className="ed-chk">
+                  <input
+                    type="checkbox"
+                    checked={panel.turbo}
+                    onChange={(e) => onTurbo(e.target.checked)}
+                  />
+                  Turbo
+                </label>
+                <label className="ed-chk">
+                  <input
+                    type="checkbox"
+                    checked={panel.latch}
+                    onChange={(e) => onLatch(e.target.checked)}
+                  />
+                  Hold to latch
+                </label>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {panel.padChoice !== null && !panel.padChoice.locked ? (
+        <label className="ed-sends ed-sends-pick">
+          <span className="ed-sends-label">Sends</span>
+          <select
+            className="ed-select"
+            value={panel.padChoice.current ?? ''}
+            onChange={(e) => onPad(e.target.value as PadControl)}
+          >
+            {panel.padChoice.current === null && <option value="">Nothing yet</option>}
+            {panel.padChoice.options.map((o) => (
+              <option key={o.pad} value={o.pad}>
+                Xbox {o.label}
+              </option>
+            ))}
+          </select>
+          <span className="ed-sends-note">{panel.sendsNote}</span>
+        </label>
+      ) : (
+        <div className="ed-sends">
+          <span className="ed-sends-label">Sends</span>
+          <span className="ed-sends-signal">{panel.sends ?? 'nothing'}</span>
+          <span className="ed-sends-note">
+            {panel.padChoice?.locked === true ? 'the stick’s own direction' : panel.sendsNote}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function Unplaced({
+  view,
+  modeName,
+  prompt,
+  onPlace,
+}: {
+  view: EditorView;
+  modeName: string;
+  prompt: string | null;
+  onPlace(id: string): void;
+}) {
+  return (
+    <div className="ed-group ed-unplaced">
+      <div className="ed-unplaced-head">
+        <span className="ed-lbl">Not on a button · {modeName}</span>
+        <span className="ed-count">{view.unplaced.length}</span>
+      </div>
+      {prompt !== null && <p className="ed-hint">{prompt}</p>}
+      {view.unplaced.length === 0 ? (
+        <p className="ed-hint">Every {modeName} action is on a button.</p>
+      ) : (
+        <ul className="ed-actions">
+          {view.unplaced.map((a) => (
+            <li key={a.id}>
+              <button
+                type="button"
+                className="ed-act"
+                draggable
+                aria-disabled={prompt === null}
+                onDragStart={dragAction(a.id)}
+                onClick={() => prompt !== null && onPlace(a.id)}
+              >
+                <span
+                  className="dot"
+                  style={{ background: roleColour(a.role) }}
+                  aria-hidden="true"
+                />
+                <span>{a.name}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** What the Scheme picker can do: each switches the editor to the setup it leads to. */
+export interface PickerActions {
+  switchTo(schemeId: string): void;
+  make(preset: Preset): void;
+  copy(): void;
+  rename(name: string): void;
+  remove(): void;
+}
+
+/**
+ * "Scheme: Main ▾", as drawn: the game's setups (switching is the second click), new ones from a
+ * default or a copy of this one (also the second click), its name and, behind one confirmation,
+ * deleting it.
+ */
+export function SchemePicker({
+  scheme,
+  game,
+  actions,
+}: {
+  scheme: Scheme;
+  game: Game;
+  actions: PickerActions | null;
+}) {
+  const [open, setOpen] = useState(false);
+  const [list, setList] = useState<Scheme[] | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [name, setName] = useState(scheme.name);
+  const nativeKeys = game.actions.some((a) => a.native?.key !== undefined);
+  const label = `Scheme: ${scheme.name}`;
+  if (actions === null) return <span className="ed-scheme">{label}</span>;
+  const toggle = (next: boolean) => {
+    setOpen(next);
+    setConfirming(false);
+    setName(scheme.name);
+    if (next) window.helm.listSchemes(game.id).then(setList, () => setList([scheme]));
+  };
+  const choose = (run: () => void) => {
+    setOpen(false);
+    run();
+  };
+  return (
+    <Popover.Root open={open} onOpenChange={toggle}>
+      <Popover.Trigger asChild>
+        <button type="button" className="ed-scheme ed-scheme-btn">
+          {label}
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="2" />
+          </svg>
+        </button>
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content
+          className="popover ed-picker"
+          sideOffset={8}
+          align="start"
+          aria-label="Schemes"
+        >
+          <div className="choices" role="group" aria-labelledby="ed-picker-list">
+            <span className="hint" id="ed-picker-list">
+              {game.name}
+            </span>
+            {(list ?? [scheme]).map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                className="btn"
+                aria-current={s.id === scheme.id ? 'true' : undefined}
+                onClick={() => s.id !== scheme.id && choose(() => actions.switchTo(s.id))}
+              >
+                {s.name}
+              </button>
+            ))}
+          </div>
+          <div className="choices" role="group" aria-labelledby="ed-picker-new">
+            <span className="hint" id="ed-picker-new">
+              New from
+            </span>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => choose(() => actions.make('xbox'))}
+            >
+              Xbox controller
+            </button>
+            {nativeKeys && (
+              <button
+                type="button"
+                className="btn"
+                onClick={() => choose(() => actions.make('keys'))}
+              >
+                Game&apos;s own keys
+              </button>
+            )}
+            <button type="button" className="btn" onClick={() => choose(actions.copy)}>
+              Copy this one
+            </button>
+          </div>
+          <form
+            className="ed-rename"
+            onSubmit={(e) => {
+              e.preventDefault();
+              actions.rename(name);
+            }}
+          >
+            <label className="hint" htmlFor="ed-scheme-name">
+              Name
+            </label>
+            <span className="ed-field">
+              <input
+                id="ed-scheme-name"
+                value={name}
+                maxLength={NAME_LIMIT}
+                onChange={(e) => setName(e.target.value)}
+                onBlur={() => actions.rename(name)}
+              />
+            </span>
+          </form>
+          {confirming ? (
+            <div className="ed-confirm" role="group" aria-label={`Delete ${scheme.name}?`}>
+              <span>Delete {scheme.name}?</span>
+              <button
+                type="button"
+                className="btn ed-danger"
+                onClick={() => choose(actions.remove)}
+              >
+                Delete
+              </button>
+              <button type="button" className="btn ghost" onClick={() => setConfirming(false)}>
+                Keep
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="btn ghost ed-danger-ghost"
+              onClick={() => setConfirming(true)}
+            >
+              Delete this scheme
+            </button>
+          )}
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
+  );
+}
+
+const AZERON_CHOICES: { value: AzeronUse; label: string }[] = [
+  { value: 'both', label: 'Both' },
+  { value: 'left', label: 'Left + mouse' },
+  { value: 'none', label: 'None' },
+];
+
+/**
+ * What the setup plays with: which Azerons, the keyboard and mouse, the Xbox controller. Next to
+ * the device tabs; one click opens it, the next changes it. A choice that would leave the setup
+ * with nothing is not offered.
+ */
+export function DevicesChooser({
+  devices,
+  onChange,
+}: {
+  devices: Scheme['devices'];
+  onChange(next: Scheme['devices']): void;
+}) {
+  const offer = (next: Scheme['devices']) => ({
+    disabled: !hasDevices(next),
+    onChange: () => onChange(next),
+  });
+  return (
+    <Popover.Root>
+      <Popover.Trigger asChild>
+        <button type="button" className="btn ghost ed-devices-btn">
+          Devices
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="2" />
+          </svg>
+        </button>
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content
+          className="popover ed-devices"
+          sideOffset={8}
+          align="start"
+          aria-label="Devices"
+        >
+          <fieldset className="ed-fieldset">
+            <legend className="hint">Azerons</legend>
+            {AZERON_CHOICES.map((c) => (
+              <label key={c.value} className="ed-chk">
+                <input
+                  type="radio"
+                  name="ed-azerons"
+                  checked={devices.azerons === c.value}
+                  {...offer(chooseAzerons(devices, c.value))}
+                />
+                {c.label}
+              </label>
+            ))}
+          </fieldset>
+          <fieldset className="ed-fieldset">
+            <legend className="hint">Also</legend>
+            <label className="ed-chk">
+              <input
+                type="checkbox"
+                checked={devices.keyboard}
+                {...offer(chooseKeyboard(devices, !devices.keyboard))}
+              />
+              Keyboard and mouse
+            </label>
+            <label className="ed-chk">
+              <input
+                type="checkbox"
+                checked={devices.controller}
+                {...offer(chooseController(devices, !devices.controller))}
+              />
+              Xbox controller
+            </label>
+          </fieldset>
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
+  );
+}
+
+/**
+ * The middle of the editor: the device tab shown. The Azerons side by side (a left Azeron + mouse
+ * setup has the mouse where the right unit was), the keyboard with the mouse, or the controller.
+ */
+export function DeviceArea({
+  view,
+  selected,
+  onSelect,
+  onDropAction,
+}: {
+  view: EditorView;
+  selected: ControlId | undefined;
+  onSelect(id: ControlId): void;
+  onDropAction(control: ControlId, actionId: string, from?: ControlId): void;
+}) {
+  const fixed = {
+    keys: view.fixed,
+    selected,
+    conflicts: view.conflicts,
+    onSelect,
+    onDropAction,
+  };
+  if (view.tab === null)
+    return <p className="ed-hint">This scheme has no devices. Choose them in Devices, above.</p>;
+  if (view.tab === 'keyboard')
+    return (
+      <div className="ed-kbm">
+        {view.keyboard && (
+          <div className="ed-kb">
+            <Keyboard {...fixed} />
+          </div>
+        )}
+        {view.mouse && <Mouse {...fixed} />}
+      </div>
+    );
+  if (view.tab === 'controller') return <Controller {...fixed} />;
+  return (
+    <div className="ed-units">
+      {view.hands.map((hand) => (
+        <div key={hand} className="ed-unit">
+          <Unit
+            hand={hand}
+            {...unitProps(view[hand])}
+            selected={selected ?? ''}
+            onSelect={onSelect}
+            onDropAction={onDropAction}
+          />
+        </div>
+      ))}
+      {view.mouseBeside && (
+        <div className="ed-unit ed-mouse-beside">
+          <Mouse {...fixed} />
+        </div>
+      )}
+    </div>
+  );
+}

@@ -633,7 +633,8 @@ describe('autosaving a scheme', () => {
   });
 
   it('answers a read with the edit that is still waiting', async () => {
-    const { data } = await openStore();
+    // A clock that never moves: the edit stays waiting, and nothing writes after the test.
+    const { data } = await openStore(undefined, handClock().schedule);
     const scheme = await data.createSchemeFromPreset('skiff', 'xbox');
     data.saveScheme(edit(scheme, 'Waiting'));
     expect((await data.getScheme(scheme.id))?.name).toBe('Waiting');
@@ -642,7 +643,8 @@ describe('autosaving a scheme', () => {
   });
 
   it('takes a copy: changing the scheme afterwards changes nothing waiting', async () => {
-    const { data } = await openStore();
+    // A clock that never moves: the edit stays waiting, and nothing writes after the test.
+    const { data } = await openStore(undefined, handClock().schedule);
     const scheme = await data.createSchemeFromPreset('skiff', 'xbox');
     const mine = edit(scheme, 'Mine');
     data.saveScheme(mine);
@@ -901,7 +903,9 @@ describe('the settings', () => {
 
 describe('copying a scheme', () => {
   it('makes a new scheme of the same game with everything, the keys it was given included', async () => {
-    const { data } = await openStore();
+    // The edit waits on a clock that never moves: the copy is of the edit, not of the file.
+    const clock = handClock();
+    const { data } = await openStore(undefined, clock.schedule);
     const scheme = await data.createSchemeFromPreset('skiff', 'keys');
     const dealt = {
       ...scheme,

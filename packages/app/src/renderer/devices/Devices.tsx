@@ -7,11 +7,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { ControlId } from '@helmarray/core';
-import type { UnitKey } from '../unit/Unit';
-import { roleVars } from '../unit/Unit';
 import { fitLabel } from '../unit/label';
-import { dragFrom, dropHandlers } from './drag';
-import type { DropAction } from './drag';
+import { controlFor, litParts, sideOf } from './controls';
+import type { DeviceProps } from './controls';
 import {
   KEYBOARD_HEIGHT,
   KEYBOARD_WIDTH,
@@ -25,60 +23,13 @@ import type { DeviceRow, KeyCap } from './layouts';
 import { PAD_BODY, PAD_LINES } from './pad-outline';
 import './devices.css';
 
-export interface DeviceProps {
-  /** Control id to its action. A missing entry draws the control plain: it does nothing. */
-  keys: Readonly<Record<ControlId, UnitKey | undefined>>;
-  selected?: ControlId | undefined;
-  conflicts?: ReadonlySet<ControlId>;
-  onSelect?: (id: ControlId) => void;
-  onDropAction?: DropAction;
-}
-
-/** What every control of these devices shares: its state classes, its words, its handlers. */
-function useControls({ keys, selected, conflicts, onSelect, onDropAction }: DeviceProps) {
+/** What every control of these devices shares, with the drop outline's state kept here. */
+function useControls(props: DeviceProps) {
   const [dropTarget, setDropTarget] = useState<ControlId | null>(null);
   return {
     dropTarget,
-    /** A control's button attributes, and its action's label (null when it has none). */
-    props(id: ControlId, name: string, canTake: boolean) {
-      const action = keys[id];
-      const conflict = conflicts?.has(id) === true;
-      return {
-        label: action?.label ?? null,
-        attrs: this.attrs(id, name, canTake, action, conflict),
-      };
-    },
-    attrs(
-      id: ControlId,
-      name: string,
-      canTake: boolean,
-      action: UnitKey | undefined,
-      conflict: boolean,
-    ) {
-      const classes = [
-        action === undefined ? 'is-plain' : 'is-assigned',
-        ...(selected === id ? ['is-selected'] : []),
-        ...(conflict ? ['is-conflict'] : []),
-        ...(dropTarget === id ? ['is-drop'] : []),
-      ];
-      return {
-        type: 'button' as const,
-        className: classes.join(' '),
-        style: roleVars(action?.role),
-        // A stick takes no action: it is called what it is.
-        'aria-label': canTake
-          ? `${name}, ${action?.label ?? 'not used'}${conflict ? ', conflict' : ''}`
-          : name,
-        'aria-current': selected === id ? ('true' as const) : undefined,
-        onClick: () => onSelect?.(id),
-        ...(onDropAction !== undefined && canTake
-          ? dropHandlers(id, onDropAction, setDropTarget)
-          : {}),
-        ...(onDropAction !== undefined && action?.action !== undefined
-          ? { draggable: true, onDragStart: dragFrom(id, action.action) }
-          : {}),
-      };
-    },
+    props: (id: ControlId, canTake: boolean, after?: string) =>
+      controlFor({ ...props, dropTarget, setDropTarget }, id, canTake, after),
   };
 }
 
@@ -111,8 +62,16 @@ function Fit({
 
 const KEYS = keyboardLayout();
 
+/**
+ * Words a screen reader says that the eye doesn't need: inline, with no size, so the name reads
+ * "R, Reload" and not "R , Reload" (a hidden block would add the space).
+ */
+function Said({ children }: { children: string }) {
+  return children === '' ? null : <span className="dv-said">{children}</span>;
+}
+
 function KeyButton({ cap, control }: { cap: KeyCap; control: ReturnType<typeof useControls> }) {
-  const { label, attrs } = control.props(cap.id, cap.name, true);
+  const { label, said, attrs } = control.props(cap.id, true, sideOf(cap.id));
   const fit =
     label === null ? null : fitLabel(label, cap.w - 16, cap.h - 24, { sizes: [13, 12, 11, 10] });
   return (
@@ -121,11 +80,15 @@ function KeyButton({ cap, control }: { cap: KeyCap; control: ReturnType<typeof u
       className={`kb-k ${attrs.className}`}
       style={{ ...attrs.style, left: cap.x, top: cap.y, width: cap.w, height: cap.h }}
     >
-      <span className="kb-l">{cap.legend}</span>
+      <span className="kb-l">
+        {cap.legend}
+        <Said>{fit === null ? `, not used${said}` : ', '}</Said>
+      </span>
       {fit !== null && (
         <>
           <span className="kb-a" style={{ fontSize: `${fit.fontSize}px` }}>
             {label}
+            <Said>{said}</Said>
           </span>
           <span className="kb-d" aria-hidden="true" />
         </>
@@ -135,6 +98,8 @@ function KeyButton({ cap, control }: { cap: KeyCap; control: ReturnType<typeof u
 }
 
 /** The keyboard, 956 x 392 as the canvas has it, scaled down to fit. */
+export type { DeviceProps };
+
 export function Keyboard(props: DeviceProps) {
   const control = useControls(props);
   return (
@@ -166,12 +131,18 @@ function Rows({
   return (
     <div className="dv-rows" role="group" aria-label={label}>
       {rows.map((row) => {
-        const { label, attrs } = control.props(row.id, row.name, row.stick !== true);
+        const { label, said, attrs } = control.props(row.id, row.stick !== true);
         return (
           <button key={row.id} {...attrs} className={`dv-r ${attrs.className}`}>
-            <span className="dv-c">{row.code}</span>
+            <span className="dv-c">
+              {row.code}
+              <Said>, </Said>
+            </span>
             <span className="dv-d" aria-hidden="true" />
-            <span className="dv-a">{row.stick ? 'Stick' : (label ?? 'Not used')}</span>
+            <span className="dv-a">
+              {row.stick ? 'Stick' : (label ?? 'Not used')}
+              <Said>{said}</Said>
+            </span>
           </button>
         );
       })}
@@ -179,17 +150,11 @@ function Rows({
   );
 }
 
-/** Which drawn part is selected, or has a drag over it. */
-function partState(rows: readonly DeviceRow[], id: ControlId | null | undefined): string | null {
-  return rows.find((r) => r.id === id)?.part ?? null;
-}
-
 /** The mouse, as Play view draws it, with its five buttons as rows. */
 export function Mouse(props: DeviceProps) {
   const control = useControls(props);
-  const on = partState(MOUSE_ROWS, props.selected);
-  const over = partState(MOUSE_ROWS, control.dropTarget);
-  const cls = (part: string) => (part === over || part === on ? 'dv-part is-on' : 'dv-part');
+  const lit = litParts(MOUSE_ROWS, props.selected, control.dropTarget);
+  const cls = (part: string) => (lit.has(part) ? 'dv-part is-on' : 'dv-part');
   return (
     <div className="mouse">
       <svg viewBox="0 0 120 190" width="120" height="190" aria-hidden="true">
@@ -211,10 +176,8 @@ export function Mouse(props: DeviceProps) {
 /** The Xbox controller, as Play view draws it, its buttons and sticks as rows either side. */
 export function Controller(props: DeviceProps) {
   const control = useControls(props);
-  const rows = [...PAD_LEFT_ROWS, ...PAD_RIGHT_ROWS];
-  const on = partState(rows, props.selected);
-  const over = partState(rows, control.dropTarget);
-  const cls = (part: string) => (part === over || part === on ? 'dv-part is-on' : 'dv-part');
+  const lit = litParts([...PAD_LEFT_ROWS, ...PAD_RIGHT_ROWS], props.selected, control.dropTarget);
+  const cls = (part: string) => (lit.has(part) ? 'dv-part is-on' : 'dv-part');
   const circle = (part: string, cx: number, cy: number, r: number) => (
     <circle cx={cx} cy={cy} r={r} className={cls(part)} />
   );

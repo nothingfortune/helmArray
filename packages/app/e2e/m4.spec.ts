@@ -98,7 +98,7 @@ test.describe('the M4 screens', () => {
     await page.getByRole('button', { name: 'Library' }).click();
     const card = page.getByLabel('On your Azerons now');
     await expect(card).toContainText('HELLDIVERS™ 2 · Xbox controller');
-    await expect(card).toContainText('Applied · Controller buttons');
+    await expect(card).toContainText('Applied · Controller');
     expect(await schemeFiles(helm.dataDir)).toHaveLength(1);
     expect(await readdir(join(helm.dataDir, 'applied'))).toHaveLength(1);
   });

@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { ControlId, Hand, Role } from '@helmarray/core';
 import { fitLabel } from './label';
+import { roleVars } from './role';
 import { dragFrom, dropHandlers } from '../devices/drag';
 import type { DropAction } from '../devices/drag';
 import { UNIT_HEIGHT, UNIT_WIDTH, unitLayout, unitScale } from './layout';
@@ -51,16 +52,6 @@ export interface UnitProps {
   className?: string;
 }
 
-const ROLE_COLOURS: Record<Role, { dot: string; tint: string }> = {
-  combat: { dot: 'var(--color-combat)', tint: 'var(--color-combat-tint)' },
-  movement: { dot: 'var(--color-movement)', tint: 'var(--color-movement-tint)' },
-  ability: { dot: 'var(--color-ability)', tint: 'var(--color-ability-tint)' },
-  travel: { dot: 'var(--color-travel)', tint: 'var(--color-travel-tint)' },
-  menu: { dot: 'var(--color-menu)', tint: 'var(--color-menu-tint)' },
-};
-// An action with no role yet: a plain key, not a guess at a colour.
-const NO_ROLE = { dot: 'var(--color-muted)', tint: 'var(--color-raised)' };
-
 const DIRECTION_WORD: Record<StickDirection, string> = {
   up: 'Up',
   down: 'Down',
@@ -75,11 +66,6 @@ const place = (p: { x: number; y: number; w: number; h: number }): CSSProperties
   width: px(p.w),
   height: px(p.h),
 });
-
-export function roleVars(role: Role | undefined): CSSProperties {
-  const c = role === undefined ? NO_ROLE : ROLE_COLOURS[role];
-  return { '--role': c.dot, '--tint': c.tint } as CSSProperties;
-}
 
 export function Unit({
   hand,

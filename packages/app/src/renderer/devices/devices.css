@@ -218,3 +218,8 @@
   max-width: 1100px;
   margin: 0 auto;
 }
+
+/* Spoken, not seen: inline, so a control's name has no stray space in it. */
+.dv-said {
+  font-size: 0;
+}

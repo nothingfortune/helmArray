@@ -7,9 +7,13 @@ import {
   AZERON_APP,
   CLOSE_AZERON_FIRST,
   applyInDrawer,
+  chooseDevice,
+  deviceTab,
   drawer,
+  gameHalf,
   helldivers,
   leftUnit,
+  schemePicker,
   keepEveryCheck,
   startFrom,
   startWithChecks,
@@ -54,11 +58,11 @@ test.describe('axe: no serious or critical violations', () => {
     expect(await seriousViolations(page)).toEqual([]);
   });
 
-  test('the Library, with a scheme started and its other-scheme choices open', async ({ helm }) => {
+  test('the Library, with a scheme started and its list of schemes open', async ({ helm }) => {
     const { page } = helm;
     await startFrom(page, 'Xbox controller');
     await page.getByRole('button', { name: 'Library' }).click();
-    await page.getByRole('button', { name: 'Other scheme' }).click();
+    await page.getByRole('button', { name: /^HELLDIVERS.* schemes$/ }).click();
     await expect(page.getByRole('dialog')).toBeVisible();
     expect(await seriousViolations(page)).toEqual([]);
   });
@@ -144,6 +148,88 @@ test.describe('axe: no serious or critical violations', () => {
     await page.getByRole('button', { name: 'Apply', exact: true }).click();
     await expect(drawer(page).getByLabel('What is ready')).toContainText(CLOSE_AZERON_FIRST);
     await expect(applyInDrawer(page)).toBeDisabled();
+    expect(await seriousViolations(page)).toEqual([]);
+  });
+
+  test('the Editor, with the Scheme picker open', async ({ helm }) => {
+    const { page } = helm;
+    await startFrom(page, 'Xbox controller');
+    await schemePicker(page).click();
+    await expect(page.getByRole('button', { name: 'Copy this one' })).toBeVisible();
+    expect(await seriousViolations(page)).toEqual([]);
+  });
+
+  test('the Editor, with the Scheme picker asking to confirm a delete', async ({ helm }) => {
+    const { page } = helm;
+    await startFrom(page, 'Xbox controller');
+    await schemePicker(page).click();
+    await page.getByRole('button', { name: 'Delete this scheme' }).click();
+    await expect(page.getByRole('button', { name: 'Keep' })).toBeVisible();
+    expect(await seriousViolations(page)).toEqual([]);
+  });
+
+  test('the Editor, with the device chooser open', async ({ helm }) => {
+    const { page } = helm;
+    await startFrom(page, 'Xbox controller');
+    await page.getByRole('button', { name: 'Devices' }).click();
+    await expect(page.getByRole('dialog', { name: 'Devices' })).toBeVisible();
+    expect(await seriousViolations(page)).toEqual([]);
+  });
+
+  test('the Editor, a left Azeron + mouse setup, with a mouse button selected', async ({
+    helm,
+  }) => {
+    const { page } = helm;
+    await startFrom(page, 'Xbox controller');
+    await chooseDevice(page, 'Left + mouse');
+    await page.getByRole('button', { name: /^Left, / }).click();
+    await expect(page.locator('.ed-panel')).toContainText('Mouse · Left button');
+    expect(await seriousViolations(page)).toEqual([]);
+  });
+
+  test('the Editor, the Keyboard tab, with a key selected', async ({ helm }) => {
+    const { page } = helm;
+    await startFrom(page, 'Xbox controller');
+    await chooseDevice(page, 'Keyboard and mouse');
+    await deviceTab(page, 'Keyboard').click();
+    await page.getByRole('button', { name: 'R, Reload', exact: true }).click();
+    await expect(page.locator('.ed-panel')).toContainText('Keyboard · R');
+    expect(await seriousViolations(page)).toEqual([]);
+  });
+
+  test('the Editor, the Controller tab, with a button selected', async ({ helm }) => {
+    const { page } = helm;
+    await startFrom(page, 'Xbox controller');
+    await chooseDevice(page, 'Xbox controller');
+    await deviceTab(page, 'Controller').click();
+    await page.getByRole('button', { name: /^X, / }).click();
+    await expect(page.locator('.ed-panel')).toContainText('Controller · X');
+    expect(await seriousViolations(page)).toEqual([]);
+  });
+
+  test('the Apply drawer, with the game’s bindings to set', async ({ helm }) => {
+    const { page } = helm;
+    await startFrom(page, 'Xbox controller');
+    const left = leftUnit(page);
+    await left
+      .getByRole('button', { name: 'Reload, middle 1' })
+      .dragTo(left.getByRole('button', { name: 'Empty, middle 2' }));
+    await page.getByRole('button', { name: 'Apply', exact: true }).click();
+    await expect(gameHalf(page)).toContainText('Set Reload to Xbox Y');
+    expect(await seriousViolations(page)).toEqual([]);
+  });
+
+  test('the Apply drawer, after Apply, with the bind sheet', async ({ helm }) => {
+    const { page } = helm;
+    await startFrom(page, 'Xbox controller');
+    const left = leftUnit(page);
+    await left
+      .getByRole('button', { name: 'Reload, middle 1' })
+      .dragTo(left.getByRole('button', { name: 'Empty, middle 2' }));
+    await page.getByRole('button', { name: 'Apply', exact: true }).click();
+    await expect(applyInDrawer(page)).toBeEnabled();
+    await applyInDrawer(page).click();
+    await expect(drawer(page).getByLabel("Now, in Helldivers 2's controls")).toBeVisible();
     expect(await seriousViolations(page)).toEqual([]);
   });
 });
