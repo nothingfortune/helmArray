@@ -122,6 +122,37 @@ describe('the stick', () => {
     expect(stickOf(right, CYBORG2_RIGHT)?.tuning.isRightAnalog).toBe(true);
   });
 
+  it('writes a key stick’s directions into the block the unit reads: left, or right by isRightAnalog', () => {
+    // Key codes as the unit stores them: W 0xF01A, S 0xF016, A 0xF004, D 0xF007; Shift 0xE002.
+    const wasd = {
+      up: { kind: 'key', code: 'W' },
+      down: { kind: 'key', code: 'S' },
+      left: { kind: 'key', code: 'A', mods: ['shift'] },
+      right: { kind: 'key', code: 'D' },
+    } as const;
+    expect(stickOf(profile([], { directions: wasd }))?.directions).toEqual({
+      'left.up': [0xf01a],
+      'left.down': [0xf016],
+      'left.left': [0xf004, 0xe002],
+      'left.right': [0xf007],
+    });
+    const right: UnitProfile = {
+      deviceId: CYBORG2_RIGHT.id,
+      hand: 'right',
+      pins: [],
+      stick: { mode: 'keys', angle: 176, invertX: false, directions: { up: wasd.up } },
+    };
+    expect(stickOf(right, CYBORG2_RIGHT)?.directions).toEqual({ 'right.up': [0xf01a] });
+  });
+
+  it('writes no directions for a stick that isn’t on keys, and refuses one that isn’t a key', () => {
+    const up = { up: { kind: 'key', code: 'W' } } as const;
+    expect(stickOf(profile([], { mode: 'pad-left', directions: up }))?.directions).toEqual({});
+    expect(() =>
+      stickOf(profile([], { directions: { up: { kind: 'mouse', button: 'left' } } })),
+    ).toThrow(ProtocolError);
+  });
+
   it('as an Xbox stick, is the right stick or the left by isRightAnalog, on either unit', () => {
     expect(stickOf(profile([], { mode: 'pad-right' }))?.tuning.isRightAnalog).toBe(true);
     expect(stickOf(profile([], { mode: 'pad-left' }))?.tuning.isRightAnalog).toBe(false);
