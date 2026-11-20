@@ -7,6 +7,8 @@ const state = (label: string): AppState => ({
   sync: { label, tone: 'ok' },
   writeBlock: null,
   question: null,
+  activeGameId: null,
+  activeSchemeId: null,
 });
 
 /** A fake `helm`: the test decides when state() answers and pushes states itself. */

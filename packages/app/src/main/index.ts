@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { BrowserWindow, Menu, Tray, app, ipcMain, nativeImage, shell } from 'electron';
 import { CHANNELS } from '../shared/api';
+import { BUILT_IN_GAMES } from './built-in-games';
 import { createCoordinator } from './coordinator';
 import type { Coordinator } from './coordinator';
 import { Devices } from './devices';
@@ -13,6 +14,7 @@ import { findUnits, openUnit } from './hid-transport';
 import { registerHelmIpc } from './ipc';
 import { listProcesses } from './process-list';
 import { watchProcesses } from './processes';
+import { DataStore } from './store';
 import { trayIconBitmap } from './tray-icon';
 import { startupWindows } from './startup';
 import { trayMenu } from './tray';
@@ -102,6 +104,13 @@ async function startServices(): Promise<() => Promise<void>> {
     });
   }
 
+  // The schemes, games and settings. A file that can't be read is reported, never replaced.
+  const data = await DataStore.open({
+    root: app.getPath('userData'),
+    builtInGames: BUILT_IN_GAMES,
+    onProblem: (problem) => log.write('(app)', `${problem.file}: ${problem.message}`),
+  });
+
   const hid = nodeHidBackend();
   const devices = new Devices({
     findUnits: () => findUnits(hid),
@@ -117,6 +126,7 @@ async function startServices(): Promise<() => Promise<void>> {
     hands,
     gate,
     readLog: (lines) => log.recent(lines),
+    active: () => data.active(),
     trace: (unit, line) => log.write(unit, line),
   });
   helm.onState(broadcast);
@@ -128,6 +138,15 @@ async function startServices(): Promise<() => Promise<void>> {
     openLogFolder: async () => {
       const problem = await shell.openPath(logDir);
       if (problem) log.write('(app)', `couldn't open the log folder: ${problem}`);
+    },
+    listGames: () => data.listGames(),
+    getScheme: (id) => data.getScheme(id),
+    listSchemes: (gameId) => data.listSchemes(gameId),
+    createScheme: (gameId, preset) => data.createSchemeFromPreset(gameId, preset),
+    saveScheme: (scheme) => Promise.resolve().then(() => data.saveScheme(scheme)),
+    setActive: async (gameId, schemeId) => {
+      await data.setActive(gameId, schemeId);
+      await helm.activeChanged();
     },
   });
 
@@ -147,6 +166,8 @@ async function startServices(): Promise<() => Promise<void>> {
   return async () => {
     watcher.stop();
     helm.stop();
+    // Edits waiting their turn to be saved are written before anything else is let go.
+    await data.flush().catch((error: unknown) => log.write('(app)', `quitting: ${String(error)}`));
     await gate.shutdown();
     await log.flush();
   };

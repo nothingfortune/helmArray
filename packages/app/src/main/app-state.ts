@@ -43,10 +43,12 @@ export interface AppStateInput {
   hands: HandsResult;
   /** Why writing is blocked (the Azeron app is open), or null. */
   writeBlock: string | null;
+  /** The active game and scheme; none until the store says. */
+  active?: { gameId: string | null; schemeId: string | null } | undefined;
 }
 
 export function composeAppState(input: AppStateInput): AppState {
-  const { devices, hands, writeBlock } = input;
+  const { devices, hands, writeBlock, active } = input;
   // `sort` is stable: units of one rank stay in the order the service lists them.
   const chips = devices.units
     .map((unit) => chipOf(unit, hands))
@@ -64,5 +66,7 @@ export function composeAppState(input: AppStateInput): AppState {
     sync: { label, tone },
     writeBlock,
     question: questionOf(pendingAsk(devices, hands)),
+    activeGameId: active?.gameId ?? null,
+    activeSchemeId: active?.schemeId ?? null,
   };
 }

@@ -3,13 +3,18 @@
 // writes the files, this only turns what it read into the current shape.
 
 import { clone } from './clone';
-import type { Game, Scheme } from './model';
+import type { AppSettings, Game, Scheme } from './model';
+import type { Plan } from './plan';
 import { DEFAULT_TURBO_INTERVAL } from './model';
 
 /** What a stored file holds, by kind. */
 export interface StoredKinds {
   scheme: Scheme;
   game: Game;
+  /** settings.json. */
+  settings: AppSettings;
+  /** The plan last applied for one scheme (applied/<schemeId>.json). */
+  applied: Plan;
 }
 export type StoredKind = keyof StoredKinds;
 
@@ -38,6 +43,8 @@ export const MIGRATIONS: Readonly<Record<StoredKind, readonly Migration[]>> = {
     },
   ],
   game: [],
+  settings: [],
+  applied: [],
 };
 
 /** The version this app writes, by kind. */
@@ -45,7 +52,12 @@ export const currentVersion = (kind: StoredKind): number => MIGRATIONS[kind].len
 
 export class SchemaError extends Error {}
 
-const NAMES: Record<StoredKind, string> = { scheme: 'scheme', game: 'game' };
+const NAMES: Record<StoredKind, string> = {
+  scheme: 'scheme',
+  game: 'game',
+  settings: 'settings file',
+  applied: 'applied plan',
+};
 
 /** Run the migrations from `version` up to the current one. Exposed for tests. */
 export function runMigrations(

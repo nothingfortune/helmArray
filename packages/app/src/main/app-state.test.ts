@@ -37,7 +37,19 @@ describe('the app state', () => {
       sync: { label: 'Units not connected', tone: 'warning' },
       writeBlock: null,
       question: null,
+      activeGameId: null,
+      activeSchemeId: null,
     });
+  });
+
+  it('carries the active game and scheme it is given', () => {
+    const state = composeAppState({
+      devices: { units: [] },
+      hands: handsFor([], known({})),
+      writeBlock: null,
+      active: { gameId: 'everspace2', schemeId: 'everspace2-xbox-1' },
+    });
+    expect([state.activeGameId, state.activeSchemeId]).toEqual(['everspace2', 'everspace2-xbox-1']);
   });
 
   it('shows left then right, whatever order the units were found in', () => {

@@ -54,8 +54,18 @@ const boundaries = [
       '@typescript-eslint/no-restricted-imports': [
         'error',
         {
+          paths: [
+            {
+              name: '@helmarray/core',
+              allowTypeImports: true,
+              message: 'app/shared takes types from core only: use `import type`.',
+            },
+          ],
           patterns: [
-            { regex: '^[^.]', message: `app/shared ${pure}` },
+            {
+              regex: '^(?!\\.|@helmarray/core$)',
+              message: 'app/shared is pure: it imports only core types and its own files.',
+            },
             {
               regex: '^(\\.\\./)+(main|renderer)(/|$)',
               message: 'app/shared is used by main and the windows, so it imports neither.',
