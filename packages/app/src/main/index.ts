@@ -1,4 +1,6 @@
+import { realpathSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { BrowserWindow, Menu, Tray, app, ipcMain, nativeImage, protocol, shell } from 'electron';
 import { CHANNELS } from '../shared/api';
@@ -31,7 +33,12 @@ import { mainWindowOptions, playWindowOptions } from './windows';
 
 // A test run (HELM_E2E=1, see e2e-seam.ts) keeps its files in a temp folder and uses fakes for
 // everything outside the app. Read before anything else; a half-set switch stops the app.
-const e2e = e2eConfig(process.env);
+const e2e = e2eConfig(process.env, {
+  realpath: (path) => realpathSync.native(path),
+  home: homedir(),
+  // Where Electron would keep the app's data, read before anything moves it.
+  userData: app.getPath('userData'),
+});
 if (e2e) {
   app.setPath('userData', e2e.dataDir);
   app.setPath('sessionData', join(e2e.dataDir, 'session'));

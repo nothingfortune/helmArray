@@ -10,7 +10,7 @@ import { E2E_UNIT_IDS, isInside } from './e2e-seam';
 import type { HidBackend, HidDevice, HidDeviceInfo } from './hid-transport';
 import { UNIT_INTERFACE, UNIT_PRODUCT_ID, UNIT_USAGE_PAGE, UNIT_VENDOR_ID } from './hid-transport';
 import type { SteamReaders } from './steam-library';
-import { readFile, readdir } from 'node:fs/promises';
+import { readFile, readdir, realpath } from 'node:fs/promises';
 
 const LEFT_PATH = String.raw`\\?\hid#vid_16d0&pid_12f7&mi_04#e2e-left`;
 const RIGHT_PATH = String.raw`\\?\hid#vid_16d0&pid_12f7&mi_04#e2e-right`;
@@ -85,18 +85,29 @@ export interface E2eControl {
 
 const BASE_PROCESSES = ['explorer.exe', 'helmArray.exe'];
 
-/** The steam folder only: a path outside it reads as missing. */
+/**
+ * The steam folder only: a path outside it reads as missing. It is judged by where it really is,
+ * after `..` and any link (a junction inside the folder that leads out) are followed, and the
+ * file is read from that real place, so what was checked is what is read.
+ */
 function confinedSteam(steamDir: string): SteamReaders {
-  const inside = (path: string): boolean => isInside(path, steamDir);
+  const within = async (path: string): Promise<string | undefined> => {
+    try {
+      const [real, home] = await Promise.all([realpath(path), realpath(steamDir)]);
+      return isInside(real, home) ? real : undefined;
+    } catch {
+      return undefined;
+    }
+  };
   return {
     readRegistrySteamPath: () => Promise.resolve(steamDir),
     async readFile(path) {
-      if (!inside(path)) return undefined;
-      return readFile(path).catch(() => undefined);
+      const real = await within(path);
+      return real === undefined ? undefined : readFile(real).catch(() => undefined);
     },
     async listDir(path) {
-      if (!inside(path)) return undefined;
-      return readdir(path).catch(() => undefined);
+      const real = await within(path);
+      return real === undefined ? undefined : readdir(real).catch(() => undefined);
     },
   };
 }

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -149,6 +149,29 @@ describe('the fake Steam', () => {
 
   it('lists nothing outside it, though the folder is there', async () => {
     expect(await backends.steam.listDir(root)).toBeUndefined();
+  });
+
+  it('reads nothing that a .. climbs out to', async () => {
+    await writeFile(join(root, 'outside.txt'), 'not steam');
+    await mkdir(join(root, 'steam'), { recursive: true });
+    expect(await backends.steam.readFile(join(root, 'steam', '..', 'outside.txt'))).toBeUndefined();
+  });
+
+  it('reads nothing through a link inside it that leads out', async () => {
+    await mkdir(join(root, 'steam'), { recursive: true });
+    await mkdir(join(root, 'elsewhere'));
+    await writeFile(join(root, 'elsewhere', 'secret.txt'), 'not steam');
+    await symlink(join(root, 'elsewhere'), join(root, 'steam', 'link'), 'junction');
+    expect(
+      await backends.steam.readFile(join(root, 'steam', 'link', 'secret.txt')),
+    ).toBeUndefined();
+  });
+
+  it('lists nothing through a link inside it that leads out', async () => {
+    await mkdir(join(root, 'steam'), { recursive: true });
+    await mkdir(join(root, 'elsewhere'));
+    await symlink(join(root, 'elsewhere'), join(root, 'steam', 'link'), 'junction');
+    expect(await backends.steam.listDir(join(root, 'steam', 'link'))).toBeUndefined();
   });
 
   it('says a missing file is missing', async () => {

@@ -11,8 +11,11 @@
 //      else ever reached it.
 //   2. A value of HELM_E2E that isn't plainly off or plainly `1` stops the app: it never falls
 //      back to the real thing when the switch is half-set.
-//   3. The test data folder can't be the player's own (`%APPDATA%\@helmarray`).
+//   3. The test data folder can't be the player's own (`%APPDATA%\@helmarray`, the same under
+//      `%LOCALAPPDATA%`, Electron's default folder for the app), a folder that holds those, a
+//      link that leads to any of them, or the home folder itself.
 
+import { win32 } from 'node:path';
 import type { SteamReaders } from './steam-library';
 import type { HidBackend } from './hid-transport';
 
@@ -28,15 +31,60 @@ export interface E2eConfig {
   steamDir: string;
 }
 
-const slashes = (path: string): string => path.replaceAll('\\', '/');
-const trimEnd = (path: string): string => slashes(path).replace(/\/+$/, '');
-const isAbsolute = (path: string): boolean => /^([A-Za-z]:\/|\/)/.test(slashes(path));
+// Every comparison of two paths here goes through `canonical`: resolved (so `.`, `..`, doubled and
+// trailing separators and mixed slashes are gone), with a link resolved to what it leads to, and
+// compared without regard to case, as Windows reads a path. The app is Windows-only, so the
+// Windows rules are used on every machine and a test reads the same everywhere.
 
-/** Whether `path` is `folder` itself or inside it, as Windows compares: not by case. */
+const slashes = (path: string): string => path.replaceAll('\\', '/');
+const isAbsolute = (path: string): boolean => /^([A-Za-z]:[\\/]|[\\/])/.test(path);
+
+/** What the seam needs from the machine, handed in so this module touches no disk. */
+export interface SeamHost {
+  /** The real path of a path that exists (links followed); throws for one that does not. */
+  realpath(path: string): string;
+  /** The user's home folder, when the environment does not say. */
+  home?: string;
+  /** The folder Electron would use for the app's data by default. */
+  userData?: string;
+}
+
+/**
+ * The path as the disk sees it: resolved, and with every link in the part that exists followed.
+ * The part that doesn't exist yet (a folder about to be made) is kept as written, resolved.
+ */
+export function canonical(path: string, realpath: (path: string) => string): string {
+  const resolved = win32.resolve(path);
+  const missing: string[] = [];
+  let current = resolved;
+  for (;;) {
+    try {
+      return win32.resolve(realpath(current), ...[...missing].reverse());
+    } catch {
+      const parent = win32.dirname(current);
+      if (parent === current) return resolved;
+      missing.push(win32.basename(current));
+      current = parent;
+    }
+  }
+}
+
+/** How two canonical paths relate: the same, the first inside the second, or the first holds it. */
+type Relation = 'same' | 'inside' | 'holds' | 'apart';
+
+function relation(a: string, b: string): Relation {
+  const x = a.toLowerCase().replace(/\\+$/, '');
+  const y = b.toLowerCase().replace(/\\+$/, '');
+  if (x === y) return 'same';
+  if (x.startsWith(`${y}\\`)) return 'inside';
+  if (y.startsWith(`${x}\\`)) return 'holds';
+  return 'apart';
+}
+
+/** Whether `path` is `folder` itself or inside it, once both are resolved. Links are not followed. */
 export function isInside(path: string, folder: string): boolean {
-  const p = trimEnd(path).toLowerCase();
-  const f = trimEnd(folder).toLowerCase();
-  return p === f || p.startsWith(`${f}/`);
+  const r = relation(win32.resolve(path), win32.resolve(folder));
+  return r === 'same' || r === 'inside';
 }
 
 /** Whether the run is a test run. Throws on a switch that is neither off nor `1`. */
@@ -47,22 +95,44 @@ export function e2eRequested(env: Env): boolean {
   throw new Error(`${E2E_ENV} must be 1 (a test run) or unset, not "${flag}".`);
 }
 
+/**
+ * The folders a test run may not use as its own: the player's helmArray data (under APPDATA and
+ * LOCALAPPDATA, and wherever Electron would put the app's data), anything inside them, and
+ * anything that holds them, since the folders below a parent are its folders too.
+ */
+function guardedFolders(env: Env, host: SeamHost): string[] {
+  const roots = [env['APPDATA'], env['LOCALAPPDATA']].flatMap((root) =>
+    root === undefined || root === '' ? [] : [win32.join(root, '@helmarray')],
+  );
+  if (host.userData !== undefined && host.userData !== '') roots.push(host.userData);
+  return roots.map((root) => canonical(root, host.realpath));
+}
+
 /** The test run's settings, or null for a normal run. Throws when a test run is set up wrong. */
-export function e2eConfig(env: Env): E2eConfig | null {
+export function e2eConfig(env: Env, host: SeamHost): E2eConfig | null {
   if (!e2eRequested(env)) return null;
   const dir = env[E2E_DIR_ENV];
-  if (dir === undefined || dir.trim() === '' || !isAbsolute(dir)) {
+  if (dir === undefined || dir.trim() === '' || !isAbsolute(dir.trim())) {
     throw new Error(`${E2E_ENV}=1 needs ${E2E_DIR_ENV} set to an absolute folder.`);
   }
-  const dataDir = trimEnd(dir.trim());
-  const appData = env['APPDATA'];
+  const real = canonical(dir.trim(), host.realpath);
+  // The home folder holds the data folder, so it is told apart first, to say so in its own words.
+  const home = host.home ?? env['USERPROFILE'];
   if (
-    appData !== undefined &&
-    appData !== '' &&
-    isInside(dataDir, `${trimEnd(appData)}/@helmarray`)
+    home !== undefined &&
+    home !== '' &&
+    relation(real, canonical(home, host.realpath)) === 'same'
   ) {
-    throw new Error(`${E2E_DIR_ENV} can't be inside your helmArray data: use a temp folder.`);
+    throw new Error(`${E2E_DIR_ENV} can't be your home folder: use a temp folder.`);
   }
+  for (const folder of guardedFolders(env, host)) {
+    if (relation(real, folder) !== 'apart') {
+      throw new Error(
+        `${E2E_DIR_ENV} can't be, hold or be inside your helmArray data folder (${folder}): use a temp folder.`,
+      );
+    }
+  }
+  const dataDir = slashes(real).replace(/\/+$/, '');
   return { dataDir, steamDir: `${dataDir}/steam` };
 }
 
