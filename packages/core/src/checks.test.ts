@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { CHECK_RULES } from './checks';
 import { BUILT_IN_DEVICES } from './devices/index';
-import type { Game, Scheme, Signal, StickDirections } from './model';
+import type { Game, Scheme, SetupDevices, Signal, StickDirections } from './model';
+import { AZERONS_ONLY } from './model';
 import type { Plan } from './plan';
 import { KEY_POOL, formatCanName } from './pool';
 import { gameKeysPreset } from './presets/keys';
@@ -82,6 +83,9 @@ const keyedSticks: Scheme['behaviour'] = {
 };
 
 /** A key scheme with every required action placed, so only what a test adds is found. */
+/** Both Azerons and the named fixed devices. */
+const withDevices = (over: Partial<SetupDevices>): SetupDevices => ({ ...AZERONS_ONLY, ...over });
+
 function keys(over: Partial<Scheme> = {}, map: Scheme['map'] = {}): Scheme {
   return {
     ...gameKeysPreset(game),
@@ -151,7 +155,10 @@ describe('key-collision: two actions live at once on the same key', () => {
   it('counts a key on the keyboard or mouse the scheme maps', () => {
     const plan = run(
       keys(
-        { ledger: { 'L.index_3': { tap: { kind: 'mouse', button: 'left' } } } },
+        {
+          devices: withDevices({ mouse: true }),
+          ledger: { 'L.index_3': { tap: { kind: 'mouse', button: 'left' } } },
+        },
         { fight: { 'L.index_3': { tap: 'heal' }, 'mouse.left': { tap: 'pause' } } },
       ),
     );
@@ -195,7 +202,7 @@ describe('sends-nothing: a button whose action sends nothing', () => {
   it("is an error for a long press or double tap on the pad's triggers and the sticks", () => {
     const plan = run(
       keys(
-        {},
+        { devices: withDevices({ controller: true }) },
         {
           fight: { 'pad.RT': { long: 'heal' }, 'L.stick': { double: 'pause' } },
           drive: { 'pad.LT': { tap: 'horn' } },
@@ -210,9 +217,35 @@ describe('sends-nothing: a button whose action sends nothing', () => {
 
   it('passes for actions on taps of buttons that send something', () => {
     expect(found(run(xboxControllerPreset(game)), 'sends-nothing')).toEqual([]);
-    expect(found(run(keys({}, { fight: { 'key.W': { tap: 'heal' } } })), 'sends-nothing')).toEqual(
-      [],
+    expect(
+      found(
+        run(
+          keys(
+            { devices: withDevices({ keyboard: true }) },
+            { fight: { 'key.W': { tap: 'heal' } } },
+          ),
+        ),
+        'sends-nothing',
+      ),
+    ).toEqual([]);
+  });
+
+  it("is an error for an action on a control of a device the setup doesn't use", () => {
+    const plan = run(keys({}, { fight: { 'key.W': { tap: 'heal' }, 'pad.A': { tap: 'pause' } } }));
+    expect(found(plan, 'sends-nothing').map((f) => [f.control, f.message])).toEqual([
+      ['key.W', "Heal is on a control this setup doesn't use, so pressing it does nothing."],
+      ['pad.A', "Pause is on a control this setup doesn't use, so pressing it does nothing."],
+    ]);
+  });
+
+  it('is an error for an action on the right unit when the setup uses the left one only', () => {
+    const plan = run(
+      keys(
+        { devices: withDevices({ azerons: 'left' }) },
+        { fight: { 'R.index_1': { tap: 'heal' } } },
+      ),
     );
+    expect(found(plan, 'sends-nothing').map((f) => f.control)).toEqual(['R.index_1']);
   });
 
   it('leaves a button the resolver already reported to the resolver', () => {

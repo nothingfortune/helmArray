@@ -26,9 +26,8 @@ import {
 import type { UnitRecord } from '@helmarray/azeron';
 import type { Hand, Plan } from '@helmarray/core';
 import type { UnitOps } from './gated-session';
-import { CYBORG2_LEFT, CYBORG2_RIGHT } from '@helmarray/core';
+import { CYBORG2_LEFT, CYBORG2_RIGHT, handsOf, unitOf } from '@helmarray/core';
 
-const HANDS: readonly Hand[] = ['left', 'right'];
 const DEVICE = { left: CYBORG2_LEFT, right: CYBORG2_RIGHT } as const;
 
 /** What the slot is called when nothing better is given. */
@@ -107,6 +106,11 @@ export function chooseSlot(
 
 export interface UnitPreview {
   hand: Hand;
+  /**
+   * The setup uses this unit. One it doesn't (the right one, for *left Azeron + mouse*) is never
+   * written, switched or cleaned up, and nothing else here says anything about it.
+   */
+  used: boolean;
   connected: boolean;
   /** The layout differs from what the unit runs now (`verify()` against the running slot). */
   differs: boolean;
@@ -133,7 +137,7 @@ export interface UnitsPreview {
 }
 
 function recordsFor(plan: Plan, hand: Hand): UnitRecord[] {
-  return unitRecords(plan.units[hand], DEVICE[hand]);
+  return unitRecords(unitOf(plan, hand), DEVICE[hand]);
 }
 
 /**
@@ -154,6 +158,7 @@ function previewUnit(
 ): UnitPreview {
   const base: UnitPreview = {
     hand,
+    used: plan.units[hand] !== undefined,
     connected: held !== undefined,
     differs: false,
     inputsChanged: 0,
@@ -163,6 +168,7 @@ function previewUnit(
     problem: null,
   };
   const unit = handName(hand);
+  if (!base.used) return base;
   if (!held) return { ...base, problem: `The ${unit} unit is not connected.` };
   let records: UnitRecord[];
   try {
@@ -214,6 +220,7 @@ export function previewUnits(
   const name = unitSlotName(options.name);
   const left = previewUnit(plan, 'left', held.left, name);
   const right = previewUnit(plan, 'right', held.right, name);
+  // A unit the setup doesn't use has nothing to do, so it adds no line, no change and no problem.
   const units = [left, right];
   return {
     left,
@@ -228,12 +235,12 @@ export function previewUnits(
 
 /**
  * Each unit against the plan, for the sync pill: `verify()` of the slot it runs. Null for a unit
- * that is not connected, or whose layout can't be worked out from the plan.
+ * the setup doesn't use, one that is not connected, or one whose layout can't be worked out.
  */
 export function verifyUnits(plan: Plan, held: HeldUnits): Record<Hand, Verdict | null> {
   const one = (hand: Hand): Verdict | null => {
     const unit = held[hand];
-    if (!unit) return null;
+    if (!unit || plan.units[hand] === undefined) return null;
     try {
       // A running slot the unit doesn't list holds nothing: every input then shows as missing.
       return verify(
@@ -276,9 +283,9 @@ export interface UnitOutcome {
 }
 
 export interface ApplyUnitsResult {
-  /** Both units hold the plan. */
+  /** Every unit the setup uses holds the plan. */
   ok: boolean;
-  /** Left, then right. */
+  /** Left, then right: the units the setup uses, and only those. */
   units: UnitOutcome[];
   /** The first failure's sentence, or the summary. */
   message: string;
@@ -494,23 +501,33 @@ async function applyUnit(
 
 const unreadable = (u: { id: number }) => ({ id: u.id, what: 'could not be read back' });
 
-/** Applies the plan to the left unit, then the right one, stopping at the first failure. */
+/** What the units the setup uses are called in a sentence: "Both units", "The left unit". */
+function unitsWord(hands: readonly Hand[]): string {
+  return hands.length === 2 ? 'Both units' : `The ${handName(hands[0] ?? 'left')} unit`;
+}
+
+/**
+ * Applies the plan to the units its setup uses, the left one first, stopping at the first
+ * failure. A unit the setup doesn't use is never sent anything, not even a read.
+ */
 export async function applyUnits(plan: Plan, deps: UnitsDeps): Promise<ApplyUnitsResult> {
   const name = unitSlotName(deps.name);
+  const hands = handsOf(plan);
+  if (hands.length === 0) return { ok: true, units: [], message: NO_UNIT_SENTENCE };
   // Everything that needs no unit is worked out first, so a layout that can't be written
   // refuses before either unit has been touched.
   const records = {} as Record<Hand, UnitRecord[]>;
-  for (const hand of HANDS) {
+  for (const hand of hands) {
     try {
       records[hand] = writableRecordsFor(plan, hand);
     } catch (error) {
       const message = `The ${handName(hand)} unit failed: ${withoutPeriod(messageOf(error))}; nothing on it was changed.`;
-      return refused(hand, message);
+      return refused(hands, hand, message);
     }
   }
   const units: UnitOutcome[] = [];
   let failed: UnitOutcome | undefined;
-  for (const hand of HANDS) {
+  for (const hand of hands) {
     if (failed) {
       units.push(
         blank(
@@ -527,15 +544,18 @@ export async function applyUnits(plan: Plan, deps: UnitsDeps): Promise<ApplyUnit
   }
   if (failed) return { ok: false, units, message: failed.message };
   const message = units.every((u) => u.status === 'unchanged')
-    ? 'Both units already held the layout.'
-    : 'Both units now run the layout.';
+    ? `${unitsWord(hands)} already held the layout.`
+    : `${unitsWord(hands)} now run${hands.length === 2 ? '' : 's'} the layout.`;
   return { ok: true, units, message };
 }
 
-function refused(hand: Hand, message: string): ApplyUnitsResult {
+/** What Apply says of the units for a setup that uses none. */
+export const NO_UNIT_SENTENCE = 'This setup uses no Azeron.';
+
+function refused(hands: readonly Hand[], hand: Hand, message: string): ApplyUnitsResult {
   return {
     ok: false,
-    units: HANDS.map((h) =>
+    units: hands.map((h) =>
       h === hand
         ? blank(h, 'failed', message)
         : blank(h, 'not-attempted', `The ${handName(h)} unit was not touched.`),

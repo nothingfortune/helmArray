@@ -43,6 +43,17 @@ describe('J1: the Xbox controller preset on Helldivers 2, applied', () => {
     ]);
   });
 
+  it('the preview lists no game binding to set: the preset starts from what the game ships', () => {
+    expect(preview.game).toEqual({ via: 'sheet', rows: [] });
+  });
+
+  it('the plan rebinds the game’s controller set only, every action where the game ships it', () => {
+    expect([[...new Set(plan.gameBindings.map((b) => b.set))], plan.bindSheet]).toEqual([
+      ['controller'],
+      [],
+    ]);
+  });
+
   it('Apply says both units run the layout', () => {
     expect(result).toEqual({
       ok: true,

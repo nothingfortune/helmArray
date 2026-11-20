@@ -6,8 +6,12 @@ import { MIGRATIONS, SchemaError, currentVersion, load, runMigrations, store } f
 // Frozen: what a scheme looked like on disk at version 1. Never regenerate it.
 import schemeV1 from './__fixtures__/scheme.v1.json';
 import schemeV1Turbo from './__fixtures__/scheme.v1-turbo.json';
+// Frozen: a pad scheme as version 2 saved it, before setups had devices. Never regenerate it.
+import schemeV2Pad from './__fixtures__/scheme.v2-pad.json';
+// Frozen: a plan as version 1 of the applied file saved it, before game bindings. Never regenerate.
+import appliedV1 from './__fixtures__/applied.v1.json';
 import { BUILT_IN_DEVICES } from './devices/index';
-import { DEFAULT_TURBO_INTERVAL } from './model';
+import { AZERONS_ONLY, DEFAULT_TURBO_INTERVAL } from './model';
 import { resolve } from './resolve';
 
 const game: Game = {
@@ -99,8 +103,57 @@ describe('store and load', () => {
       'L.index_2': {},
     });
     const plan = resolve(scheme, game, BUILT_IN_DEVICES);
-    const pin = plan.units.left.pins.find((p) => p.control === 'L.index_1');
+    const pin = plan.units.left?.pins.find((p) => p.control === 'L.index_1');
     expect(pin?.turbo).toEqual({ interval: 20 });
+  });
+});
+
+describe('setups (scheme version 3)', () => {
+  it('give a scheme saved before setups both Azerons and nothing else, as it always meant', () => {
+    expect([load('scheme', schemeV1).devices, load('scheme', schemeV2Pad).devices]).toEqual([
+      AZERONS_ONLY,
+      AZERONS_ONLY,
+    ]);
+  });
+
+  it('drop what was kept of the two editor findings that are gone, and keep the rest', () => {
+    expect(load('scheme', schemeV2Pad).accepted).toEqual([
+      { rule: 'mixed-input', control: 'R.stick', reason: 'Kept on purpose' },
+    ]);
+  });
+
+  it('leave the pad map, the map and the rest of a pad scheme as they were', () => {
+    const now = load('scheme', schemeV2Pad);
+    const keys = [
+      'id',
+      'gameId',
+      'name',
+      'output',
+      'padMap',
+      'writeGameFile',
+      'map',
+      'behaviour',
+      'ledger',
+    ] as const;
+    expect(keys.map((key) => now[key])).toEqual(keys.map((key) => schemeV2Pad[key]));
+  });
+});
+
+describe('applied plans (version 2)', () => {
+  it('give a plan saved before game bindings no game bindings, so none is claimed as applied', () => {
+    expect(load('applied', appliedV1).gameBindings).toEqual([]);
+  });
+
+  it('put each old bind sheet row in the set its signal belongs to, with no shipped binding known', () => {
+    expect(load('applied', appliedV1).bindSheet).toEqual([
+      {
+        set: 'keyboard',
+        mode: 'foot',
+        action: 'jump',
+        signal: { kind: 'key', code: 'Insert' },
+        native: null,
+      },
+    ]);
   });
 });
 

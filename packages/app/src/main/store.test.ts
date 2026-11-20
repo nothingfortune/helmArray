@@ -1,7 +1,13 @@
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { BUILT_IN_DEVICES, currentVersion, resolve, xboxControllerPreset } from '@helmarray/core';
+import {
+  BUILT_IN_DEVICES,
+  currentVersion,
+  resolve,
+  unitOf,
+  xboxControllerPreset,
+} from '@helmarray/core';
 import type { Game, Scheme } from '@helmarray/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AUTOSAVE_MS, DataStore, StoreError, isSafeId, isScheme } from './store';
@@ -166,7 +172,7 @@ describe('what is handed in is what is written', () => {
     const asApplied = structuredClone(plan);
     const saved = data.saveApplied(scheme.id, plan);
     plan.findings.push({ rule: 'later', severity: 'error', message: 'changed after' });
-    plan.units.left.hand = 'right';
+    unitOf(plan, 'left').hand = 'right';
     plan.bindings.length = 0;
     await saved;
     expect(await data.getApplied(scheme.id)).toEqual(asApplied);
@@ -908,5 +914,36 @@ describe('isScheme', () => {
     expect(isScheme({ ...scheme, output: 'both' })).toBe(false);
     expect(isScheme(null)).toBe(false);
     expect(isScheme([])).toBe(false);
+  });
+});
+
+describe('files saved before setups, read through the store', () => {
+  // The frozen fixtures core's migration tests read: a pad scheme saved at version 2, and a plan
+  // applied before game bindings. An owner who used M4 has files of exactly these shapes.
+  const fixture = (name: string) =>
+    readFile(new URL(`../../../core/src/__fixtures__/${name}`, import.meta.url), 'utf8');
+  const DRILL: Game = { ...SKIFF, id: 'drill', name: 'Drill' };
+
+  it('reads an old scheme as a setup of both Azerons, without what was kept of the retired findings', async () => {
+    await writeRaw(['schemes', 'drill-xbox-1.json'], await fixture('scheme.v2-pad.json'));
+    const { data, problems } = await openStore([DRILL]);
+    const scheme = await data.getScheme('drill-xbox-1');
+    expect([scheme?.devices, scheme?.accepted.map((a) => a.rule), problems]).toEqual([
+      { azerons: 'both', keyboard: false, mouse: false, controller: false },
+      ['mixed-input'],
+      [],
+    ]);
+  });
+
+  it('reads an old applied plan, with no game bindings claimed', async () => {
+    await writeRaw(['schemes', 'drill-xbox-1.json'], await fixture('scheme.v2-pad.json'));
+    await writeRaw(['applied', 'drill-xbox-1.json'], await fixture('applied.v1.json'));
+    const { data, problems } = await openStore([DRILL]);
+    const plan = await data.getApplied('drill-xbox-1');
+    expect([plan?.gameBindings, Object.keys(plan?.units ?? {}), problems]).toEqual([
+      [],
+      ['left', 'right'],
+      [],
+    ]);
   });
 });

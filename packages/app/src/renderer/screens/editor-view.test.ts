@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Scheme } from '@helmarray/core';
 import { assign, acceptFinding, clear, setLatch } from './editor-model';
-import { assignable, editorView, padFindings, signalText } from './editor-view';
+import { assignable, editorView, signalText } from './editor-view';
 import { game, keysScheme, padGame, padScheme, plan } from './editor-fixture';
 
 const view = (
@@ -191,7 +191,8 @@ describe('the side panel', () => {
     expect(mouse?.sends).toBe('Left mouse button');
     const pad = view(padScheme(), 'ship', 'L.index_1').panel;
     expect(pad?.sends).toBe('Xbox RB');
-    expect(pad?.sendsNote).toBe('your pad bindings');
+    // This game ships Boost on no Xbox control: the game's controller binding is set to RB.
+    expect(pad?.sendsNote).toBe("set it in the game's controls");
   });
 
   it("captions the key chosen for the game's file when it is written", () => {
@@ -333,101 +334,45 @@ describe('checks', () => {
   });
 });
 
-describe("controller output: the editor's own findings and the panel", () => {
+describe('controller output: the game is rebound, and the panel says so', () => {
   const padView = (scheme: Scheme, mode = 'ship', selected?: string) =>
     editorView({ scheme, game: padGame, plan: plan(scheme, padGame), mode, selected });
-  const ruled = (scheme: Scheme, rule: string) =>
-    [...padView(scheme).findings, ...padView(scheme).kept].filter((r) => r.finding.rule === rule);
+  const tap = (control: string, mode = 'ship') => ({ mode, control, press: 'tap' as const });
 
-  it('has none when each button sends what the game puts its action on', () => {
+  it('has no findings when each button sends what the game puts its action on', () => {
     expect(padView(padScheme()).findings).toEqual([]);
   });
 
-  it("says the game's controller default is not known, in one keepable sentence", () => {
-    const scheme = assign(
-      padScheme(),
-      { mode: 'ship', control: 'R.index_1', press: 'tap' },
-      'gear',
-      padGame,
-    );
-    const [row] = ruled(scheme, 'pad-default-unknown');
-    expect(row?.finding.message).toBe(
-      "Lite Dangerous's controller default for Landing gear isn't known: check it's on RT in the game's controls menu.",
-    );
-    expect(row?.finding).toMatchObject({
-      control: 'R.index_1',
-      action: 'gear',
-      severity: 'warning',
-    });
-    expect(row?.canKeep).toBe(true);
-  });
-
-  it('can be kept with "Keep, I know", and then comes back marked', () => {
-    const scheme = assign(
-      padScheme(),
-      { mode: 'ship', control: 'R.index_1', press: 'tap' },
-      'gear',
-      padGame,
-    );
-    const [row] = ruled(scheme, 'pad-default-unknown');
-    const kept = acceptFinding(scheme, (row as NonNullable<typeof row>).finding);
-    expect(padView(kept).findings.filter((r) => r.finding.rule === 'pad-default-unknown')).toEqual(
+  it('flags nothing for an action the game ships on no Xbox control: the button gets it', () => {
+    const scheme = assign(padScheme(), tap('R.index_1'), 'gear', padGame);
+    const v = padView(scheme, 'ship', 'R.index_1');
+    expect([v.findings, v.panel?.title, v.panel?.sends, v.panel?.sendsNote]).toEqual([
       [],
-    );
-    expect(padView(kept).kept[0]?.kept).toBe('Kept on purpose');
-  });
-
-  it('says so when a button sends another control than the action is on by default', () => {
-    // Dropping SRV Fire on L.index_1 makes it send RT in every mode; Boost ships on RB.
-    const scheme = assign(
-      padScheme(),
-      { mode: 'srv', control: 'L.index_1', press: 'tap' },
-      'srv_fire',
-      padGame,
-    );
-    expect(ruled(scheme, 'pad-mismatch').map((r) => r.finding.message)).toEqual([
-      'Boost is on RB in Lite Dangerous by default, but this button sends RT in every mode: move it to a button that sends RB.',
+      'Landing gear',
+      'Xbox RT',
+      "set it in the game's controls",
     ]);
   });
 
-  it('leaves a button with no pad control to core, with no second finding of its own', () => {
-    const scheme = assign(
-      padScheme(),
-      { mode: 'ship', control: 'L.index_4', press: 'tap' },
-      'gear',
-      padGame,
-    );
-    const v = padView(scheme);
-    expect(v.findings.some((r) => r.finding.rule === 'sends-nothing')).toBe(true);
-    expect(v.findings.some((r) => r.finding.rule === 'pad-default-unknown')).toBe(false);
+  it("captions a button whose action the game already has on its control as the game's own", () => {
+    const panel = padView(padScheme(), 'ship', 'R.index_1').panel;
+    expect([panel?.sends, panel?.sendsNote]).toEqual(['Xbox RT', "the game's own button"]);
   });
 
-  it('makes none for key output', () => {
-    expect(padFindings(keysScheme(), padGame)).toEqual([]);
-  });
-
-  it('gives each a key of its own', () => {
-    let scheme = assign(
-      padScheme(),
-      { mode: 'ship', control: 'R.index_1', press: 'tap' },
-      'gear',
-      padGame,
-    );
-    scheme = assign(scheme, { mode: 'srv', control: 'L.index_1', press: 'tap' }, 'lights', padGame);
-    const rows = padView(scheme).findings;
-    expect(rows.filter((r) => r.finding.rule === 'pad-default-unknown')).toHaveLength(2);
-    expect(new Set(rows.map((r) => r.key)).size).toBe(rows.length);
-  });
-
-  it('shows the control a button sends, and "Still sends RT" once its label is taken off', () => {
-    const labelled = padView(padScheme(), 'ship', 'R.index_1').panel;
-    expect(labelled?.sends).toBe('Xbox RT');
-    expect(labelled?.sendsNote).toBe('your pad bindings');
-    const cleared = clear(padScheme(), { mode: 'ship', control: 'R.index_1', press: 'tap' });
+  it('shows a cleared button as empty and sending nothing', () => {
+    const cleared = clear(padScheme(), tap('R.index_1'));
     const panel = padView(cleared, 'ship', 'R.index_1').panel;
-    expect(panel?.title).toBe('Empty');
-    expect(panel?.sends).toBe('Xbox RT');
-    expect(panel?.sendsNote).toBe('Still sends RT');
+    expect([panel?.title, panel?.sends]).toEqual(['Empty', null]);
+  });
+
+  it("shows on an Azeron button what the controller's own button sending the same control does", () => {
+    const scheme: Scheme = {
+      ...padScheme(),
+      devices: { ...padScheme().devices, controller: true },
+      map: { ...padScheme().map, ship: { 'pad.RT': { tap: 'fire' } } },
+    };
+    const v = padView(scheme, 'ship', 'R.index_1');
+    expect([v.right.keys['R.index_1']?.label, v.panel?.title]).toEqual(['Fire', 'Fire']);
   });
 });
 

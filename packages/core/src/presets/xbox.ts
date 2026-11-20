@@ -1,4 +1,5 @@
 import type { ActionId, ControlId, Game, ModeId, PadControl, Press, Scheme } from '../model';
+import { AZERONS_ONLY } from '../model';
 
 /**
  * PLACEHOLDER. Which Xbox control each Azeron button sends in the *Xbox controller* preset.
@@ -56,6 +57,7 @@ export function xboxControllerPreset(
     id: `${game.id}-xbox`,
     gameId: game.id,
     name: 'Xbox controller',
+    devices: { ...AZERONS_ONLY },
     output: 'pad',
     writeGameFile: false,
     padMap: { ...padMap },

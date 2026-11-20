@@ -5,9 +5,9 @@ import { expect, test } from './helm';
 import {
   applyInDrawer,
   drawer,
-  flagAnAction,
   keepEveryCheck,
   startFrom,
+  startWithChecks,
   unseen,
   walkTabOrder,
 } from './screens';
@@ -31,8 +31,7 @@ test.describe('keyboard: Tab order and visible focus', () => {
 
   test('the Editor', async ({ helm }) => {
     const { page } = helm;
-    await startFrom(page, 'Xbox controller');
-    await flagAnAction(page);
+    await startWithChecks(page);
     const stops = await walkTabOrder(page);
     const labels = stops.map((s) => s.label);
     expect(labels).toEqual(

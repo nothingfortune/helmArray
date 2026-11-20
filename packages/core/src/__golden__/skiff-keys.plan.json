@@ -610,6 +610,95 @@
       }
     }
   ],
+  "gameBindings": [
+    {
+      "set": "keyboard",
+      "mode": "ship",
+      "action": "boost",
+      "signal": {
+        "kind": "key",
+        "code": "PageUp"
+      },
+      "native": {
+        "kind": "key",
+        "code": "Tab"
+      }
+    },
+    {
+      "set": "keyboard",
+      "mode": "ship",
+      "action": "fire",
+      "signal": {
+        "kind": "key",
+        "code": "Insert"
+      },
+      "native": {
+        "kind": "mouse",
+        "button": "left"
+      }
+    },
+    {
+      "set": "keyboard",
+      "mode": "ship",
+      "action": "map",
+      "signal": {
+        "kind": "key",
+        "code": "Home"
+      },
+      "native": {
+        "kind": "key",
+        "code": "M"
+      }
+    },
+    {
+      "set": "keyboard",
+      "mode": "ship",
+      "action": "zoom",
+      "signal": {
+        "kind": "scroll",
+        "dir": "up",
+        "speed": 33
+      },
+      "native": {
+        "kind": "scroll",
+        "dir": "up",
+        "speed": 33
+      }
+    },
+    {
+      "set": "keyboard",
+      "mode": "foot",
+      "action": "sprint",
+      "signal": {
+        "kind": "key",
+        "code": "PageUp"
+      },
+      "native": {
+        "kind": "key",
+        "code": "LShift"
+      }
+    },
+    {
+      "set": "keyboard",
+      "mode": "foot",
+      "action": "shoot",
+      "signal": {
+        "kind": "key",
+        "code": "Del"
+      },
+      "native": {
+        "kind": "mouse",
+        "button": "left"
+      }
+    },
+    {
+      "set": "keyboard",
+      "mode": "foot",
+      "action": "emote",
+      "signal": null,
+      "native": null
+    }
+  ],
   "bindSheet": [],
   "ledger": {
     "L.middle_1": {

@@ -20,6 +20,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import type { AppSettings, Game, Plan, Scheme, StoredKind, StoredKinds } from '@helmarray/core';
+import { AZERON_USES } from '@helmarray/core';
 import {
   DEFAULT_SETTINGS,
   currentVersion,
@@ -76,6 +77,14 @@ type Rec = Record<string, unknown>;
 const isRecord = (value: unknown): value is Rec =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
+/** Whether this is what a setup plays with. */
+const isDevices = (value: unknown): value is Scheme['devices'] =>
+  isRecord(value) &&
+  (AZERON_USES as readonly unknown[]).includes(value['azerons']) &&
+  typeof value['keyboard'] === 'boolean' &&
+  typeof value['mouse'] === 'boolean' &&
+  typeof value['controller'] === 'boolean';
+
 /** Whether this has the shape of a scheme. A look at the top level, not a full audit. */
 export function isScheme(value: unknown): value is Scheme {
   return (
@@ -83,6 +92,7 @@ export function isScheme(value: unknown): value is Scheme {
     isSafeId(value['id']) &&
     isSafeId(value['gameId']) &&
     typeof value['name'] === 'string' &&
+    isDevices(value['devices']) &&
     (value['output'] === 'pad' || value['output'] === 'keys') &&
     typeof value['writeGameFile'] === 'boolean' &&
     isRecord(value['padMap']) &&
@@ -106,12 +116,16 @@ const isSettings = (value: unknown): value is AppSettings =>
   isRecord(value['activeScheme']) &&
   Object.values(value['activeScheme']).every((id) => typeof id === 'string');
 
+/** A unit of a plan: absent for a unit the setup doesn't use, else a profile. */
+const isUnitOrNone = (value: unknown) => value === undefined || isRecord(value);
+
 const isPlan = (value: unknown): value is Plan =>
   isRecord(value) &&
   isRecord(value['units']) &&
-  isRecord(value['units']['left']) &&
-  isRecord(value['units']['right']) &&
+  isUnitOrNone(value['units']['left']) &&
+  isUnitOrNone(value['units']['right']) &&
   Array.isArray(value['bindings']) &&
+  Array.isArray(value['gameBindings']) &&
   Array.isArray(value['bindSheet']) &&
   isRecord(value['ledger']) &&
   Array.isArray(value['findings']);

@@ -25,14 +25,12 @@ export async function startFrom(page: Page, preset: 'Xbox controller' | "Game's 
 export const leftUnit = (page: Page) => page.locator('.unit[data-hand="left"]');
 
 /**
- * Puts Throw grenade, an action Helldivers 2 has no Xbox default for, on the left unit's middle
- * 2 button (which sends Y, and which the Xbox controller preset leaves empty). That raises a
- * check the player can keep, for the tests that need one: the preset itself has none. The side
- * panel the drop opens stays open.
+ * Opens Helldivers 2 on a setup with checks the player can keep: the game's own keys with nothing
+ * placed yet flags the required actions (and the sticks, which send no keys). The Xbox controller
+ * preset has none, and putting an action on a button no longer raises one: the game is rebound.
  */
-export async function flagAnAction(page: Page) {
-  const action = page.locator('.ed-actions').getByRole('button', { name: 'Throw grenade' });
-  await action.dragTo(leftUnit(page).getByRole('button', { name: 'Empty, middle 2' }));
+export async function startWithChecks(page: Page) {
+  await startFrom(page, "Game's own keys");
   await expect(page.getByRole('button', { name: 'Keep, I know' }).first()).toBeVisible();
 }
 

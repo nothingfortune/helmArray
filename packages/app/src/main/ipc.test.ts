@@ -23,6 +23,7 @@ const GAME: Game = {
 };
 const SCHEME = gameKeysPreset(GAME);
 const UNIT: Omit<ApplyUnitChange, 'hand'> = {
+  used: true,
   connected: true,
   differs: false,
   inputsChanged: 0,
@@ -43,6 +44,7 @@ const PREVIEW: ApplyPreview = {
   anyChange: false,
   left: { hand: 'left', ...UNIT },
   right: { hand: 'right', ...UNIT },
+  game: { via: 'sheet', rows: [] },
 };
 
 function setup() {

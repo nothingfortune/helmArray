@@ -1,5 +1,6 @@
 import { clone } from '../clone';
 import type { Game, Scheme } from '../model';
+import { AZERONS_ONLY } from '../model';
 
 /**
  * The *game's own keys* preset: key output on the keys the game already has, so its file is
@@ -13,6 +14,7 @@ export function gameKeysPreset(game: Game): Scheme {
     id: `${game.id}-own-keys`,
     gameId: game.id,
     name: "Game's own keys",
+    devices: { ...AZERONS_ONLY },
     output: 'keys',
     padMap: {},
     writeGameFile: false,
