@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BUILT_IN_DEVICES } from './devices/index';
-import type { Game, Scheme, Signal } from './model';
+import type { Game, Scheme, Signal, StickDirections } from './model';
 import type { Plan } from './plan';
 import { KEY_POOL, formatCanName } from './pool';
 import { copyScheme, gameKeysPreset } from './presets/keys';
@@ -69,8 +69,25 @@ const game: Game = {
   file: { format: 'elite-binds' },
 };
 
+// Key sticks with their directions given, so the stick checks stay quiet here.
+const wasd = {
+  up: { kind: 'key', code: 'W' },
+  down: { kind: 'key', code: 'S' },
+  left: { kind: 'key', code: 'A' },
+  right: { kind: 'key', code: 'D' },
+} satisfies StickDirections;
+const keyedSticks: Scheme['behaviour'] = {
+  'L.stick': { stick: { mode: 'keys', directions: wasd } },
+  'R.stick': { stick: { mode: 'keys', directions: wasd } },
+};
+
 function scheme(over: Partial<Scheme> = {}): Scheme {
-  return { ...gameKeysPreset(game), writeGameFile: true, ...over };
+  return {
+    ...gameKeysPreset(game),
+    writeGameFile: true,
+    ...over,
+    behaviour: { ...keyedSticks, ...over.behaviour },
+  };
 }
 
 const key = (code: string): Signal => ({ kind: 'key', code }) as Signal;

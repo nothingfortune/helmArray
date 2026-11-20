@@ -261,6 +261,24 @@
       ],
       "stick": {
         "mode": "keys",
+        "directions": {
+          "up": {
+            "kind": "key",
+            "code": "W"
+          },
+          "down": {
+            "kind": "key",
+            "code": "S"
+          },
+          "left": {
+            "kind": "key",
+            "code": "A"
+          },
+          "right": {
+            "kind": "key",
+            "code": "D"
+          }
+        },
         "angle": -1,
         "invertX": false
       }
@@ -517,6 +535,24 @@
       ],
       "stick": {
         "mode": "keys",
+        "directions": {
+          "up": {
+            "kind": "key",
+            "code": "W"
+          },
+          "down": {
+            "kind": "key",
+            "code": "S"
+          },
+          "left": {
+            "kind": "key",
+            "code": "A"
+          },
+          "right": {
+            "kind": "key",
+            "code": "D"
+          }
+        },
         "angle": 176,
         "invertX": false
       }
