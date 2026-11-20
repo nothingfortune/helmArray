@@ -215,6 +215,8 @@ export class DataStore {
   /** Writes happen one at a time, in the order asked. */
   private chain: Promise<unknown> = Promise.resolve();
   /** Schemes edited and not yet safely on disk: what a read of them must give back. */
+  /** The settings are changed one call at a time. */
+  private settingsTurn: Promise<unknown> = Promise.resolve();
   private readonly unsaved = new Map<string, Scheme>();
   private readonly timers = new Map<string, Timer>();
 
@@ -456,14 +458,19 @@ export class DataStore {
   }
 
   /** Makes this game, and this scheme of it, the active ones. `null` leaves the game with none. */
-  async setActive(gameId: string, schemeId: string | null): Promise<void> {
+  setActive(gameId: string, schemeId: string | null): Promise<void> {
+    // One change at a time, in the order asked: each reads the settings the one before left.
+    const run = this.settingsTurn.then(() => this.changeActive(gameId, schemeId));
+    this.settingsTurn = run.catch(() => undefined);
+    return run;
+  }
+
+  private async changeActive(gameId: string, schemeId: string | null): Promise<void> {
     if (!(await this.findGame(gameId))) throw new StoreError('There is no such game.');
     if (schemeId !== null) {
       const scheme = await this.getScheme(schemeId);
       if (scheme?.gameId !== gameId) throw new StoreError("That scheme isn't one of this game's.");
     }
-    // From here to the memory update nothing awaits, so overlapping calls each build on the
-    // other's result; the writes are queued in the same order.
     const before = this.settings;
     // The other games' choices stay; this game's is replaced, or dropped for null.
     const others = Object.entries(before.activeScheme).filter(([id]) => id !== gameId);
