@@ -64,12 +64,128 @@ describe('ids', () => {
     expect(isSafeId(id)).toBe(true);
   });
 
-  it.each(['', '..', '.hidden', 'a/b', 'a\\b', 'a b', 'name.', 'x'.repeat(101), 3, null])(
-    'refuses %j',
-    (id) => {
-      expect(isSafeId(id)).toBe(false);
-    },
-  );
+  it.each([
+    '',
+    '..',
+    '__proto__',
+    'con',
+    'NUL',
+    'com1.json',
+    'lpt9',
+    '.hidden',
+    'a/b',
+    'a\\b',
+    'a b',
+    'name.',
+    'x'.repeat(101),
+    3,
+    null,
+  ])('refuses %j', (id) => {
+    expect(isSafeId(id)).toBe(false);
+  });
+});
+
+describe('ids that are also names on every object', () => {
+  const names = ['constructor', 'toString', 'valueOf', 'hasOwnProperty'];
+  const gameOf = (id: string): Game => ({ ...SKIFF, id, name: id });
+
+  it.each(names)('are fine as ids: %s', (id) => {
+    expect(isSafeId(id)).toBe(true);
+  });
+
+  it.each(names)('give a game with no choice made no scheme, not a function: %s', async (id) => {
+    const { data } = await openStore([gameOf(id)]);
+    await data.setActive(id, null);
+    expect(data.active()).toEqual({ gameId: id, schemeId: null });
+    expect(() => structuredClone(data.active())).not.toThrow();
+    expect((await readJson('settings.json'))['activeScheme']).toEqual({});
+  });
+
+  it.each(names)('are found as the active game of an old settings file: %s', async (id) => {
+    await writeRaw(
+      ['settings.json'],
+      JSON.stringify({ schemaVersion: 1, activeGameId: id, activeScheme: {} }),
+    );
+    const { data } = await openStore([gameOf(id)]);
+    expect(data.active()).toEqual({ gameId: id, schemeId: null });
+    expect(structuredClone(data.active())).toEqual({ gameId: id, schemeId: null });
+  });
+
+  it.each(names)('keep a scheme chosen for such a game: %s', async (id) => {
+    const { data } = await openStore([gameOf(id), SKIFF]);
+    const scheme = await data.createSchemeFromPreset(id, 'xbox');
+    await data.setActive(id, scheme.id);
+    await data.setActive('skiff', null);
+    await data.setActive(id, scheme.id);
+    expect(structuredClone(data.active())).toEqual({ gameId: id, schemeId: scheme.id });
+    expect((await openStore([gameOf(id), SKIFF])).data.active().schemeId).toBe(scheme.id);
+  });
+
+  it('refuses __proto__ as a game or a scheme, writing nothing', async () => {
+    const { data } = await openStore();
+    await expect(data.setActive('__proto__', null)).rejects.toThrow(StoreError);
+    await expect(data.createSchemeFromPreset('__proto__', 'xbox')).rejects.toThrow(StoreError);
+    expect(await data.getScheme('__proto__')).toBeNull();
+    expect(await data.getApplied('__proto__')).toBeNull();
+    expect(data.active()).toEqual({ gameId: null, schemeId: null });
+    expect(await exists('settings.json')).toBe(false);
+  });
+
+  it('keeps a __proto__ key in a settings file as a plain key, not a prototype', async () => {
+    await writeRaw(
+      ['settings.json'],
+      '{"schemaVersion":1,"activeGameId":"skiff","activeScheme":{"__proto__":"x"}}',
+    );
+    const { data } = await openStore();
+    await data.setActive('skiff', null);
+    expect(data.active()).toEqual({ gameId: 'skiff', schemeId: null });
+    expect(Object.getPrototypeOf((await readJson('settings.json'))['activeScheme'])).toBe(
+      Object.prototype,
+    );
+  });
+});
+
+describe('flush', () => {
+  it('waits for a change of the active game that is still being worked out', async () => {
+    const { data } = await openStore();
+    const change = data.setActive('skiff', null);
+    await data.flush();
+    expect(await exists('settings.json')).toBe(true);
+    expect((await readJson('settings.json'))['activeGameId']).toBe('skiff');
+    await change;
+  });
+
+  it('waits for a scheme still being made from a preset', async () => {
+    const { data } = await openStore();
+    const made = data.createSchemeFromPreset('skiff', 'xbox');
+    await data.flush();
+    expect(await names('schemes')).toEqual([`${(await made).id}.json`]);
+  });
+
+  it('waits for an applied plan on its way to the disk', async () => {
+    const { data } = await openStore();
+    const plan = resolve(xboxControllerPreset(SKIFF), SKIFF, BUILT_IN_DEVICES);
+    const saved = data.saveApplied('x', plan);
+    await data.flush();
+    expect(await exists('applied', 'x.json')).toBe(true);
+    await saved;
+  });
+
+  it('waits for a change that is refused, and doesn’t throw for it', async () => {
+    const { data } = await openStore();
+    const refused = data.setActive('nowhere', null);
+    const seen = expect(refused).rejects.toThrow(StoreError);
+    await expect(data.flush()).resolves.toBeUndefined();
+    await seen;
+  });
+
+  it('writes an edit made while a change was still being worked out', async () => {
+    const { data } = await openStore();
+    const made = data.createSchemeFromPreset('skiff', 'xbox');
+    data.saveScheme({ ...xboxControllerPreset(SKIFF), id: 'edited' });
+    await data.flush();
+    expect(await names('schemes')).toEqual(['edited.json', `${(await made).id}.json`].sort());
+  });
 });
 
 describe('the games', () => {
