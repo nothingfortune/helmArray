@@ -1,0 +1,49 @@
+name: mutation
+
+# Tests the tests: Stryker changes the pure logic that can do damage (the unit protocol, the
+# resolver, the game readers, the main-process services that write) one small way at a time and
+# re-runs Vitest for each change. A surviving mutant is an assertion that cannot fail that way.
+# Config and scope live in stryker.config.mjs; docs/testing.md says what it answers.
+#
+# MANUAL AND SCOPED: a full run takes hours, far past a job's budget, so the full run is local
+# (`pnpm test:mutation`, incremental after the first pass). This job mutates only the glob it is
+# given. INFORMATIONAL: never on pull requests, never a required check. If it does not block, it
+# must not look like it blocks.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mutate:
+        description: 'Glob to mutate, e.g. packages/azeron/src/records.ts (a full run does not fit a job)'
+        required: true
+
+concurrency:
+  group: mutation-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  mutation:
+    # The owner's self-hosted runner, as in ci.yml. No fallback to GitHub-hosted runners.
+    runs-on: [self-hosted, linux, x64, build-rig]
+    timeout-minutes: 60
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: '.nvmrc'
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec stryker run --mutate "$MUTATE"
+        env:
+          MUTATE: ${{ inputs.mutate }}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always() # the report is the whole point, even on a low score
+        with:
+          name: mutation-report
+          path: reports/mutation/
+          retention-days: 30
