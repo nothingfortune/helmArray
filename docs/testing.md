@@ -11,7 +11,7 @@ coverage, and the coverage drift check. If it passes locally it passes in CI.
 | Layer              | What it tests                                                                                        | Where                                                  | State     |
 | ------------------ | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------ | --------- |
 | Unit               | Pure modules: core, azeron, games, app's shared and renderer logic                                   | `*.test.ts` beside the source, and root `test/`        | In the gate |
-| Integration        | Main-process services wired together, with a fake HID unit and temp folders                          | `*.test.ts` in `packages/app/src/main`, root `test/`   | In the gate |
+| Integration        | Main-process services wired together, with a fake HID unit and temp folders                          | `test/integration/`, `*.test.ts` in `packages/app/src/main` |  In the gate |
 | End to end         | The real app: Playwright on Electron over fake units, a temp data folder and a fake Steam (the M4 journeys, the keyboard, axe) | `packages/app/e2e/*.spec.ts`, run by `pnpm test:e2e` | Outside the gate |
 | Mutation           | Whether the tests notice when the code is broken: Stryker                                            | Later PR                                               | Coming    |
 | Hardware checklist | The real units, pedals and a game, run by hand                                                       | [`hardware-checklist.md`](hardware-checklist.md)       | Manual    |
@@ -26,6 +26,26 @@ lives in pure modules beside `src/main/index.ts` and is tested there. The Electr
 only code left out of coverage for that reason. The e2e switch itself (`e2e-seam.ts`, `e2e-fakes.ts`,
 the guard in `hid-backend.ts`) is counted and has vitest tests: a run with `HELM_E2E=1` can never
 reach a real HID device.
+
+## Integration tests
+
+`test/integration/` runs the main process as `src/main/index.ts` wires it: `compose.ts`
+(`composeServices`) builds the store, the hands file, the devices service and its gate, the
+coordinator, Apply, the Library and the exchange log, and `index.ts` calls the same function. Only
+the edges are faked, with the fakes this document already allows: the HID bus (`FakeUnit` from
+`@helmarray/azeron` behind a fake backend that hands out hidapi-style paths), the process list,
+Steam's files, and the clock (a clock and a scheduler the test moves by hand). The store, the
+hands file and the log are real, on a temp folder.
+
+`support/world.ts` is the harness. A test drives the app through `window.helm` (the preload's
+`createHelmApi` over an in-memory bridge to the real `registerHelmIpc`), plays the owner at the
+edges (`world.left.unplug()`, `world.processes.azeronOpen`, `world.left.unit.running`), and reads
+the result from the same places a window would and from the fakes. `support/fake-hid.ts` records
+everything that reaches the bus, including any feature report, so "the pedals were never touched"
+is read at the bus, not assumed.
+
+A file's `beforeAll` does the journey once and each test reads one thing it left behind; a test that
+changes the world makes its own.
 
 ## Rules
 
