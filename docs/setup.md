@@ -25,9 +25,9 @@ pin an older version of the package rather than adding an exclusion.
 | Command        | Does                                                                                    |
 | -------------- | --------------------------------------------------------------------------------------- |
 | `pnpm dev`     | Starts the app with hot reload. Close the Azeron app first: helmArray waits while it runs. |
-| `pnpm check`   | The gate: typecheck, lint, format and tests. CI runs exactly this.                      |
-| `pnpm test`    | The tests on their own.                                                                 |
-| `pnpm test:e2e`     | Builds the app and drives it in a real window over two fake units, the M4 screens (J1, J2, the Azeron app refusal). Not part of `pnpm check`. |
+| `pnpm check`   | The gate: typecheck, lint, format, tests with coverage, coverage drift. CI runs exactly this. |
+| `pnpm test`    | The tests on their own, without coverage.                                               |
+| `pnpm test:e2e` | Builds the app and drives it in a real window over two fake units: the M4 screens (J1, J2, the Azeron app refusal), the keyboard and an axe scan of each. Not part of `pnpm check`. |
 | `pnpm format`  | Rewrites files to the house format (`pnpm check` only reports).                          |
 | `pnpm tokens`  | Rewrites `styles/tokens.css` from `src/shared/tokens.ts` after a token changes.          |
 
@@ -40,6 +40,8 @@ temp folder), which swap in fake units, a fake list of running programs, a Steam
 temp folder and that folder for the app's files. With the switch set the real HID backend throws
 if anything reaches it. It opens a window for a few seconds without taking the keyboard focus, and
 needs Electron's binary (`node packages/app/node_modules/electron/install.js` if it is missing).
+
+How the tests are written and what the gate holds them to: [`testing.md`](testing.md).
 
 ## Where the app keeps things
 

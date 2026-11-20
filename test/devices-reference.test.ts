@@ -74,8 +74,9 @@ describe.each([
   });
 
   it('the stick X fact matches, where the map states one', () => {
-    if (reference.stickInvertX !== undefined)
-      expect(unit.stick.invertX).toBe(reference.stickInvertX);
+    // A map that states no fact has nothing to compare: it contributes no field to match.
+    const stated = reference.stickInvertX === undefined ? {} : { invertX: reference.stickInvertX };
+    expect(unit.stick).toMatchObject(stated);
   });
 });
 

@@ -18,6 +18,6 @@ describe('contrastRatio', () => {
 
   it('refuses anything that is not #RRGGBB', () => {
     expect(() => luminance('#FFF')).toThrow('Not a #RRGGBB colour: #FFF');
-    expect(() => luminance('red')).toThrow();
+    expect(() => luminance('red')).toThrow('Not a #RRGGBB colour: red');
   });
 });

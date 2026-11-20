@@ -20,7 +20,8 @@ Work follows the roadmap's milestones, in order.
 Install, commands and where the app keeps its files: [`docs/setup.md`](docs/setup.md). Keep
 them there, not here; this file adds only what an agent needs on top.
 
-- `pnpm check` is the gate.
+- `pnpm check` is the gate. [`docs/testing.md`](docs/testing.md) says how tests are written, what lint,
+  the temp-folder check and the coverage floor enforce, and which layers exist.
 - `packages/core`, `azeron`, `games` ship TypeScript source; `app` bundles them. The package
   boundaries from `02-architecture.md` are lint rules (`eslint.config.js`), tested in
   `test/boundaries.test.ts`.
