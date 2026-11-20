@@ -187,6 +187,22 @@ describe('using a preset', () => {
     expect(third.name).toBe('Xbox controller 3');
   });
 
+  it('makes an id that passes the same check, whatever the length of the game’s id', async () => {
+    const long: Game = { ...SKIFF, id: 'g'.repeat(100), name: 'Long' };
+    const { data } = await openStore([long]);
+    for (const preset of ['xbox', 'keys'] as const) {
+      const scheme = await data.createSchemeFromPreset(long.id, preset);
+      expect(isSafeId(scheme.id)).toBe(true);
+      expect(scheme.gameId).toBe(long.id);
+      expect(scheme.id).toContain(`-${preset}-`);
+      expect(await data.getScheme(scheme.id)).toEqual(scheme);
+      data.saveScheme({ ...scheme, name: 'Edited' });
+      await data.flush();
+      expect((await data.listSchemes(long.id)).map((s) => s.name)).toContain('Edited');
+    }
+    expect(await data.listSchemes(long.id)).toHaveLength(2);
+  });
+
   it('also makes the game’s-own-keys scheme', async () => {
     const { data } = await openStore();
     const scheme = await data.createSchemeFromPreset('skiff', 'keys');
@@ -492,6 +508,31 @@ describe('the settings', () => {
       skiff: a.id,
       arboretum: b.id,
     });
+  });
+
+  it('keep both choices when two changes overlap', async () => {
+    const { data } = await openStore();
+    const a = await data.createSchemeFromPreset('skiff', 'xbox');
+    const b = await data.createSchemeFromPreset('arboretum', 'xbox');
+    await Promise.all([data.setActive('skiff', a.id), data.setActive('arboretum', b.id)]);
+    expect(data.active()).toEqual({ gameId: 'arboretum', schemeId: b.id });
+    expect((await readJson('settings.json'))['activeScheme']).toEqual({
+      skiff: a.id,
+      arboretum: b.id,
+    });
+    expect((await openStore()).data.active()).toEqual({ gameId: 'arboretum', schemeId: b.id });
+  });
+
+  it('go back to what they were when a change is refused', async () => {
+    const { data } = await openStore();
+    const scheme = await data.createSchemeFromPreset('skiff', 'xbox');
+    await data.setActive('skiff', scheme.id);
+    await writeRaw(
+      ['settings.json'],
+      JSON.stringify({ schemaVersion: currentVersion('settings') + 1 }),
+    );
+    await expect(data.setActive('skiff', null)).rejects.toThrow(StoreError);
+    expect(data.active()).toEqual({ gameId: 'skiff', schemeId: scheme.id });
   });
 
   it('refuse a game or a scheme that isn’t there, or a scheme of another game', async () => {

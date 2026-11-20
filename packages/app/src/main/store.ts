@@ -64,6 +64,7 @@ export interface ActiveSelection {
 // --- ids and shapes -------------------------------------------------------------------------
 
 /** An id that is safe as a file name: ids come from windows and from files, so nothing else. */
+const MAX_ID_LENGTH = 100;
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
 export const isSafeId = (value: unknown): value is string =>
   typeof value === 'string' && SAFE_ID.test(value) && !value.endsWith('.');
@@ -389,7 +390,9 @@ export class DataStore {
     else if (preset === 'keys') copy = gameKeysPreset(game);
     else throw new StoreError('There is no such preset.');
     copy = structuredClone(copy);
-    copy.id = `${game.id}-${preset}-${this.newId()}`;
+    // The game's id as far as it fits: the whole id must pass `isSafeId`, whatever the game's is.
+    const suffix = `-${preset}-${this.newId()}`;
+    copy.id = `${game.id.slice(0, Math.max(1, MAX_ID_LENGTH - suffix.length))}${suffix}`;
     copy.name = await this.freeName(game.id, copy.name);
     await this.put('scheme', `schemes/${copy.id}.json`, copy);
     return copy;
@@ -459,16 +462,25 @@ export class DataStore {
       const scheme = await this.getScheme(schemeId);
       if (scheme?.gameId !== gameId) throw new StoreError("That scheme isn't one of this game's.");
     }
+    // From here to the memory update nothing awaits, so overlapping calls each build on the
+    // other's result; the writes are queued in the same order.
+    const before = this.settings;
     // The other games' choices stay; this game's is replaced, or dropped for null.
-    const others = Object.entries(this.settings.activeScheme).filter(([id]) => id !== gameId);
+    const others = Object.entries(before.activeScheme).filter(([id]) => id !== gameId);
     const next: AppSettings = {
       activeGameId: gameId,
       activeScheme: Object.fromEntries(
         schemeId === null ? others : [...others, [gameId, schemeId]],
       ),
     };
-    await this.put('settings', 'settings.json', next);
     this.settings = next;
+    try {
+      await this.put('settings', 'settings.json', next);
+    } catch (error) {
+      // Refused: go back, unless a later call has already built on this one.
+      if (this.settings === next) this.settings = before;
+      throw error;
+    }
   }
 
   // Applied plans -----------------------------------------------------------------------------
