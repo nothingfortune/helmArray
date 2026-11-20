@@ -1,0 +1,244 @@
+/* The Azeron unit board, from docs/design/canvas/Unit.dc.html. Colours and type come from the
+   tokens; geometry is set inline from layout.ts. */
+
+.unit-host {
+  position: relative;
+}
+
+.unit {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  box-sizing: border-box;
+  background: var(--color-panel);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-panel);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 3%);
+  font-family: var(--font-read);
+  color: var(--color-text);
+}
+
+.unit-hand {
+  position: absolute;
+  font: 600 11px var(--font-read);
+  color: var(--color-muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.unit .zn {
+  position: absolute;
+  box-sizing: border-box;
+  border-radius: 12px;
+  background: #0c0e12;
+  border: 1px solid #1e232c;
+}
+
+.unit .zh {
+  position: absolute;
+  font: 600 10px var(--font-read);
+  color: var(--color-muted);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+/* A key. Empty is dashed; assigned has a faint tint and the role's dot. */
+.unit .uk {
+  position: absolute;
+  box-sizing: border-box;
+  display: flex;
+  align-items: flex-start;
+  margin: 0;
+  padding: 5px 7px 5px 8px;
+  border-radius: 9px;
+  font-family: var(--font-read);
+  line-height: 1.12;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--motion-hover),
+    border-color var(--motion-hover),
+    box-shadow var(--motion-hover);
+}
+
+.unit .uk.is-empty {
+  background: transparent;
+  border: 1.5px dashed var(--color-edge);
+  color: var(--color-muted);
+  font-weight: 500;
+}
+
+.unit .uk.is-assigned {
+  background: var(--tint);
+  border: 1px solid var(--color-line-key);
+  color: var(--color-text);
+  font-weight: 600;
+  box-shadow:
+    inset 0 -2px 0 rgb(0 0 0 / 35%),
+    inset 0 1px 0 rgb(255 255 255 / 4%);
+}
+
+.unit .uk.flat {
+  align-items: center;
+  padding: 4px 9px 4px 8px;
+}
+
+.unit .uk:hover {
+  filter: brightness(1.18);
+}
+
+.unit .uk:focus-visible {
+  outline: 2px solid var(--color-text);
+  outline-offset: 2px;
+}
+
+.unit .ul {
+  min-width: 0;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.unit .ud {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--role);
+}
+
+.unit .uk.flat .ud {
+  top: 4px;
+  right: 4px;
+  bottom: auto;
+}
+
+/* Conflict: a red border and a red-tinted face. */
+.unit .uk.is-conflict {
+  background: var(--color-conflict);
+  border: 1px solid var(--color-error);
+}
+
+/* Pressed: amber glow. Over conflict, because it is happening now. */
+.unit .uk.is-lit {
+  background: var(--color-pressed);
+  border: 1px solid var(--color-accent);
+  color: var(--color-text);
+  font-weight: 600;
+  box-shadow:
+    0 0 0 3px rgb(255 178 36 / 22%),
+    0 0 22px rgb(255 178 36 / 35%);
+}
+
+.unit .uk.is-lit .ud {
+  background: var(--color-accent);
+}
+
+/* Selected: amber outline. Focus keeps its own white ring, so both show at once. */
+.unit .uk.is-selected {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.unit .uk.is-selected:focus-visible {
+  outline-color: var(--color-text);
+}
+
+/* An action dragged over a key it can be dropped on. */
+.unit .uk.is-drop {
+  outline: 2px dashed var(--color-accent);
+  outline-offset: 2px;
+  background: var(--color-pressed);
+}
+
+/* The stick: a disc, with its four directions as chips and its press in the middle. */
+.unit .uk.shape-stick {
+  padding: 0;
+  border-radius: 50%;
+  background: var(--color-raised);
+  border: 1px solid var(--color-line-key);
+  box-shadow:
+    inset 0 0 0 10px #161a21,
+    0 2px 0 rgb(0 0 0 / 35%);
+}
+
+.unit .uk.shape-stick.is-conflict {
+  border-color: var(--color-error);
+}
+
+.unit .uk.shape-stick.is-lit {
+  background: var(--color-pressed);
+  border-color: var(--color-accent);
+  box-shadow:
+    inset 0 0 0 10px rgb(255 178 36 / 10%),
+    0 0 22px rgb(255 178 36 / 35%);
+}
+
+.unit .uk.shape-stick.is-selected {
+  outline-offset: 3px;
+}
+
+.unit .uk.shape-press {
+  justify-content: center;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  box-shadow: none;
+  text-align: center;
+}
+
+.unit .uk.shape-press.is-assigned {
+  color: var(--color-secondary);
+  background: transparent;
+  border: 0;
+}
+
+.unit .uk.shape-press.is-lit {
+  background: transparent;
+  border: 0;
+  color: var(--color-accent);
+  box-shadow: none;
+}
+
+.unit .uk.shape-press.is-conflict {
+  background: transparent;
+  border: 0;
+  color: var(--color-error-text);
+}
+
+.unit .uk.shape-press.is-drop {
+  background: var(--color-pressed);
+}
+
+.unit .sl {
+  position: absolute;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  border-radius: 13px;
+  line-height: 1.1;
+  text-align: center;
+  font-family: var(--font-read);
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.unit .sl.is-assigned {
+  background: var(--tint);
+  border: 1px solid var(--color-line-key);
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.unit .sl.is-empty {
+  border: 1.5px dashed var(--color-edge);
+  color: var(--color-muted);
+  font-weight: 500;
+}
