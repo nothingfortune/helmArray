@@ -143,6 +143,65 @@ describe('keys, game file written', () => {
   });
 });
 
+describe('stick directions', () => {
+  const stickUp = (code: string): Scheme['behaviour'] => ({
+    ...keyedSticks,
+    'L.stick': { stick: { mode: 'keys', directions: { ...wasd, up: key(code) } } },
+  });
+
+  it('keep their keys out of the pool: a button is never dealt a key a direction sends', () => {
+    const plan = resolve(
+      scheme({
+        behaviour: stickUp('Insert'),
+        map: { ship: { 'L.index_1': { tap: 'boost' }, 'L.index_2': { tap: 'map' } } },
+      }),
+      game,
+      BUILT_IN_DEVICES,
+    );
+    // Insert is the pool's first key, and the left stick's up direction already sends it.
+    expect(sent(plan, 'L.index_1')).toEqual({ tap: key('Home') });
+    expect(sent(plan, 'L.index_2')).toEqual({ tap: key('PageUp') });
+    expect(plan.findings.filter((f) => f.rule === 'key-collision')).toEqual([]);
+  });
+
+  it('keep the right stick keys out of the pool too, and only while the stick is in key mode', () => {
+    const rightUp = {
+      ...keyedSticks,
+      'R.stick': { stick: { mode: 'keys', directions: { ...wasd, up: key('Insert') } } },
+    } satisfies Scheme['behaviour'];
+    const map = { ship: { 'L.index_1': { tap: 'boost' } } };
+    const right = resolve(scheme({ behaviour: rightUp, map }), game, BUILT_IN_DEVICES);
+    expect(sent(right, 'L.index_1')).toEqual({ tap: key('Home') });
+    const mouse = {
+      ...rightUp,
+      'R.stick': { stick: { mode: 'mouse' } },
+    } satisfies Scheme['behaviour'];
+    const free = resolve(scheme({ behaviour: mouse, map }), game, BUILT_IN_DEVICES);
+    expect(sent(free, 'L.index_1')).toEqual({ tap: key('Insert') });
+  });
+
+  it('are reported when a key a button already holds is also a direction', () => {
+    const plan = resolve(
+      scheme({
+        behaviour: stickUp('Insert'),
+        ledger: { 'L.index_1': { tap: key('Insert') } },
+        map: { ship: { 'L.index_1': { tap: 'boost' } } },
+      }),
+      game,
+      BUILT_IN_DEVICES,
+    );
+    expect(plan.findings.filter((f) => f.rule === 'key-collision')).toEqual([
+      expect.objectContaining({
+        severity: 'error',
+        control: 'L.stick',
+        mode: 'ship',
+        message:
+          "In Ship, the left stick's up and Boost are both on Insert: the game does them at once.",
+      }),
+    ]);
+  });
+});
+
 describe('the ledger', () => {
   it('comes first: a key once given stays, even with an earlier pool key free', () => {
     const plan = resolve(
