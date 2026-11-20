@@ -37,6 +37,12 @@ export interface SteamLibrary {
   games: SteamGame[];
 }
 
+/** Steam tools that have manifests like games but are not games: left out of the library. */
+export const HIDDEN_STEAM_APPS: readonly string[] = [
+  '228980', // Steamworks Common Redistributables
+  '250820', // SteamVR
+];
+
 /** How deep the folder scan for a portrait goes below an app's cache folder. */
 const SCAN_DEPTH = 4;
 
@@ -148,7 +154,7 @@ async function installedGames(readers: SteamReaders, steam: string): Promise<Ins
       } catch (error) {
         if (!(error instanceof VdfError)) throw error;
       }
-      if (game && !seen.has(game.appId)) {
+      if (game && !HIDDEN_STEAM_APPS.includes(game.appId) && !seen.has(game.appId)) {
         seen.add(game.appId);
         games.push(game);
       }

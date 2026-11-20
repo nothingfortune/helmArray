@@ -49,6 +49,32 @@ describe('parseVdfText', () => {
     });
   });
 
+  // The tokenizer once skipped only space, tab, CR and LF between tokens but ended a bare word at
+  // anything \s matches, so these characters looped forever, growing memory. A synchronous loop
+  // cannot be cut short by the timeout; a regression shows as a failure only if the tokenizer's
+  // "every pass must move on" guard throws, and otherwise as a stuck run.
+  it.each([
+    ['a form feed', '\f'],
+    ['a vertical tab', '\v'],
+    ['a non-breaking space', ' '],
+    ['a line separator', ' '],
+    ['an ideographic space', '　'],
+  ])(
+    'skips %s between tokens, outside quotes',
+    (_name, space) => {
+      expect(parseVdfText(`${space}"a"${space}"b"${space}`)).toEqual({ a: 'b' });
+      expect(parseVdfText(`"s"${space}{${space}"k"${space}"v"${space}}`)).toEqual({
+        s: { k: 'v' },
+      });
+      expect(parseVdfText(`bare${space}word`)).toEqual({ bare: 'word' });
+    },
+    2000,
+  );
+
+  it('keeps such characters inside quotes', () => {
+    expect(parseVdfText('"a" "x\f\v y"')).toEqual({ a: 'x\f\v y' });
+  });
+
   it('keeps a quoted brace as text, not structure', () => {
     expect(parseVdfText('"a" "{" "b" "}"')).toEqual({ a: '{', b: '}' });
   });

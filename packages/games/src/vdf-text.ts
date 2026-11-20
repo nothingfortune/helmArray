@@ -12,17 +12,22 @@ type Token =
   | { kind: 'close'; line: number }
   | { kind: 'text'; text: string; line: number };
 
+/** What is skipped between tokens, and what ends a bare word: the same set, plus braces and quotes. */
+const WHITESPACE = /\s/;
+const WORD_END = /[\s{}"]/;
+
 function tokenize(source: string): Token[] {
   const text = source.startsWith('\uFEFF') ? source.slice(1) : source;
   const tokens: Token[] = [];
   let i = 0;
   let line = 1;
   while (i < text.length) {
+    const before = i;
     const c = text[i] as string;
     if (c === '\n') {
       line++;
       i++;
-    } else if (c === ' ' || c === '\t' || c === '\r') {
+    } else if (WHITESPACE.test(c)) {
       i++;
     } else if (c === '/' && text[i + 1] === '/') {
       while (i < text.length && text[i] !== '\n') i++;
@@ -53,9 +58,11 @@ function tokenize(source: string): Token[] {
       tokens.push({ kind: 'text', text: out, line: start });
     } else {
       let out = '';
-      while (i < text.length && !/[\s{}"]/.test(text[i] as string)) out += text[i++];
+      while (i < text.length && !WORD_END.test(text[i] as string)) out += text[i++];
       tokens.push({ kind: 'text', text: out, line });
     }
+    // Every pass must move on, or a character nothing handles would loop forever.
+    if (i === before) throw new VdfError(`Unreadable character on line ${line}`);
   }
   return tokens;
 }

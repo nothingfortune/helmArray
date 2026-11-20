@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SteamReaders } from './steam-library';
-import { parseSteamPathFromReg, readSteamLibrary } from './steam-library';
+import { HIDDEN_STEAM_APPS, parseSteamPathFromReg, readSteamLibrary } from './steam-library';
 
 // Binary KeyValues for assetcache.vdf, laid out from the documented format (type byte, key and
 // string value ending in 0, section closed by 0x08). The parser's own byte-level tests are in
@@ -208,6 +208,20 @@ describe('readSteamLibrary', () => {
       [`${LIB2}/steamapps/appmanifest_1.acf`]: manifest('1', 'One'),
     });
     expect((await readSteamLibrary(readers)).games).toHaveLength(1);
+  });
+
+  it('leaves out Steam tools that are not games', async () => {
+    expect(HIDDEN_STEAM_APPS).toEqual(['228980', '250820']);
+    const { readers } = fakeDisk({
+      [`${STEAM}/steamapps/appmanifest_228980.acf`]: manifest(
+        '228980',
+        'Steamworks Common Redistributables',
+      ),
+      [`${STEAM}/steamapps/appmanifest_250820.acf`]: manifest('250820', 'SteamVR'),
+      [`${STEAM}/steamapps/appmanifest_2289800.acf`]: manifest('2289800', 'Almost Hidden'),
+      [`${STEAM}/steamapps/appmanifest_620.acf`]: manifest('620', 'Portal 2'),
+    });
+    expect((await readSteamLibrary(readers)).games.map((g) => g.appId)).toEqual(['2289800', '620']);
   });
 
   it('keeps app ids of every length', async () => {
