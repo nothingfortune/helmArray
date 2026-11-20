@@ -276,6 +276,23 @@ describe('the setup’s devices', () => {
     ]).toEqual(['keyboard', 'azerons', 'azerons', null]);
   });
 
+  it('call the keyboard’s controls keys, and every other device’s buttons', () => {
+    const scheme = withDevices({ keyboard: true, mouse: true, controller: true });
+    const word = (tab: 'azerons' | 'keyboard' | 'controller') =>
+      editorView({ scheme, game, plan: plan(scheme), mode: 'ship', tab }).controlWord;
+    expect([
+      word('azerons'),
+      word('keyboard'),
+      word('controller'),
+      editorView({
+        scheme: withDevices({ azerons: 'none', mouse: true }),
+        game,
+        plan: plan(withDevices({ azerons: 'none', mouse: true })),
+        mode: 'ship',
+      }).controlWord,
+    ]).toEqual(['button', 'key', 'button', 'button']);
+  });
+
   it('offer “Azerons send” only to a setup with Azerons', () => {
     expect([
       view(keysScheme()).output,

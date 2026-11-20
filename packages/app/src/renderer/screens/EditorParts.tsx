@@ -261,12 +261,16 @@ export function Unplaced({
   return (
     <div className="ed-group ed-unplaced">
       <div className="ed-unplaced-head">
-        <span className="ed-lbl">Not on a button · {modeName}</span>
+        <span className="ed-lbl">
+          Not on a {view.controlWord} · {modeName}
+        </span>
         <span className="ed-count">{view.unplaced.length}</span>
       </div>
       {prompt !== null && <p className="ed-hint">{prompt}</p>}
       {view.unplaced.length === 0 ? (
-        <p className="ed-hint">Every {modeName} action is on a button.</p>
+        <p className="ed-hint">
+          Every {modeName} action is on a {view.controlWord}.
+        </p>
       ) : (
         <ul className="ed-actions">
           {view.unplaced.map((a) => (

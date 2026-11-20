@@ -215,6 +215,8 @@ export interface EditorView {
   /** The keyboard and the mouse are drawn on their tab: which of the two the setup has. */
   keyboard: boolean;
   mouse: boolean;
+  /** What the tab's controls are called: keys on the keyboard, buttons everywhere else. */
+  controlWord: 'key' | 'button';
   /** "Azerons send: Keys | Controller", for a setup with Azerons; null without. */
   output: Scheme['output'] | null;
   left: UnitSide;
@@ -620,6 +622,7 @@ export function editorView(input: EditorViewInput): EditorView {
     mouseBeside: setup.mouse && mouseBesideLeft(scheme.devices),
     keyboard: setup.keyboard,
     mouse: setup.mouse,
+    controlWord: tab === 'keyboard' && setup.keyboard ? 'key' : 'button',
     output: setup.hands.length > 0 ? scheme.output : null,
     fixed: {
       ...keysOf(scheme, game, mode, 'key.'),

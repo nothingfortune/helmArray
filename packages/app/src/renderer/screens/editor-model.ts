@@ -684,8 +684,11 @@ function stickFor(
  * the other kind of signal, in the other binding set of the game: with a controller each gets an
  * Xbox control (THE PAD RULE, rule 2: the one the game ships its action on when free), with keys
  * the pad map empties. A controller button only taps, so a long press or a double tap comes off
- * (its action is unplaced). Each stick follows (`stickFor`). The controller's own buttons, the
- * keyboard and the mouse keep what they have, and the ledger is never touched.
+ * (its action is unplaced). Each stick follows (`stickFor`). The keyboard and the mouse keep what
+ * they have, and the ledger is never touched. With a controller in the setup, it keeps doing what
+ * it did: switching to keys gives its buttons the actions they showed through an Azeron button,
+ * and switching to a controller puts an Azeron button on the control the controller already has
+ * its action on.
  */
 export function setOutput(scheme: Scheme, output: Scheme['output'], game: Game): Scheme {
   if (scheme.output === output) return scheme;
@@ -713,7 +716,35 @@ export function setOutput(scheme: Scheme, output: Scheme['output'], game: Game):
     });
   }
   let out: Scheme = { ...scheme, output, padMap: {}, map, behaviour };
-  for (const slot of carried) out = assign(out, slot, slot.action, game);
+  const controller = setupOf(scheme.devices).controller;
+  const buttons = new Set(XBOX_PAD.controls.filter((c) => c.sends).map((c) => c.id));
+  for (const slot of carried) {
+    if (controller && output === 'keys') {
+      // The controller's button sending the same Xbox control kept doing it only through this
+      // button: it now carries the action itself, so the controller does what it did.
+      const pad = `pad.${padSignalOf(scheme, slot.control) ?? ''}`;
+      if (buttons.has(pad) && own(own(out.map, slot.mode) ?? {}, pad)?.tap === undefined)
+        out = assign(out, { ...slot, control: pad }, slot.action, game);
+    }
+    if (controller && output === 'pad') {
+      // The controller already has the action on a button: the Azeron button joins that control.
+      const pad = [...buttons].find(
+        (c) => own(own(out.map, slot.mode) ?? {}, c)?.tap === slot.action,
+      );
+      if (pad !== undefined) {
+        const byControl = withOwn<PressMap>(copyMode(out, slot.mode), slot.control, {
+          tap: slot.action,
+        });
+        out = withMode(
+          { ...out, padMap: withOwn(out.padMap, slot.control, pad.slice(4) as PadControl) },
+          slot.mode,
+          byControl,
+        );
+        continue;
+      }
+    }
+    out = assign(out, slot, slot.action, game);
+  }
   return out;
 }
 

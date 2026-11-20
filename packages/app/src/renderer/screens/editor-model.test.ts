@@ -900,6 +900,37 @@ describe('setOutput: what the Azerons send', () => {
     });
   });
 
+  it('controller to keys with a controller in the setup: its buttons keep doing what they did', () => {
+    const both = setDevices(hd, { ...AZERONS_ONLY, controller: true }, helldivers2);
+    // The controller's X shows Reload only by the Azeron button sending X: no entry of its own.
+    expect([both.map['default']?.['pad.X'], shownAction(both, 'default', 'pad.X')?.id]).toEqual([
+      undefined,
+      'reload',
+    ]);
+    const keys = setOutput(both, 'keys', helldivers2);
+    const rows = plan(keys, helldivers2).gameBindings.filter(
+      (b) => b.set === 'controller' && b.action === 'reload',
+    );
+    expect([
+      shownAction(keys, 'default', 'pad.X')?.id,
+      keys.map['default']?.['L.middle_1'],
+      rows.map((b) => b.signal),
+    ]).toEqual(['reload', { tap: 'reload' }, [{ kind: 'pad', control: 'X' }]]);
+  });
+
+  it('keys to controller: a button whose action the controller already has joins its control', () => {
+    const scheme = deepFreeze({
+      ...keysScheme(),
+      devices: { ...AZERONS_ONLY, controller: true },
+      map: { ship: { 'pad.Y': { tap: 'hardpoints' }, 'L.index_1': { tap: 'hardpoints' } } },
+    });
+    const next = setOutput(scheme, 'pad', padGame);
+    expect([next.padMap['L.index_1'], next.map['ship']?.['pad.Y']]).toEqual([
+      'Y',
+      { tap: 'hardpoints' },
+    ]);
+  });
+
   it('returns the same scheme for the output it already has', () => {
     expect(setOutput(hd, 'pad', helldivers2)).toBe(hd);
   });

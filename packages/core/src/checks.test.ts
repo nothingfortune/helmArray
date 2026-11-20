@@ -233,8 +233,8 @@ describe('sends-nothing: a button whose action sends nothing', () => {
   it("is an error for an action on a control of a device the setup doesn't use", () => {
     const plan = run(keys({}, { fight: { 'key.W': { tap: 'heal' }, 'pad.A': { tap: 'pause' } } }));
     expect(found(plan, 'sends-nothing').map((f) => [f.control, f.message])).toEqual([
-      ['key.W', "Heal is on a control this setup doesn't use, so pressing it does nothing."],
-      ['pad.A', "Pause is on a control this setup doesn't use, so pressing it does nothing."],
+      ['key.W', "Heal is on a control this scheme doesn't use, so pressing it does nothing."],
+      ['pad.A', "Pause is on a control this scheme doesn't use, so pressing it does nothing."],
     ]);
   });
 

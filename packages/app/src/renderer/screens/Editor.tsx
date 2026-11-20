@@ -440,10 +440,11 @@ function EditorBody({
             <aside className="ed-side" aria-label="Button and actions">
               {view.panel === null ? (
                 <div className="ed-pick">
-                  <h2 className="ed-pick-title">Pick a button</h2>
+                  <h2 className="ed-pick-title">Pick a {view.controlWord}</h2>
                   <p className="ed-hint">
-                    Click one, then click an action below, or drag an action onto a button. Drag a
-                    button&apos;s action onto another to move it.
+                    Click one, then click an action below, or drag an action onto a{' '}
+                    {view.controlWord}. Drag a {view.controlWord}&apos;s action onto another to move
+                    it.
                   </p>
                 </div>
               ) : (

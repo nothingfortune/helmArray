@@ -152,6 +152,9 @@ test.describe('setups', () => {
     await expect(drawer(page).getByLabel("Now, in Helldivers 2's controls")).toContainText(
       'Set Reload to T',
     );
+    await drawer(page).getByRole('button', { name: 'Close' }).click();
+    // No unit to judge, and nothing left to apply.
+    await expect(pill(page)).toHaveText('In sync');
 
     const after = await helm.units();
     expect(after.map((u) => [u.slots, u.writesReceived])).toEqual(
@@ -199,6 +202,18 @@ test.describe('setups', () => {
     await page.getByRole('button', { name: 'Library' }).click();
     await expect(page.locator('.tile', { hasText: 'HELLDIVERS' }).locator('.status')).toHaveText(
       'On the units · Xbox controller',
+    );
+
+    // From the Library, the other setup is two clicks: the game's list, then the setup.
+    await page.getByRole('button', { name: /^HELLDIVERS.* schemes$/ }).click();
+    await page
+      .getByRole('dialog', { name: /schemes$/ })
+      .getByRole('button', { name: /^Xbox controller copy/ })
+      .click();
+    await expect(schemePicker(page)).toHaveText(/^Scheme: Xbox controller copy$/);
+    await expect(azeronsSend(page).getByRole('button', { name: 'Keys' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
     );
   });
 });

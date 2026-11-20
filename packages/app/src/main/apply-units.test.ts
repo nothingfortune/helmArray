@@ -956,7 +956,7 @@ describe('a setup with no Azeron', () => {
       result,
       [left.received.length - (before[0] ?? 0), right.received.length - (before[1] ?? 0)],
     ]).toEqual([
-      { ok: true, units: [], message: 'Applied. This setup uses no Azeron, so none was written.' },
+      { ok: true, units: [], message: 'Applied. This scheme uses no Azeron, so none was written.' },
       [0, 0],
     ]);
   });

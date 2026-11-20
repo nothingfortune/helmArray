@@ -74,12 +74,21 @@ describe('the device area', () => {
       map: { ship: { 'key.J': { tap: 'fsd' } }, srv: {} },
     };
     const html = area(scheme, 'keyboard', 'key.J');
+    const unplaced = renderToStaticMarkup(
+      <Unplaced
+        view={view(scheme, undefined, 'keyboard')}
+        modeName="Ship"
+        prompt={null}
+        onPlace={none}
+      />,
+    );
     expect([
       html.includes('aria-label="Keyboard"'),
       html.includes('aria-label="Mouse"'),
       html.includes('Frame shift drive'),
       count(html, 'is-selected'),
-    ]).toEqual([true, true, true, 1]);
+      unplaced.includes('Not on a key · Ship'),
+    ]).toEqual([true, true, true, 1, true]);
   });
 
   it('draws only the mouse on a mouse tab with no keyboard', () => {

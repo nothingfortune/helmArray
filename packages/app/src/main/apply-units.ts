@@ -550,7 +550,7 @@ export async function applyUnits(plan: Plan, deps: UnitsDeps): Promise<ApplyUnit
 }
 
 /** What Apply says of the units for a setup that uses none. */
-export const NO_UNIT_SENTENCE = 'Applied. This setup uses no Azeron, so none was written.';
+export const NO_UNIT_SENTENCE = 'Applied. This scheme uses no Azeron, so none was written.';
 
 function refused(hands: readonly Hand[], hand: Hand, message: string): ApplyUnitsResult {
   return {
