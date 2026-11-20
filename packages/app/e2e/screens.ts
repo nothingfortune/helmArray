@@ -21,18 +21,18 @@ export async function startFrom(page: Page, preset: 'Xbox controller' | "Game's 
   await expect(page.getByRole('heading', { name: 'Helldivers 2' })).toBeVisible();
 }
 
+/** The left unit's board in the Editor. */
+export const leftUnit = (page: Page) => page.locator('.unit[data-hand="left"]');
+
 /**
  * Puts Throw grenade, an action Helldivers 2 has no Xbox default for, on the left unit's middle
  * 2 button (which sends Y, and which the Xbox controller preset leaves empty). That raises a
  * check the player can keep, for the tests that need one: the preset itself has none. The side
- * panel the drop opens is closed again, so the page is the Editor with one check and no button
- * selected (the panel's own press rows have an axe label-in-name problem, left for the owner).
+ * panel the drop opens stays open.
  */
 export async function flagAnAction(page: Page) {
-  const left = page.locator('.unit[data-hand="left"]');
   const action = page.locator('.ed-actions').getByRole('button', { name: 'Throw grenade' });
-  await action.dragTo(left.getByRole('button', { name: 'Empty, middle 2' }));
-  await page.getByRole('button', { name: 'Close', exact: true }).click();
+  await action.dragTo(leftUnit(page).getByRole('button', { name: 'Empty, middle 2' }));
   await expect(page.getByRole('button', { name: 'Keep, I know' }).first()).toBeVisible();
 }
 

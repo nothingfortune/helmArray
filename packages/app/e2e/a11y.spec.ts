@@ -9,6 +9,8 @@ import {
   applyInDrawer,
   drawer,
   flagAnAction,
+  helldivers,
+  leftUnit,
   keepEveryCheck,
   startFrom,
 } from './screens';
@@ -45,10 +47,74 @@ test.describe('axe: no serious or critical violations', () => {
     await expect(helm.page.getByRole('heading', { level: 1 })).toHaveCount(1);
   });
 
+  test('the Library, with the start-from choices open', async ({ helm }) => {
+    const { page } = helm;
+    await helldivers(page).click();
+    await expect(page.getByRole('button', { name: 'Xbox controller' })).toBeVisible();
+    expect(await seriousViolations(page)).toEqual([]);
+  });
+
+  test('the Library, with a scheme started and its other-scheme choices open', async ({ helm }) => {
+    const { page } = helm;
+    await startFrom(page, 'Xbox controller');
+    await page.getByRole('button', { name: 'Library' }).click();
+    await page.getByRole('button', { name: 'Other scheme' }).click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    expect(await seriousViolations(page)).toEqual([]);
+  });
+
+  test('Settings, open', async ({ helm }) => {
+    const { page } = helm;
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+    expect(await seriousViolations(page)).toEqual([]);
+  });
+
+  test('the Editor, with the side panel open on a button that has an action', async ({ helm }) => {
+    const { page } = helm;
+    await startFrom(page, 'Xbox controller');
+    await leftUnit(page)
+      .getByRole('button', { name: /^Interact, / })
+      .click();
+    await expect(page.getByRole('button', { name: /^Tap/ }).first()).toBeVisible();
+    expect(await seriousViolations(page)).toEqual([]);
+  });
+
+  test('the Editor, with the side panel open on an empty button', async ({ helm }) => {
+    const { page } = helm;
+    await startFrom(page, 'Xbox controller');
+    await leftUnit(page)
+      .getByRole('button', { name: /^Empty, middle 2/ })
+      .click();
+    await expect(page.getByRole('button', { name: /^Tap/ }).first()).toBeVisible();
+    expect(await seriousViolations(page)).toEqual([]);
+  });
+
+  test('the Editor, with the side panel open on the stick', async ({ helm }) => {
+    const { page } = helm;
+    await startFrom(page, 'Xbox controller');
+    // The stick press sits over the stick's own button, so the keyboard selects it.
+    await leftUnit(page)
+      .getByRole('button', { name: /^Stick/ })
+      .press('Enter');
+    await expect(page.getByText('The stick sends its four directions.')).toBeVisible();
+    expect(await seriousViolations(page)).toEqual([]);
+  });
+
   test('the Editor, with findings', async ({ helm }) => {
     const { page } = helm;
     await startFrom(page, 'Xbox controller');
     await flagAnAction(page);
+    await page.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Keep, I know' }).first()).toBeVisible();
+    expect(await seriousViolations(page)).toEqual([]);
+  });
+
+  test('the Editor, with findings and the side panel open', async ({ helm }) => {
+    const { page } = helm;
+    await startFrom(page, 'Xbox controller');
+    await flagAnAction(page);
+    await expect(page.locator('.ed-panel-title')).toHaveText('Throw grenade');
     expect(await seriousViolations(page)).toEqual([]);
   });
 

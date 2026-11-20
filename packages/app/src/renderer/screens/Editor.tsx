@@ -561,7 +561,8 @@ function Panel({
                   className="ed-slot-main"
                   aria-pressed={row.target}
                   aria-disabled={!row.available}
-                  aria-label={`${row.word}: ${row.action?.name ?? (row.available ? 'empty' : 'not on a controller')}`}
+                  // No aria-label: the visible words ("Tap", then the action, "Add" or "Not on a
+                  // controller") name the button, so the name begins with what is seen.
                   onClick={() => row.available && onTarget(row.press)}
                 >
                   <span className="ed-slot-word">{row.word}</span>
