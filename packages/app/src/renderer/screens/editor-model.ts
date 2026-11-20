@@ -7,6 +7,7 @@
 
 import type {
   ActionId,
+  Behaviour,
   ControlId,
   Finding,
   Game,
@@ -16,6 +17,8 @@ import type {
   Press,
   Scheme,
   SetupDevices,
+  StickBehaviour,
+  StickDirections,
 } from '@helmarray/core';
 import {
   BUILT_IN_DEVICES,
@@ -25,6 +28,7 @@ import {
   XBOX_PAD,
   PAD_CONTROLS,
   PRESSES,
+  STICK_DIRECTIONS,
   controlSet,
   inSetup,
   own,
@@ -44,9 +48,14 @@ export interface Slot {
 type PressMap = Partial<Record<Press, ActionId>>;
 type ByControl = Record<ControlId, PressMap>;
 
-/** The stick is not a button: it has no presses, only directions. Actions never go on it. */
+const STICKS = new Set(['stick', 'left_stick', 'right_stick']);
+
+/**
+ * A stick is not a button: it has no presses, only directions. Actions never go on it. A unit's
+ * stick, and the controller's two.
+ */
 export const isStick = (control: ControlId): boolean =>
-  control.slice(control.indexOf('.') + 1) === 'stick';
+  STICKS.has(control.slice(control.indexOf('.') + 1));
 
 /** The reason stored when the player taps "Keep, I know". The canvas has no field for one. */
 export const KEPT_REASON = 'Kept on purpose';
@@ -629,4 +638,117 @@ export function isTextEntry(target: {
   const tag = target.tagName.toUpperCase();
   if (tag === 'TEXTAREA' || tag === 'SELECT') return true;
   return tag === 'INPUT' && !NON_TEXT_INPUTS.includes((target.type ?? 'text').toLowerCase());
+}
+
+// ---- What the Azerons send ----
+
+const isAzeron = (control: ControlId): boolean =>
+  control.startsWith('L.') || control.startsWith('R.');
+
+const STICK_PAD_DIRECTIONS = {
+  L: { up: 'LS_UP', down: 'LS_DOWN', left: 'LS_LEFT', right: 'LS_RIGHT' },
+  R: { up: 'RS_UP', down: 'RS_DOWN', left: 'RS_LEFT', right: 'RS_RIGHT' },
+} as const;
+
+/**
+ * What a unit's stick does once the Azerons send `output`: its hand's Xbox stick for a controller;
+ * for keys, the keys the game ships the actions of its Xbox directions on (the left stick's up is
+ * Move forward, so W), or the mouse when none of them has one. Tuning is kept; the old
+ * directions are not.
+ */
+function stickFor(
+  prefix: 'L' | 'R',
+  before: StickBehaviour | undefined,
+  output: Scheme['output'],
+  game: Game,
+): StickBehaviour {
+  const tuning: Partial<StickBehaviour> = { ...before };
+  delete tuning.mode;
+  delete tuning.directions;
+  if (output === 'pad') return { ...tuning, mode: prefix === 'L' ? 'pad-left' : 'pad-right' };
+  const directions: StickDirections = {};
+  for (const direction of STICK_DIRECTIONS) {
+    const pad = STICK_PAD_DIRECTIONS[prefix][direction];
+    const key = game.actions.find((a) => a.native?.pad === pad && a.native.key?.kind === 'key')
+      ?.native?.key;
+    if (key !== undefined) directions[direction] = key;
+  }
+  return Object.keys(directions).length === 0
+    ? { ...tuning, mode: 'mouse' }
+    : { ...tuning, mode: 'keys', directions };
+}
+
+/**
+ * "Azerons send: Keys | Controller". Every Azeron button keeps the action on its tap, now sent as
+ * the other kind of signal, in the other binding set of the game: with a controller each gets an
+ * Xbox control (THE PAD RULE, rule 2: the one the game ships its action on when free), with keys
+ * the pad map empties. A controller button only taps, so a long press or a double tap comes off
+ * (its action is unplaced). Each stick follows (`stickFor`). The controller's own buttons, the
+ * keyboard and the mouse keep what they have, and the ledger is never touched.
+ */
+export function setOutput(scheme: Scheme, output: Scheme['output'], game: Game): Scheme {
+  if (scheme.output === output) return scheme;
+  const carried: (Slot & { action: ActionId })[] = [];
+  for (const [mode, byControl] of Object.entries(scheme.map)) {
+    for (const [control, presses] of Object.entries(byControl)) {
+      if (!isAzeron(control) || isStick(control)) continue;
+      const action = presses.tap;
+      if (action !== undefined) carried.push({ mode, control, press: 'tap', action });
+    }
+  }
+  const map: Scheme['map'] = Object.fromEntries(
+    Object.entries(scheme.map).map(([mode, byControl]) => [
+      mode,
+      Object.fromEntries(Object.entries(byControl).filter(([control]) => !isAzeron(control))),
+    ]),
+  );
+  let behaviour: Scheme['behaviour'] = { ...scheme.behaviour };
+  for (const prefix of ['L', 'R'] as const) {
+    const id = `${prefix}.stick`;
+    const before: Behaviour = own(scheme.behaviour, id) ?? {};
+    behaviour = withOwn<Behaviour>(behaviour, id, {
+      ...before,
+      stick: stickFor(prefix, before.stick, output, game),
+    });
+  }
+  let out: Scheme = { ...scheme, output, padMap: {}, map, behaviour };
+  for (const slot of carried) out = assign(out, slot, slot.action, game);
+  return out;
+}
+
+/**
+ * Which Xbox control an Azeron button sends, chosen in the side panel (controller output only).
+ * The button's own action goes with it: the game's controller binding for it becomes the new
+ * control, and whatever else was on that control comes off (THE PAD RULE, rule 1). Another Azeron
+ * button already sending it takes this button's old control in exchange, with its own action: a
+ * swap. A button that sent nothing joins the others sending it instead (both press that control).
+ * Never a direction a stick of the setup sends. A choice that can't stand (a button carrying a
+ * stick's action stays on the stick's direction) changes nothing.
+ */
+export function setPadControl(
+  scheme: Scheme,
+  control: ControlId,
+  pad: PadControl,
+  game: Game,
+): Scheme {
+  if (scheme.output !== 'pad' || !isAzeron(control) || isStick(control)) return scheme;
+  if (!inSetup(setupOf(scheme.devices), control) || stickPadsOf(scheme).has(pad)) return scheme;
+  const current = padSignalOf(scheme, control);
+  if (current === pad) return scheme;
+  const swapped =
+    current === undefined
+      ? []
+      : Object.keys(scheme.padMap).filter((c) => c !== control && padSignalOf(scheme, c) === pad);
+  let padMap = withOwn(scheme.padMap, control, pad);
+  if (current !== undefined) for (const other of swapped) padMap = withOwn(padMap, other, current);
+  let out: Scheme = { ...scheme, padMap };
+  // Each button's own action, put back on its tap in every mode: rule 1 does the displacing.
+  for (const mode of Object.keys(scheme.map)) {
+    for (const c of [control, ...swapped]) {
+      const action = own(own(scheme.map, mode) ?? {}, c)?.tap;
+      if (action !== undefined) out = assign(out, { mode, control: c, press: 'tap' }, action, game);
+    }
+  }
+  out = dropStrayStickPads(out, game);
+  return padSignalOf(out, control) === pad ? out : scheme;
 }
