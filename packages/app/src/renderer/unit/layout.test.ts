@@ -219,3 +219,9 @@ describe('dragCarriesAction', () => {
     expect(dragCarriesAction(undefined)).toBe(false);
   });
 });
+
+describe('positionName for a position named like an Object property', () => {
+  it('words constructor as a name, not as Object', () => {
+    expect(positionName('constructor')).toBe('Constructor');
+  });
+});
