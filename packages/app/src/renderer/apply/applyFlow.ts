@@ -69,13 +69,24 @@ export function reduce(state: DrawerState, event: DrawerEvent): DrawerState {
   }
 }
 
-/** Changes whenever the preview could read differently: the Azeron app, a unit, a hand. */
+/**
+ * Changes whenever what the preview says could be different now, and not otherwise (a unit being
+ * asked again, with the same answer, must not look again):
+ *  - the Azeron app opening or closing (`writeBlock`);
+ *  - a unit coming or going, or being told which hand it is, and its state;
+ *  - a unit read or not read (a refused or failed read, then recovered), and the slot it runs
+ *    (the profile button), which the slots to be deleted rest on;
+ *  - the scheme changing since it was applied, which the pill's words say (an edit elsewhere).
+ * A scheme edited in a way the pill does not show is caught when Apply is pressed instead: it
+ * carries the fingerprint of the layout shown and is refused if that has changed.
+ */
 export function previewKey(state: AppState | null): string {
   if (state === null) return '';
   return JSON.stringify([
     state.writeBlock,
     state.question === null,
-    state.devices.map((d) => [d.hand, d.unitId, d.state]),
+    state.devices.map((d) => [d.hand, d.unitId, d.state, d.read, d.running]),
+    state.sync.label,
   ]);
 }
 

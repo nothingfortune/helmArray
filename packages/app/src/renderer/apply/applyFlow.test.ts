@@ -279,8 +279,24 @@ describe('what changes on a unit', () => {
 describe('when to look again', () => {
   const state = (over: Partial<AppState> = {}): AppState => ({
     devices: [
-      { hand: 'left', unitId: 1, state: 'ready', firmware: 112, error: null },
-      { hand: 'right', unitId: 2, state: 'ready', firmware: 112, error: null },
+      {
+        hand: 'left',
+        unitId: 1,
+        state: 'ready',
+        firmware: 112,
+        error: null,
+        read: true,
+        running: 1,
+      },
+      {
+        hand: 'right',
+        unitId: 2,
+        state: 'ready',
+        firmware: 112,
+        error: null,
+        read: true,
+        running: 1,
+      },
     ],
     sync: { label: 'In sync', tone: 'ok' },
     writeBlock: null,
@@ -290,13 +306,63 @@ describe('when to look again', () => {
     ...over,
   });
 
-  it('changes with the Azeron app, a unit and a hand, and not with the pill', () => {
+  const withLeft = (over: Partial<AppState['devices'][number]>): AppState => {
+    const s = state();
+    return { ...s, devices: s.devices.map((d, i) => (i === 0 ? { ...d, ...over } : d)) };
+  };
+  /** How many times a drawer open on this run of states would have looked again. */
+  const previews = (states: AppState[]) =>
+    states.reduce(
+      (n, s, i) => (i > 0 && previewKey(s) !== previewKey(states[i - 1] ?? null) ? n + 1 : n),
+      0,
+    );
+
+  it('changes with the Azeron app opening or closing, and not otherwise with the app state', () => {
     const base = previewKey(state());
     expect(previewKey(state({ writeBlock: 'Close the Azeron app first.' }))).not.toBe(base);
-    expect(previewKey(state({ devices: [] }))).not.toBe(base);
-    expect(previewKey(state({ sync: { label: '3 changes not applied', tone: 'warning' } }))).toBe(
-      base,
-    );
+    expect(previewKey(state({ activeGameId: 'skiff', activeSchemeId: 'x' }))).toBe(base);
     expect(previewKey(null)).toBe('');
+  });
+
+  it('looks again when a unit is unplugged and when it is plugged back', () => {
+    const [both, one] = [state(), state({ devices: state().devices.slice(1) })];
+    expect(previews([both, one, both])).toBe(2);
+    expect(previewKey(withLeft({ state: 'connecting', read: false, running: null }))).not.toBe(
+      previewKey(both),
+    );
+  });
+
+  it('looks again when a unit goes unread and when it is read again, once each', () => {
+    const read = state();
+    const unread = withLeft({ read: false, running: null });
+    expect(previewKey(unread)).not.toBe(previewKey(read));
+    // Unread, then read: two changes of key, so two previews, and the last shows it recovered.
+    expect(previews([read, unread, read])).toBe(2);
+  });
+
+  it('looks again when the profile button moves a unit to another slot', () => {
+    expect(previewKey(withLeft({ running: 0 }))).not.toBe(previewKey(state()));
+  });
+
+  it('does not look again for a unit asked again with the same answer (readAt is not in the state)', () => {
+    expect(previews([state(), state(), state(), state()])).toBe(0);
+  });
+
+  it('looks again when the scheme was edited elsewhere (what the pill says changes), not on a plain tick', () => {
+    const edited = state({ sync: { label: '2 changes not applied', tone: 'warning' } });
+    expect(previews([state(), edited, edited])).toBe(1);
+    const moved = state({
+      sync: {
+        label: 'Left unit differs',
+        tone: 'error',
+        detail: 'Left unit: 3 inputs not as applied.',
+      },
+    });
+    expect(previewKey(moved)).not.toBe(previewKey(state()));
+  });
+
+  it('looks again when a unit is told which hand it is', () => {
+    const asked = state({ question: { kind: 'press', prompt: 'Unplug your left Azeron.' } });
+    expect(previews([asked, state()])).toBe(1);
   });
 });

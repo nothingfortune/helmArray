@@ -135,6 +135,13 @@ describe('the slot each unit runs, asked on a timer', () => {
       now: Date.now(),
     }).sync;
   const tick = () => vi.advanceTimersByTimeAsync(RUNNING_MS);
+  /** What a window is told of each unit: whether it is read, and the slot it runs. */
+  const chips = () =>
+    composeAppState({
+      devices: devices.snapshot(),
+      hands: handsFor([LEFT, RIGHT], { get: (id) => (id === LEFT ? 'left' : 'right') }),
+      writeBlock: null,
+    }).devices.map((c) => [c.read, c.running]);
 
   it('follows the profile button within one tick: In sync, then the unit that moved differs', async () => {
     expect(pill().label).toBe('In sync');
@@ -205,11 +212,21 @@ describe('the slot each unit runs, asked on a timer', () => {
     expect(devices.snapshot().units.every((u) => u.slots === undefined)).toBe(true);
     expect(devices.snapshot().units.every((u) => u.state === 'ready')).toBe(true);
     expect(pill().label).toBe('Not checked yet');
+    // The windows are told the units are not read, so an open drawer looks again ...
+    expect(chips()).toEqual([
+      [false, null],
+      [false, null],
+    ]);
 
     failSends = false;
     await tick();
     expect(read.left).toBeGreaterThan(0);
     expect(pill().label).toBe('In sync');
+    // ... and again when they are read: that is what enables Apply without reopening it.
+    expect(chips()).toEqual([
+      [true, 1],
+      [true, 1],
+    ]);
   });
 
   it('reads a unit again when it runs a slot the cache has not got', async () => {

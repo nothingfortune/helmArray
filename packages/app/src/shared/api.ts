@@ -61,6 +61,13 @@ export interface DeviceChip {
   firmware: number | null;
   /** Why it failed, in one plain sentence. */
   error: string | null;
+  /**
+   * What the unit holds is known: it was read, and not given up since (the Azeron app was open, or
+   * a question went unanswered). Not whether it is in sync.
+   */
+  read: boolean;
+  /** The slot it runs as last asked (the profile button moves it), or null when not read. */
+  running: number | null;
 }
 
 export type SyncTone = 'ok' | 'warning' | 'error';

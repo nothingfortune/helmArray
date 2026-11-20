@@ -33,6 +33,8 @@ function chipOf(unit: UnitSnapshot, hands: HandsResult): DeviceChip {
     state: unit.state,
     firmware: unit.identity?.firmware ?? null,
     error: unit.error ?? null,
+    read: unit.slots !== undefined,
+    running: unit.slots !== undefined ? (unit.identity?.runningSlot ?? null) : null,
   };
 }
 
