@@ -281,6 +281,38 @@ describe('reading schemes', () => {
     expect(await data.getScheme('cut')).toBeNull();
   });
 
+  it('gives null, and reports it, for a scheme filed under another id than its own', async () => {
+    const { data, problems } = await openStore();
+    const other = await data.createSchemeFromPreset('skiff', 'keys');
+    const text = JSON.stringify({
+      schemaVersion: currentVersion('scheme'),
+      ...xboxControllerPreset(SKIFF),
+      id: other.id,
+    });
+    await writeRaw(['schemes', 'a.json'], text);
+
+    expect(await data.getScheme('a')).toBeNull();
+    expect(problems.map((p) => p.file)).toEqual(['schemes/a.json']);
+    expect(problems[0]?.message).toContain('different name');
+    // The same file is turned down the same way when the schemes are listed.
+    expect((await data.listSchemes('skiff')).map((s) => s.id)).toEqual([other.id]);
+    // The unrelated scheme is still its own.
+    expect(await data.getScheme(other.id)).toEqual(other);
+  });
+
+  it('lets getScheme and listSchemes agree on every file', async () => {
+    const { data } = await openStore();
+    const good = await data.createSchemeFromPreset('skiff', 'xbox');
+    await writeRaw(
+      ['schemes', 'liar.json'],
+      JSON.stringify({ schemaVersion: currentVersion('scheme'), ...good, id: 'someone' }),
+    );
+    const listed = new Set((await data.listSchemes('skiff')).map((s) => s.id));
+    for (const id of [good.id, 'liar', 'someone']) {
+      expect((await data.getScheme(id)) !== null, id).toBe(listed.has(id));
+    }
+  });
+
   it('clears a report once the file reads well again', async () => {
     const { data } = await openStore();
     await writeRaw(['schemes', 'x.json'], 'not json');
