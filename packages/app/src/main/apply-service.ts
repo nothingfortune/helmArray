@@ -244,7 +244,7 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
     }
     // A setup with no Azeron has nothing to ask of the units or of the Azeron app.
     if (used.length === 0) {
-      const checks = readiness(false, resolved.plan);
+      const checks = findingChecks(resolved.plan);
       return { ...base, ...names, ready: checks.every((c) => c.ok), checks };
     }
     const open = await azeronOpen();
@@ -353,7 +353,7 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
       // A setup with no Azeron writes no unit: it is remembered, and the game's half is the
       // player's, from the drawer.
       if (handsOf(plan).length === 0) {
-        const blocked = readiness(false, plan).find((c) => !c.ok);
+        const blocked = findingChecks(plan).find((c) => !c.ok);
         if (blocked) return refused(blocked.text);
         const problem = await remember(schemeId, game.id, plan, fingerprint);
         return { ok: problem === null, message: problem ?? NO_UNIT_SENTENCE, units: [] };

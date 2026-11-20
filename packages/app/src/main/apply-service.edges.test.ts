@@ -3,9 +3,9 @@
 // the test writes; nothing here talks to a unit. Found by mutation testing: these are the
 // sentences and branches no other test noticed.
 import { describe, expect, it } from 'vitest';
-import type { Game, Hand, Scheme } from '@helmarray/core';
-import { gameKeysPreset } from '@helmarray/core';
-import { BUSY_SENTENCE, createApplyService } from './apply-service';
+import type { Game, Hand, Plan, Scheme } from '@helmarray/core';
+import { BUILT_IN_DEVICES, gameKeysPreset, resolve } from '@helmarray/core';
+import { BUSY_SENTENCE, changedRows, createApplyService } from './apply-service';
 import type { ApplyDevices, ApplyServiceDeps } from './apply-service';
 import type { UnitSnapshot } from './devices';
 
@@ -377,5 +377,153 @@ describe('what is said of units depends on whether the Azeron app is known to be
       false,
       "The left Azeron couldn't be read: It would not answer.",
     ]);
+  });
+});
+
+describe('a setup with no Azeron', () => {
+  const noUnit: Scheme = {
+    ...scheme,
+    devices: { azerons: 'none', keyboard: true, mouse: true, controller: false },
+    accepted: [],
+    map: { ship: { 'key.B': { tap: 'boost' }, 'mouse.left': { tap: 'fire' } } },
+  };
+  /** Counts what a unit-writing apply would have touched. */
+  const counted = () => {
+    const touched = { holds: 0, looks: 0 };
+    const b = bench(() => [], {
+      exclusive: async (job) => {
+        touched.holds++;
+        return job({ refresh: async () => undefined });
+      },
+    });
+    return { b, touched };
+  };
+
+  it('is applied without holding the devices or looking for the Azeron app', async () => {
+    const { b, touched } = counted();
+    const { service } = serviceOver(b, {
+      scheme: noUnit,
+      azeronAppRunning: async () => {
+        touched.looks++;
+        return false;
+      },
+    });
+    const { fingerprint } = await service.preview(noUnit.id);
+    expect(await service.apply(noUnit.id, fingerprint)).toEqual({
+      ok: true,
+      message: 'This setup uses no Azeron.',
+      units: [],
+    });
+    expect(touched).toEqual({ holds: 0, looks: 0 });
+  });
+
+  it('says what went wrong with the note of it, as a setup and not as units', async () => {
+    const { service } = serviceOver(
+      bench(() => []),
+      {
+        scheme: noUnit,
+        saveApplied: async () => {
+          throw new Error('disk full');
+        },
+      },
+    );
+    const { fingerprint } = await service.preview(noUnit.id);
+    expect(await service.apply(noUnit.id, fingerprint)).toEqual({
+      ok: false,
+      message:
+        "The setup is applied, but helmArray couldn't keep a note of it (disk full), so it can't say they are in sync.",
+      units: [],
+    });
+  });
+
+  it('is refused for an error nobody accepted, in the error’s own words, and nothing is remembered', async () => {
+    const unplaced: Scheme = { ...noUnit, map: { ship: { 'key.B': { tap: 'boost' } } } };
+    let remembered = 0;
+    const { service } = serviceOver(
+      bench(() => []),
+      {
+        scheme: unplaced,
+        saveApplied: async () => {
+          remembered++;
+        },
+      },
+    );
+    const preview = await service.preview(unplaced.id);
+    const result = await service.apply(unplaced.id, preview.fingerprint);
+    expect([preview.ready, result.ok, result.message, remembered]).toEqual([
+      false,
+      false,
+      preview.checks[0]?.text,
+      0,
+    ]);
+    expect(preview.checks.every((c) => !c.ok)).toBe(true);
+  });
+});
+
+describe('the game half of a preview, when what the game holds cannot be read', () => {
+  it('is worked out from nothing held, and the failure is logged', async () => {
+    const { service, lines } = serviceOver(
+      bench(() => [unit(LEFT), unit(RIGHT)]),
+      {
+        gameHolds: async () => {
+          throw new Error('no record');
+        },
+      },
+    );
+    const preview = await service.preview(scheme.id);
+    expect(lines).toContain("couldn't read what was applied to skiff last: no record");
+    expect(preview.game.rows.length).toBeGreaterThan(0);
+  });
+});
+
+describe('the game rows that change, in the game’s words', () => {
+  const twoModes: Game = {
+    ...game,
+    modes: [
+      { id: 'ship', name: 'Ship' },
+      { id: 'ground', name: 'Ground' },
+    ],
+    actions: [
+      { id: 'boost', name: 'Boost', mode: 'ship', role: 'movement', required: true },
+      { id: 'jump', name: 'Jump', mode: 'ground', role: 'movement', required: true },
+    ],
+  };
+  const planOf = (): Plan =>
+    resolve(
+      {
+        ...gameKeysPreset(twoModes),
+        writeGameFile: false,
+        accepted: [
+          { rule: 'stick-no-directions', control: 'L.stick', reason: 'x' },
+          { rule: 'stick-no-directions', control: 'R.stick', reason: 'x' },
+        ],
+        map: {
+          ship: { 'L.index_1': { tap: 'boost' } },
+          ground: { 'L.index_1': { tap: 'jump' } },
+        },
+      },
+      twoModes,
+      BUILT_IN_DEVICES,
+    );
+
+  it('names the mode each row is in, not the first mode the game has', () => {
+    const rows = changedRows(planOf(), twoModes, null);
+    expect(rows.map((row) => [row.action, row.modeName])).toEqual([
+      ['boost', 'Ship'],
+      ['jump', 'Ground'],
+    ]);
+  });
+
+  it('takes what the game held from the first of its rows for an action', () => {
+    const now = planOf();
+    const boost = now.gameBindings.filter((b) => b.action === 'boost');
+    const earlier: Plan = {
+      ...now,
+      gameBindings: [
+        ...boost.map((b) => ({ ...b, signal: { kind: 'key', code: 'End' } as const })),
+        ...boost.map((b) => ({ ...b, signal: { kind: 'key', code: 'Del' } as const })),
+      ],
+    };
+    expect(changedRows(now, twoModes, earlier)[0]?.from).toEqual({ kind: 'key', code: 'End' });
   });
 });

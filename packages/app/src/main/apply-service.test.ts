@@ -970,3 +970,34 @@ describe('the game half of the Apply drawer', () => {
     ).toEqual([['boost', { kind: 'key', code: 'End' }, { kind: 'key', code: 'Home' }]]);
   });
 });
+
+describe('what Apply says when the note of a setup could not be kept, by which units it used', () => {
+  let r: Awaited<ReturnType<typeof rig>> | undefined;
+  beforeEach(() => void vi.useFakeTimers());
+  afterEach(async () => {
+    await r?.devices.stop();
+    r = undefined;
+    vi.useRealTimers();
+  });
+
+  const leftOnly: Scheme = {
+    ...scheme,
+    devices: { azerons: 'left', keyboard: false, mouse: true, controller: false },
+    accepted: [{ rule: 'stick-no-directions', control: 'L.stick', reason: 'No stick' }],
+    map: { ship: { 'L.index_1': { tap: 'boost' }, 'L.middle_1': { tap: 'fire' } } },
+  };
+  it.each<[string, () => Scheme, string]>([
+    ['both units', () => scheme, 'Both units now run the layout'],
+    ['the left unit', () => leftOnly, 'The left unit now runs the layout'],
+  ])('%s', async (_, pick, words) => {
+    const used = pick();
+    r = await rig({
+      scheme: used,
+      saveApplied: () => Promise.reject(new Error('disk full')),
+    });
+    const result = await r.service.apply(used.id, fp(used));
+    expect(result.message).toBe(
+      `${words}, but helmArray couldn't keep a note of it (disk full), so it can't say they are in sync.`,
+    );
+  });
+});

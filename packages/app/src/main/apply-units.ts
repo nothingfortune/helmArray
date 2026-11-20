@@ -240,7 +240,9 @@ export function previewUnits(
 export function verifyUnits(plan: Plan, held: HeldUnits): Record<Hand, Verdict | null> {
   const one = (hand: Hand): Verdict | null => {
     const unit = held[hand];
-    if (!unit || plan.units[hand] === undefined) return null;
+    if (!unit) return null;
+    // Stryker disable next-line ConditionalExpression: recordsFor throws for a unit the plan lacks and the catch below returns null: the same answer
+    if (plan.units[hand] === undefined) return null;
     try {
       // A running slot the unit doesn't list holds nothing: every input then shows as missing.
       return verify(
