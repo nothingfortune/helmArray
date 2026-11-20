@@ -223,6 +223,7 @@ export class DataStore {
   /** Schemes edited and not yet safely on disk: what a read of them must give back. */
   /** The settings are changed one call at a time. */
   private settingsTurn: Promise<unknown> = Promise.resolve();
+  private createTurn: Promise<unknown> = Promise.resolve();
   /** Changes still under way, for `flush()` to wait for. */
   private readonly ops = new Set<Promise<void>>();
   private readonly unsaved = new Map<string, Scheme>();
@@ -413,7 +414,11 @@ export class DataStore {
    * which lives in core, is never edited.
    */
   createSchemeFromPreset(gameId: string, preset: Preset): Promise<Scheme> {
-    return this.track(this.makeScheme(gameId, preset));
+    // One creation at a time: each picks its name only after the one before it is written, so
+    // two made at once can't both take `Xbox controller`.
+    const run = this.createTurn.then(() => this.makeScheme(gameId, preset));
+    this.createTurn = run.catch(() => undefined);
+    return this.track(run);
   }
 
   private async makeScheme(gameId: string, preset: Preset): Promise<Scheme> {

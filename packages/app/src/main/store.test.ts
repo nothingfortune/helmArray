@@ -378,6 +378,20 @@ describe('using a preset', () => {
     expect(third.name).toBe('Xbox controller 3');
   });
 
+  it('names copies made at the same moment apart too', async () => {
+    const { data } = await openStore();
+    const made = await Promise.all([
+      data.createSchemeFromPreset('skiff', 'xbox'),
+      data.createSchemeFromPreset('skiff', 'xbox'),
+      data.createSchemeFromPreset('skiff', 'xbox'),
+    ]);
+    expect(made.map((s) => s.name)).toEqual([
+      'Xbox controller',
+      'Xbox controller 2',
+      'Xbox controller 3',
+    ]);
+  });
+
   it('makes an id that passes the same check, whatever the length of the game’s id', async () => {
     const long: Game = { ...SKIFF, id: 'g'.repeat(100), name: 'Long' };
     const { data } = await openStore([long]);
