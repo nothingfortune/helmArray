@@ -1,7 +1,8 @@
 // `window.helm`: what the preload gives a page. Built over a small bridge instead of Electron's
 // `ipcRenderer` directly, so it can be tested without Electron.
 
-import type { AppState, HelmApi } from '../shared/api';
+import type { Scheme } from '@helmarray/core';
+import type { AppState, GameEntry, HelmApi } from '../shared/api';
 import { CHANNELS } from '../shared/api';
 
 type Listener = (event: unknown, ...args: unknown[]) => void;
@@ -28,6 +29,17 @@ export function createHelmApi(bridge: IpcBridge): HelmApi {
     recentLog: (lines) => bridge.invoke(CHANNELS.recentLog, lines) as Promise<string[]>,
     openLogFolder: async () => {
       await bridge.invoke(CHANNELS.openLogFolder);
+    },
+    listGames: () => bridge.invoke(CHANNELS.listGames) as Promise<GameEntry[]>,
+    getScheme: (id) => bridge.invoke(CHANNELS.getScheme, id) as Promise<Scheme | null>,
+    listSchemes: (gameId) => bridge.invoke(CHANNELS.listSchemes, gameId) as Promise<Scheme[]>,
+    createScheme: (gameId, preset) =>
+      bridge.invoke(CHANNELS.createScheme, gameId, preset) as Promise<Scheme>,
+    saveScheme: async (scheme) => {
+      await bridge.invoke(CHANNELS.saveScheme, scheme);
+    },
+    setActive: async (gameId, schemeId) => {
+      await bridge.invoke(CHANNELS.setActive, gameId, schemeId);
     },
   };
 }

@@ -11,6 +11,7 @@ const RIGHT = 29993;
 const BLOCK = 'Close the Azeron app first: it talks to the units too.';
 
 async function bench(saved: Record<string, 'left' | 'right'> = {}) {
+  const active = { gameId: null as string | null, schemeId: null as string | null };
   const stored: { value: unknown } = { value: Object.keys(saved).length ? saved : undefined };
   const storage: HandsStorage = {
     load: () => Promise.resolve(stored.value),
@@ -42,6 +43,7 @@ async function bench(saved: Record<string, 'left' | 'right'> = {}) {
       shutdown: () => Promise.resolve(),
     },
     readLog: (lines) => Promise.resolve([`last ${lines}`]),
+    active: () => ({ ...active }),
     trace: (unit, line) => traces.push(`${unit} ${line}`),
   });
   helm.onState((state) => states.push(state));
@@ -59,7 +61,7 @@ async function bench(saved: Record<string, 'left' | 'right'> = {}) {
     units.splice(index, 1);
     for (const listener of listeners) listener();
   };
-  return { helm, hands, stored, units, listeners, gateCalls, states, traces, plug, unplug };
+  return { helm, hands, stored, active, units, listeners, gateCalls, states, traces, plug, unplug };
 }
 
 const settle = () => vi.advanceTimersByTimeAsync(0);
@@ -69,6 +71,23 @@ const AZERON_OPEN = processState(['explorer.exe', 'Azeron Software.exe']);
 describe('the coordinator', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
+
+  it('tells the listeners when the active game or scheme changes', async () => {
+    const b = await bench();
+    b.helm.start();
+    await settle();
+    const before = b.states.length;
+    b.active.gameId = 'everspace2';
+    b.active.schemeId = 'everspace2-xbox-1';
+    await b.helm.activeChanged();
+    expect(b.states).toHaveLength(before + 1);
+    expect(b.helm.state()).toMatchObject({
+      activeGameId: 'everspace2',
+      activeSchemeId: 'everspace2-xbox-1',
+    });
+    await b.helm.activeChanged();
+    expect(b.states).toHaveLength(before + 1);
+  });
 
   it('starts out with no units and no question', async () => {
     const b = await bench();

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Game, Scheme } from './model';
+import type { AppSettings, Game, Scheme } from './model';
 import { copyScheme, gameKeysPreset } from './presets/keys';
 import type { Migration } from './schema';
 import { MIGRATIONS, SchemaError, currentVersion, load, runMigrations, store } from './schema';
@@ -31,6 +31,8 @@ describe('the versions', () => {
   it('are one more than the migrations of each kind, so a new version needs its migration', () => {
     expect(currentVersion('scheme')).toBe(MIGRATIONS.scheme.length + 1);
     expect(currentVersion('game')).toBe(MIGRATIONS.game.length + 1);
+    expect(currentVersion('settings')).toBe(MIGRATIONS.settings.length + 1);
+    expect(currentVersion('applied')).toBe(MIGRATIONS.applied.length + 1);
   });
 });
 
@@ -45,6 +47,28 @@ describe('store and load', () => {
 
   it('give back the same game', () => {
     expect(load('game', store('game', game))).toEqual(game);
+  });
+
+  it('give back the same settings', () => {
+    const settings: AppSettings = { activeGameId: 'skiff', activeScheme: { skiff: 'mine' } };
+    const stored = store('settings', settings);
+    expect(stored.schemaVersion).toBe(currentVersion('settings'));
+    expect(load('settings', JSON.parse(JSON.stringify(stored)))).toEqual(settings);
+  });
+
+  it('give back the same applied plan', () => {
+    const plan = resolve(gameKeysPreset(game), game, BUILT_IN_DEVICES);
+    const stored = store('applied', plan);
+    expect(stored.schemaVersion).toBe(currentVersion('applied'));
+    expect(load('applied', JSON.parse(JSON.stringify(stored)))).toEqual(plan);
+  });
+
+  it('refuse a settings file or plan saved by a newer helmArray', () => {
+    const newer = { schemaVersion: currentVersion('settings') + 1 };
+    expect(() => load('settings', newer)).toThrow('newer helmArray');
+    expect(() => load('applied', { schemaVersion: currentVersion('applied') + 1 })).toThrow(
+      'newer helmArray',
+    );
   });
 
   it('share nothing with what they were given', () => {

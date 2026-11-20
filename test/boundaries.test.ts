@@ -117,6 +117,14 @@ describe('package boundaries', () => {
       },
     );
 
+    it('shared code may take types from core, and nothing else of it', async () => {
+      const shared = 'packages/app/src/shared/x.ts';
+      const typeOnly = "import type { Scheme } from '@helmarray/core';\nexport type S = Scheme;\n";
+      const value = "import { resolve } from '@helmarray/core';\nexport { resolve };\n";
+      expect(await problems(shared, typeOnly)).toEqual([]);
+      expect(await problems(shared, value)).toContain(restricted);
+    });
+
     it('shared code is pure', async () => {
       expect(
         await problems(
