@@ -34,6 +34,7 @@ import { mainWindowOptions, playWindowOptions } from './windows';
 // A test run (HELM_E2E=1, see e2e-seam.ts) keeps its files in a temp folder and uses fakes for
 // everything outside the app. Read before anything else; a half-set switch stops the app.
 const e2e = e2eConfig(process.env, {
+  platform: process.platform,
   realpath: (path) => realpathSync.native(path),
   home: homedir(),
   // Where Electron would keep the app's data, read before anything moves it.

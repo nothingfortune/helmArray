@@ -94,7 +94,7 @@ function confinedSteam(steamDir: string): SteamReaders {
   const within = async (path: string): Promise<string | undefined> => {
     try {
       const [real, home] = await Promise.all([realpath(path), realpath(steamDir)]);
-      return isInside(real, home) ? real : undefined;
+      return isInside(real, home, process.platform) ? real : undefined;
     } catch {
       return undefined;
     }

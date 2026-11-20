@@ -11,6 +11,9 @@ import { E2E_UNIT_IDS } from './e2e-seam';
 import type { Backends } from './e2e-seam';
 import { findUnits, openUnit } from './hid-transport';
 
+// A junction on Windows (it needs no privilege), a symlink everywhere else.
+const linkKind = process.platform === 'win32' ? 'junction' : 'dir';
+
 let root: string;
 let backends: Backends;
 let control: E2eControl;
@@ -161,7 +164,7 @@ describe('the fake Steam', () => {
     await mkdir(join(root, 'steam'), { recursive: true });
     await mkdir(join(root, 'elsewhere'));
     await writeFile(join(root, 'elsewhere', 'secret.txt'), 'not steam');
-    await symlink(join(root, 'elsewhere'), join(root, 'steam', 'link'), 'junction');
+    await symlink(join(root, 'elsewhere'), join(root, 'steam', 'link'), linkKind);
     expect(
       await backends.steam.readFile(join(root, 'steam', 'link', 'secret.txt')),
     ).toBeUndefined();
@@ -170,7 +173,7 @@ describe('the fake Steam', () => {
   it('lists nothing through a link inside it that leads out', async () => {
     await mkdir(join(root, 'steam'), { recursive: true });
     await mkdir(join(root, 'elsewhere'));
-    await symlink(join(root, 'elsewhere'), join(root, 'steam', 'link'), 'junction');
+    await symlink(join(root, 'elsewhere'), join(root, 'steam', 'link'), linkKind);
     expect(await backends.steam.listDir(join(root, 'steam', 'link'))).toBeUndefined();
   });
 
