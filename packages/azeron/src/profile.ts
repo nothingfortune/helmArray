@@ -12,6 +12,8 @@ import type {
   Press,
   ScrollDirection,
   Signal,
+  StickDirection as CoreStickDirection,
+  StickDirections,
   UnitProfile,
 } from '@helmarray/core';
 import type {
@@ -257,8 +259,43 @@ function stickRecord(profile: UnitProfile, device: AzeronDevice): StickRecord {
     pinTwo: position.pinTwo,
     mode,
     tuning,
-    directions: {},
+    directions:
+      mode === 'keys' ? directionKeys(s.directions ?? {}, tuning.isRightAnalog, where) : {},
   };
+}
+
+/** core's four directions; `azeron` may import only core's types, so they're listed here. */
+const CORE_STICK_DIRECTIONS: readonly CoreStickDirection[] = ['up', 'down', 'left', 'right'];
+
+/**
+ * A key-mode stick's direction keys, in the block the unit reads: `isRightAnalog` set reads the
+ * right block, clear the left (legacy CLAUDE.md, export format rules: writing the other block
+ * compiles and does nothing on the hardware). Each direction is [key, modifier, modifier].
+ */
+function directionKeys(
+  directions: StickDirections,
+  rightBlock: boolean,
+  where: string,
+): StickRecord['directions'] {
+  const block = rightBlock ? 'right' : 'left';
+  const out: StickRecord['directions'] = {};
+  for (const direction of CORE_STICK_DIRECTIONS) {
+    const signal = directions[direction];
+    if (signal === undefined) continue;
+    if (signal.kind !== 'key') {
+      throw new ProtocolError(
+        `${where} ${direction}: a stick direction sends a key, nothing else.`,
+      );
+    }
+    const mods = (signal.mods ?? []).map((m) => MOD_CODES[m]);
+    if (mods.length > 2) {
+      throw new ProtocolError(
+        `${where} ${direction}: a stick direction holds two modifiers at most.`,
+      );
+    }
+    out[`${block}.${direction}`] = [UNIT_KEY_CODES[signal.code], ...mods];
+  }
+  return out;
 }
 
 /**
