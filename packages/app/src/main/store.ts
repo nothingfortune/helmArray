@@ -261,8 +261,29 @@ export class DataStore {
     return found;
   }
 
+  /**
+   * Reads the file `<folder>/<id>.json` of a kind that carries its own id (a scheme, a game):
+   * the document, or null when there is none, it can't be used, or it names another id than
+   * its file does (reported, so nothing is ever saved under the wrong name). Every read of such
+   * a file goes through here.
+   */
+  private async readFiled<K extends 'scheme' | 'game'>(
+    kind: K,
+    folder: string,
+    id: string,
+  ): Promise<StoredKinds[K] | null> {
+    const file = `${folder}/${id}.json`;
+    const found = await this.read(kind, file);
+    if (found.status !== 'ok') return null;
+    if (found.value.id !== id) {
+      this.report(file, `This ${THING[kind]} is filed under a different name than its own.`);
+      return null;
+    }
+    return found.value;
+  }
+
   /** Reads every `.json` in a folder of the data folder. Files that can't be used are reported. */
-  private async readAll<K extends StoredKind>(
+  private async readAll<K extends 'scheme' | 'game'>(
     kind: K,
     folder: string,
   ): Promise<{ id: string; value: StoredKinds[K] }[]> {
@@ -277,16 +298,9 @@ export class DataStore {
     const found: { id: string; value: StoredKinds[K] }[] = [];
     for (const name of names.filter((n) => n.endsWith('.json')).sort()) {
       const id = name.slice(0, -'.json'.length);
-      const file = `${folder}/${name}`;
       if (!isSafeId(id)) continue;
-      const read = await this.read(kind, file);
-      if (read.status !== 'ok') continue;
-      const own = (read.value as { id?: string }).id;
-      if (own !== id) {
-        this.report(file, `This ${THING[kind]} is filed under a different name than its own.`);
-        continue;
-      }
-      found.push({ id, value: read.value });
+      const value = await this.readFiled(kind, folder, id);
+      if (value !== null) found.push({ id, value });
     }
     return found;
   }
@@ -365,8 +379,7 @@ export class DataStore {
     if (!isSafeId(id)) return null;
     const waiting = this.unsaved.get(id);
     if (waiting) return structuredClone(waiting);
-    const found = await this.read('scheme', `schemes/${id}.json`);
-    return found.status === 'ok' ? found.value : null;
+    return this.readFiled('scheme', 'schemes', id);
   }
 
   /** The schemes of one game, each by name. Edits not yet written are included. */
