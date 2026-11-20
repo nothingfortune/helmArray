@@ -371,3 +371,38 @@ describe('the keyboard and Azerons sending keys share the keyboard set', () => {
     expect(plan.findings.filter((f) => f.rule === 'key-collision')).toEqual([]);
   });
 });
+
+describe('two actions resolved onto one live signal are a collision, from a stick or a button', () => {
+  it('flags an action put on a button sending a direction the stick sends for another', () => {
+    // Left middle 2 sends the left stick's up, which the game ships Move forward on; Reload is put
+    // there. Both end up on LS_UP: pressing forward reloads.
+    const plan = run({
+      ...xboxControllerPreset(helldivers2),
+      padMap: { ...xboxControllerPreset(helldivers2).padMap, 'L.middle_2': 'LS_UP' },
+      map: {
+        default: {
+          ...xboxControllerPreset(helldivers2).map['default'],
+          'L.middle_2': { tap: 'reload' },
+          'L.middle_1': {},
+        },
+      },
+    });
+    expect(
+      plan.findings
+        .filter((f) => f.rule === 'key-collision')
+        .map((f) => [f.control, f.severity, f.message]),
+    ).toEqual([
+      [
+        'L.middle_2',
+        'error',
+        'In Default, Move forward and Reload are both on Xbox LS_UP: the game does them at once.',
+      ],
+    ]);
+  });
+
+  it('leaves the game’s own second uses of one control alone: Interact and Climb on A', () => {
+    expect(
+      run(xboxControllerPreset(helldivers2)).findings.filter((f) => f.rule === 'key-collision'),
+    ).toEqual([]);
+  });
+});

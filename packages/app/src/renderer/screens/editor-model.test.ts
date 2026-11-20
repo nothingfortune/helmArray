@@ -580,6 +580,28 @@ describe('controller output: the pad rule', () => {
     ]).toEqual(['hardpoints', undefined, [pad('RB')]]);
   });
 
+  it('rule 2: another action replacing a stick’s action on a button gets a control of its own, not the stick’s', () => {
+    // The button sends the left stick's up for Move forward; then Reload takes its place.
+    const preset = deepFreeze(xboxControllerPreset(helldivers2));
+    const forward = assign(preset, slot('default', 'L.middle_2'), 'move_forward', helldivers2);
+    const next = assign(forward, slot('default', 'L.middle_2'), 'reload', helldivers2);
+    const p = plan(next, helldivers2);
+    expect([
+      next.padMap['L.middle_2'],
+      p.gameBindings
+        .filter((b) => b.signal?.kind === 'pad' && b.signal.control === 'LS_UP')
+        .map((b) => b.action),
+      p.findings,
+    ]).toEqual(['Y', ['move_forward'], []]);
+  });
+
+  it('rule 3: clearing a stick’s action off a button gives the stick’s direction back', () => {
+    const preset = deepFreeze(xboxControllerPreset(helldivers2));
+    const forward = assign(preset, slot('default', 'L.middle_2'), 'move_forward', helldivers2);
+    const next = clear(forward, slot('default', 'L.middle_2'));
+    expect('L.middle_2' in next.padMap).toBe(false);
+  });
+
   it('rule 2: an action a stick sends for makes the button send the same stick direction, as with keys', () => {
     // Helldivers 2's left stick sends Move forward (up). Left middle 2 sends Y with nothing on it.
     const preset = deepFreeze(xboxControllerPreset(helldivers2));
@@ -778,9 +800,9 @@ describe('controller output: what every control shows is what the game does', ()
   // (bar the game's own second uses of one button, such as Climb on a held A next to Interact).
   const g = helldivers2;
   // A stick sends the moves: an action a stick sends for is the stick's, not a button's.
-  const actions = g.actions
-    .filter((a) => a.native?.pad === undefined || !/^LS_/.test(a.native.pad))
-    .map((a) => a.id);
+  // The moves too: a stick sends for them, and a button they are dropped on sends the stick's
+  // direction until another action takes their place.
+  const actions = g.actions.map((a) => a.id);
   const buttons = [
     ...CYBORG2_LEFT.positions.filter((p) => p.name !== 'stick').map((p) => `L.${p.name}`),
     ...CYBORG2_RIGHT.positions.filter((p) => p.name !== 'stick').map((p) => `R.${p.name}`),
@@ -806,26 +828,50 @@ describe('controller output: what every control shows is what the game does', ()
   function faults(scheme: Scheme): string[] {
     const p = plan(scheme, g);
     const out: string[] = [];
+    // The editor itself never puts two actions on one Xbox control, nor one action on two.
     const bad = p.findings.filter(
       (f) => f.rule === 'key-collision' || f.rule === 'pad-bound-twice',
     );
     if (bad.length > 0) out.push(`findings: ${bad.map((f) => f.rule).join(', ')}`);
+    // What is wrong is never silent: an error names a control sending the Xbox control.
+    const flagged = (pc: string) =>
+      p.findings.some(
+        (f) =>
+          f.severity === 'error' &&
+          f.control !== undefined &&
+          (padSignalOf(scheme, f.control) === pc ||
+            p.bindings.some(
+              (b) => b.control === f.control && b.signal.kind === 'pad' && b.signal.control === pc,
+            )),
+      );
+    const nativeOf = (action: string) => g.actions.find((a) => a.id === action)?.native?.pad;
+    // No live Xbox control binds two actions, bar the game's own second uses of one control.
+    for (const pc of new Set(
+      p.gameBindings.flatMap((b) => (b.signal?.kind === 'pad' ? [b.signal.control] : [])),
+    )) {
+      const on = p.gameBindings
+        .filter((b) => b.signal?.kind === 'pad' && b.signal.control === pc)
+        .map((b) => b.action);
+      const moved = on.filter((a) => nativeOf(a) !== pc);
+      if ((moved.length > 1 || (moved.length === 1 && on.length > 1)) && !flagged(pc)) {
+        out.push(`${pc}: binds ${on.join(', ')}, and nothing says so`);
+      }
+    }
     const controls = [...buttons, ...pads].filter((c) => padSignalOf(scheme, c) !== undefined);
     for (const pc of new Set(controls.map((c) => padSignalOf(scheme, c)))) {
       const senders = controls.filter((c) => padSignalOf(scheme, c) === pc);
       const shown = new Set(senders.map((c) => shownAction(scheme, 'default', c)?.id ?? null));
       if (shown.size > 1) out.push(`${pc}: shown differently on ${senders.join(', ')}`);
       const one = [...shown][0] ?? null;
-      const shownNative =
-        one === null ? undefined : g.actions.find((a) => a.id === one)?.native?.pad;
+      const shownNative = one === null ? undefined : nativeOf(one);
       const bound = p.gameBindings
         .filter(
           (b) => b.set === 'controller' && b.signal?.kind === 'pad' && b.signal.control === pc,
         )
         .map((b) => b.action)
-        .filter((a) => a === one || g.actions.find((x) => x.id === a)?.native?.pad !== shownNative);
+        .filter((a) => a === one || nativeOf(a) !== shownNative);
       const want = one === null ? [] : [one];
-      if (JSON.stringify(bound) !== JSON.stringify(want)) {
+      if (JSON.stringify(bound) !== JSON.stringify(want) && !flagged(String(pc))) {
         out.push(`${pc}: shows ${String(one)}, the game does ${bound.join(', ') || 'nothing'}`);
       }
     }

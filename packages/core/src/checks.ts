@@ -14,7 +14,7 @@ import type {
   StickDirection,
 } from './model';
 import { PRESSES, STICK_DIRECTIONS } from './model';
-import type { Finding, PinPlan, Plan, UnitProfile } from './plan';
+import type { Finding, GameBinding, PinPlan, Plan, UnitProfile } from './plan';
 import { signalId } from './signal';
 import type { Setup } from './setup';
 import { inSetup, setsUsed, setupOf, stickSends } from './setup';
@@ -179,6 +179,8 @@ function stickKeys(plan: Unchecked) {
 /** Two actions live at once on the same signal: the game does both. Modes are never live together. */
 function keyCollision(ctx: Context): Finding[] {
   const out: Finding[] = [];
+  /** Signals already reported in a mode, by `mode|signal id`: one finding is enough. */
+  const said = new Set<string>();
   for (const mode of ctx.game.modes) {
     const bySignal = new Map<string, { control: ControlId; action: ActionId; signal: Signal }[]>();
     const add = (control: ControlId, action: ActionId, signal: Signal) => {
@@ -196,6 +198,7 @@ function keyCollision(ctx: Context): Finding[] {
         const mine = group.find((g) => g.control === control);
         if (!mine || actions.length < 2 || reported.has(control)) continue;
         reported.add(control);
+        said.add(`${mode.id}|${signalId(mine.signal)}`);
         const names = actions.map((a) => actionName(ctx.game, a));
         const listed = `${names.slice(0, -1).join(', ')} and ${names.at(-1) ?? ''}`;
         out.push({
@@ -230,12 +233,51 @@ function keyCollision(ctx: Context): Finding[] {
         (b) => signalId(b.signal) === signalId(signal) && !reached.has(b.action),
       );
       if (!clash) continue;
+      said.add(`${mode.id}|${signalId(signal)}`);
       out.push({
         rule: 'key-collision',
         severity: 'error',
         control,
         mode: mode.id,
         message: `In ${modeName(ctx.game, mode.id)}, the ${control.startsWith('L.') ? 'left' : 'right'} stick's ${direction} and ${actionName(ctx.game, clash.action)} are both on ${signalName(signal)}: the game does them at once.`,
+      });
+    }
+  }
+  // Whatever put them there (a stick, a button, the controller's button, a key kept where the game
+  // ships it), two actions the game ends up binding to one signal in one mode are done at once.
+  // The game's own second use of a control (it ships both there: Climb on a held A beside Interact)
+  // is not one. Named on the control of the setup that put an action there.
+  for (const mode of ctx.game.modes) {
+    const bySignal = new Map<string, GameBinding[]>();
+    for (const b of ctx.plan.gameBindings) {
+      if (b.mode !== mode.id || b.signal === null) continue;
+      const id = `${b.set}|${signalId(b.signal)}`;
+      bySignal.set(id, [...(bySignal.get(id) ?? []), b]);
+    }
+    for (const rows of bySignal.values()) {
+      const first = rows[0];
+      if (first === undefined || first.signal === null) continue;
+      const signal = first.signal;
+      const id = signalId(signal);
+      const actions = [...new Set(rows.map((r) => r.action))];
+      const moved = rows.filter((r) => r.native === null || signalId(r.native) !== id);
+      if (actions.length < 2 || moved.length === 0 || said.has(`${mode.id}|${id}`)) continue;
+      const by = ctx.plan.bindings.find(
+        (b) =>
+          b.mode === mode.id &&
+          signalId(b.signal) === id &&
+          moved.some((r) => r.action === b.action),
+      );
+      if (by === undefined) continue;
+      said.add(`${mode.id}|${id}`);
+      const names = actions.map((a) => actionName(ctx.game, a));
+      const listed = `${names.slice(0, -1).join(', ')} and ${names.at(-1) ?? ''}`;
+      out.push({
+        rule: 'key-collision',
+        severity: 'error',
+        control: by.control,
+        mode: mode.id,
+        message: `In ${modeName(ctx.game, mode.id)}, ${listed} are ${names.length === 2 ? 'both' : 'all'} on ${signalName(signal)}: the game does them at once.`,
       });
     }
   }

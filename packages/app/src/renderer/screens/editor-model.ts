@@ -170,6 +170,33 @@ function stickPads(scheme: Scheme): Set<PadControl> {
   return out;
 }
 
+/** A copy of the pad map without these buttons. */
+const without = (padMap: Scheme['padMap'], controls: readonly ControlId[]): Scheme['padMap'] =>
+  Object.fromEntries(
+    Object.entries(padMap).filter(([c]) => !controls.includes(c)),
+  ) as Scheme['padMap'];
+
+/**
+ * THE PAD RULE, the stick's directions: an Azeron button sends a direction a stick of the setup
+ * sends only while it carries, in some mode, an action the game ships on that direction. A button
+ * whose stick action left it, moved or displaced, stops sending: it would do the stick's action
+ * while shown empty, or bind another action onto the stick.
+ */
+function dropStrayStickPads(scheme: Scheme, game: Game): Scheme {
+  if (scheme.output !== 'pad') return scheme;
+  const sticks = stickPads(scheme);
+  const stray = Object.entries(scheme.padMap)
+    .filter(([control, pad]) => {
+      if (!sticks.has(pad) || padSignalOf(scheme, control) === undefined) return false;
+      return !Object.values(scheme.map).some((byControl) => {
+        const id = own(byControl, control)?.tap;
+        return id !== undefined && game.actions.some((a) => a.id === id && a.native?.pad === pad);
+      });
+    })
+    .map(([control]) => control);
+  return stray.length === 0 ? scheme : { ...scheme, padMap: without(scheme.padMap, stray) };
+}
+
 /** Whether a pad control is free for a button: nothing sending it carries an action anywhere. */
 function padFree(scheme: Scheme, pad: PadControl, sticks: ReadonlySet<PadControl>): boolean {
   if (sticks.has(pad)) return false;
@@ -197,11 +224,18 @@ function givePad(scheme: Scheme, control: ControlId, action: ActionId, game: Gam
     if (own(scheme.padMap, control) === ownPad) return scheme;
     return { ...scheme, padMap: withOwn(scheme.padMap, control, ownPad) };
   }
-  if (padSignalOf(scheme, control) !== undefined) return scheme;
+  const current = padSignalOf(scheme, control);
+  // A stick's direction is the button's only for the stick's own action: any other action gets a
+  // control of its own, chosen afresh, or it would be on the stick too.
+  if (current !== undefined && !sticks.has(current)) return scheme;
   const pick = [...(ownPad === undefined ? [] : [ownPad]), ...PAD_CONTROLS].find((pad) =>
     padFree(scheme, pad, sticks),
   );
-  if (pick === undefined) return scheme;
+  if (pick === undefined) {
+    return current === undefined
+      ? scheme
+      : { ...scheme, padMap: without(scheme.padMap, [control]) };
+  }
   // An empty Azeron button sending it gives it up: one button per Xbox control.
   const padMap = Object.fromEntries(
     Object.entries(scheme.padMap).filter(([, sends]) => sends !== pick),
@@ -251,7 +285,7 @@ export function assign(scheme: Scheme, slot: Slot, action: ActionId, game: Game)
     byControl = withOwn(byControl, slot.control, { ...here, [slot.press]: action });
     changed = true;
   }
-  return changed ? withMode(given, slot.mode, byControl) : scheme;
+  return changed ? dropStrayStickPads(withMode(given, slot.mode, byControl), game) : scheme;
 }
 
 /** Whether a control carries an action in any mode. */
