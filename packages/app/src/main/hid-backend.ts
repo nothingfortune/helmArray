@@ -3,6 +3,7 @@
 // feature-report and GET_REPORT methods are left out on purpose.
 
 import type * as NodeHidModule from 'node-hid';
+import { refuseRealHid } from './e2e-seam';
 import type { HidBackend } from './hid-transport';
 
 type NodeHid = typeof NodeHidModule;
@@ -10,8 +11,11 @@ type NodeHid = typeof NodeHidModule;
 /** Loads node-hid on first use, so building the backend touches nothing. */
 export function nodeHidBackend(): HidBackend {
   let loading: Promise<NodeHid> | undefined;
-  const load = (): Promise<NodeHid> =>
-    (loading ??= import('node-hid').then((m) => (m as { default?: NodeHid }).default ?? m));
+  const load = (): Promise<NodeHid> => {
+    // A test run (HELM_E2E) must never reach a real device, whatever else went wrong.
+    refuseRealHid(process.env);
+    return (loading ??= import('node-hid').then((m) => (m as { default?: NodeHid }).default ?? m));
+  };
   return {
     async enumerate(vendorId, productId) {
       return (await load()).devicesAsync(vendorId, productId);

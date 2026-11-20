@@ -11,6 +11,7 @@ import { createCoordinator } from './coordinator';
 import type { Coordinator } from './coordinator';
 import { Devices } from './devices';
 import { createDevicesGate } from './devices-gate';
+import { E2E_CONTROL_GLOBAL, chooseBackends, e2eConfig } from './e2e-seam';
 import { createExchangeLog, diskLogFiles } from './exchange-log';
 import { jsonFileStorage, openHandStore } from './hands';
 import type { HandStore } from './hands';
@@ -27,6 +28,15 @@ import { trayIconBitmap } from './tray-icon';
 import { startupWindows } from './startup';
 import { trayMenu } from './tray';
 import { mainWindowOptions, playWindowOptions } from './windows';
+
+// A test run (HELM_E2E=1, see e2e-seam.ts) keeps its files in a temp folder and uses fakes for
+// everything outside the app. Read before anything else; a half-set switch stops the app.
+const e2e = e2eConfig(process.env);
+if (e2e) {
+  app.setPath('userData', e2e.dataDir);
+  app.setPath('sessionData', join(e2e.dataDir, 'session'));
+  app.setPath('logs', join(e2e.dataDir, 'logs'));
+}
 
 // Must be said before the app is ready: the windows' pages may then load `helm-cover://` images.
 protocol.registerSchemesAsPrivileged([
@@ -57,7 +67,8 @@ function openMainWindow(): void {
     return;
   }
   mainWindow = new BrowserWindow(mainWindowOptions(preloadPath()));
-  mainWindow.once('ready-to-show', () => mainWindow?.show());
+  // A test run doesn't take the keyboard focus from whoever is at the machine.
+  mainWindow.once('ready-to-show', () => (e2e ? mainWindow?.showInactive() : mainWindow?.show()));
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
@@ -125,8 +136,17 @@ async function startServices(): Promise<() => Promise<void>> {
   });
 
   // Steam's games and covers. The protocol serves only the files the Steam read returned.
+  // Everything outside the app: real ones, or under a test run the fakes and never the real.
+  const outside = await chooseBackends(e2e, {
+    real: () => ({ hid: nodeHidBackend(), listProcesses, steam: steamReaders }),
+    fake: async (config) => (await import('./e2e-fakes')).fakeBackends(config),
+  });
+  if (outside.control !== undefined) {
+    (globalThis as Record<string, unknown>)[E2E_CONTROL_GLOBAL] = outside.control;
+  }
+
   const library = createLibraryService({
-    readSteam: () => readSteamLibrary(steamReaders),
+    readSteam: () => readSteamLibrary(outside.steam),
     games: () => data.listGames(),
     listSchemes: (gameId) => data.listSchemes(gameId),
     activeSchemeOf: (gameId) => data.activeSchemeOf(gameId),
@@ -141,9 +161,9 @@ async function startServices(): Promise<() => Promise<void>> {
       : new Response(null, { status: 404 });
   });
 
-  const hid = nodeHidBackend();
+  const hid = outside.hid;
   // A fresh listing every time, never the watcher's last answer; a listing that fails throws.
-  const azeronOpen = async () => azeronAppRunning(await listProcesses());
+  const azeronOpen = async () => azeronAppRunning(await outside.listProcesses());
   const devices = new Devices({
     azeronAppRunning: azeronOpen,
     findUnits: () => findUnits(hid),
@@ -220,7 +240,7 @@ async function startServices(): Promise<() => Promise<void>> {
   // programs starts the service, and each change after that stops or starts it.
   const watcher = watchProcesses(
     {
-      listProcesses,
+      listProcesses: outside.listProcesses,
       onChange: (state) => helm.azeronChanged(state),
       onError: (error) =>
         log.write('(app)', `couldn't list the running programs: ${String(error)}`),

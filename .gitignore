@@ -5,3 +5,5 @@ coverage/
 *.log
 .eslintcache
 .claude/worktrees/
+test-results/
+playwright-report/
