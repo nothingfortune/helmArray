@@ -430,3 +430,13 @@ describe("controller output: the editor's own findings and the panel", () => {
     expect(panel?.sendsNote).toBe('Still sends RT');
   });
 });
+
+describe('words for a signal that names an Object property', () => {
+  it('writes a key code of constructor as itself', () => {
+    expect(signalText({ kind: 'key', code: 'constructor' as never })).toBe('constructor');
+  });
+
+  it('writes a pad control of toString as itself', () => {
+    expect(signalText({ kind: 'pad', control: 'toString' as never })).toBe('Xbox toString');
+  });
+});

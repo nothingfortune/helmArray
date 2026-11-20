@@ -17,7 +17,7 @@ import type {
   Signal,
   StickDirection,
 } from '@helmarray/core';
-import { PRESSES, STICK_DIRECTIONS, signalId } from '@helmarray/core';
+import { PRESSES, STICK_DIRECTIONS, own, signalId } from '@helmarray/core';
 import type { StickLabels, UnitKey } from '../unit/Unit';
 import { handPrefix, positionName, positionOf } from '../unit/layout';
 import { fixFor, isAcceptable, isStick } from './editor-model';
@@ -53,7 +53,7 @@ const KEY_WORDS: Readonly<Record<string, string>> = {
 const MOD_WORDS = { ctrl: 'Ctrl', shift: 'Shift', alt: 'Alt' } as const;
 
 function keyWord(code: string): string {
-  const known = KEY_WORDS[code];
+  const known = own(KEY_WORDS, code);
   if (known !== undefined) return known;
   const numpad = /^Num(\d)$/.exec(code);
   return numpad?.[1] !== undefined ? `Num ${numpad[1]}` : code;
@@ -76,7 +76,7 @@ const PAD_WORDS: Readonly<Record<string, string>> = {
   DPAD_RIGHT: 'D-pad right',
 };
 
-export const padWord = (control: PadControl): string => PAD_WORDS[control] ?? control;
+export const padWord = (control: PadControl): string => own(PAD_WORDS, control) ?? control;
 
 /** What a signal is called in the mono caption: `Num +`, `Left Shift+F13`, `Xbox RB`. */
 export function signalText(signal: Signal): string {

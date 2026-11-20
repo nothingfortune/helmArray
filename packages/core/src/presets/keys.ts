@@ -7,8 +7,8 @@ import type { Game, Scheme } from '../model';
  * button sends the action's own key (or a free key and a bind sheet row when it can't).
  */
 export function gameKeysPreset(game: Game): Scheme {
-  const map: Scheme['map'] = {};
-  for (const mode of game.modes) map[mode.id] = {};
+  // fromEntries, not map[mode.id] = {}: a mode named `__proto__` must be an entry, not a prototype.
+  const map: Scheme['map'] = Object.fromEntries(game.modes.map((mode) => [mode.id, {}]));
   return {
     id: `${game.id}-own-keys`,
     gameId: game.id,

@@ -16,7 +16,14 @@ import type {
   Press,
   Scheme,
 } from '@helmarray/core';
-import { BUILT_IN_DEVICES, CHECK_RULES, DEFAULT_TURBO_INTERVAL, PRESSES } from '@helmarray/core';
+import {
+  BUILT_IN_DEVICES,
+  CHECK_RULES,
+  DEFAULT_TURBO_INTERVAL,
+  PRESSES,
+  own,
+  withOwn,
+} from '@helmarray/core';
 
 /** One press of one control, in one mode: the place an action sits. */
 export interface Slot {
@@ -40,22 +47,27 @@ function omit<R extends object>(record: R, key: keyof R): R {
   return Object.fromEntries(Object.entries(record).filter(([k]) => k !== key)) as R;
 }
 
-/** A copy of one mode's map that can be changed freely. */
+/**
+ * A copy of one mode's map that can be changed freely. Built with fromEntries, and changed with
+ * `withOwn`, never `out[control] = ...`: a control the scheme file names `__proto__` or
+ * `constructor` is an ordinary entry, not a prototype to replace or Object to write onto.
+ */
 function copyMode(scheme: Scheme, mode: ModeId): ByControl {
-  const out: ByControl = {};
-  for (const [control, presses] of Object.entries(scheme.map[mode] ?? {})) {
-    out[control] = { ...presses };
-  }
-  return out;
+  return Object.fromEntries(
+    Object.entries(own(scheme.map, mode) ?? {}).map(([control, presses]) => [
+      control,
+      { ...presses },
+    ]),
+  );
 }
 
 /** Drops controls left with no press, so an emptied button leaves no trace. */
 function prune(byControl: ByControl): ByControl {
-  const out: ByControl = {};
-  for (const [control, presses] of Object.entries(byControl)) {
-    if (PRESSES.some((p) => presses[p] !== undefined)) out[control] = presses;
-  }
-  return out;
+  return Object.fromEntries(
+    Object.entries(byControl).filter(([, presses]) =>
+      PRESSES.some((p) => presses[p] !== undefined),
+    ),
+  );
 }
 
 const withMode = (scheme: Scheme, mode: ModeId, byControl: ByControl): Scheme => ({
@@ -65,7 +77,7 @@ const withMode = (scheme: Scheme, mode: ModeId, byControl: ByControl): Scheme =>
 
 /** The action on a slot, if any. */
 export const actionAt = (scheme: Scheme, slot: Slot): ActionId | undefined =>
-  scheme.map[slot.mode]?.[slot.control]?.[slot.press];
+  own(own(scheme.map, slot.mode) ?? {}, slot.control)?.[slot.press];
 
 /*
  * CONTROLLER OUTPUT (`scheme.output === 'pad'`): THE PAD RULE.
@@ -111,20 +123,20 @@ function followPad(scheme: Scheme, slot: Slot, action: ActionId, game: Game): Sc
  */
 export function assign(scheme: Scheme, slot: Slot, action: ActionId, game: Game): Scheme {
   if (isStick(slot.control)) return scheme;
-  const byControl = copyMode(scheme, slot.mode);
+  let byControl = copyMode(scheme, slot.mode);
   let changed = false;
   for (const control of Object.keys(byControl)) {
     for (const press of PRESSES) {
-      const presses = byControl[control] ?? {};
+      const presses = own(byControl, control) ?? {};
       if (presses[press] === action && !(control === slot.control && press === slot.press)) {
-        byControl[control] = omit(presses, press);
+        byControl = withOwn(byControl, control, omit(presses, press));
         changed = true;
       }
     }
   }
-  const here = (byControl[slot.control] ??= {});
+  const here = own(byControl, slot.control) ?? {};
   if (here[slot.press] !== action) {
-    here[slot.press] = action;
+    byControl = withOwn(byControl, slot.control, { ...here, [slot.press]: action });
     changed = true;
   }
   return followPad(changed ? withMode(scheme, slot.mode, byControl) : scheme, slot, action, game);
@@ -134,8 +146,11 @@ export function assign(scheme: Scheme, slot: Slot, action: ActionId, game: Game)
 export function clear(scheme: Scheme, slot: Slot): Scheme {
   if (actionAt(scheme, slot) === undefined) return scheme;
   const byControl = copyMode(scheme, slot.mode);
-  byControl[slot.control] = omit(byControl[slot.control] ?? {}, slot.press);
-  return withMode(scheme, slot.mode, byControl);
+  return withMode(
+    scheme,
+    slot.mode,
+    withOwn(byControl, slot.control, omit(own(byControl, slot.control) ?? {}, slot.press)),
+  );
 }
 
 /** Moves the action on one slot to another in the same mode; what was on the target is dropped. */

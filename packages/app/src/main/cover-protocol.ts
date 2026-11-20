@@ -23,12 +23,14 @@ export function parseCoverRequest(url: string): CoverTarget | null {
   return { appId: match[1] as string, kind: match[2] as CoverKind };
 }
 
-const MIME: Record<string, string> = {
-  jpg: 'image/jpeg',
-  jpeg: 'image/jpeg',
-  png: 'image/png',
-  webp: 'image/webp',
-};
+const MIME: ReadonlyMap<string, string> = new Map(
+  Object.entries({
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    png: 'image/png',
+    webp: 'image/webp',
+  }),
+);
 
 /** The file to serve and its type, or null when the request isn't for a file the list holds. */
 export function resolveCover(
@@ -41,7 +43,7 @@ export function resolveCover(
   if (path === undefined) return null;
   // The list's own paths are checked too: Steam's index names the file, so it is not trusted.
   if (path.split(/[\\/]/).includes('..')) return null;
-  const mime = MIME[(/\.([a-z0-9]+)$/i.exec(path)?.[1] ?? '').toLowerCase()];
+  const mime = MIME.get((/\.([a-z0-9]+)$/i.exec(path)?.[1] ?? '').toLowerCase());
   return mime === undefined ? null : { path, mime };
 }
 
