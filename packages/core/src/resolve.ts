@@ -9,7 +9,7 @@ import type {
   Signal,
   StickBehaviour,
 } from './model';
-import { PRESSES } from './model';
+import { PRESSES, STICK_DIRECTIONS } from './model';
 import type { BindSheetRow, Binding, Finding, Ledger, PinPlan, Plan, UnitProfile } from './plan';
 import { clone } from './clone';
 import { KEY_POOL, formatCanName } from './pool';
@@ -72,6 +72,43 @@ function dealPad(scheme: Scheme, controls: readonly string[]): Dealt {
   return { signals, ledger: clone(scheme.ledger), bindSheet: [], findings: [] };
 }
 
+/*
+ * STICK DIRECTION KEYS: the rules, in one place. Every reader of them (dealKeys here, and
+ * keyCollision and missingRequired in checks.ts) follows these.
+ *
+ * 1. Only a stick in keys mode sends its directions, in every game mode. A stick in any other
+ *    mode sends nothing: its directions are not reserved, not collided, not counted, and not in
+ *    the plan.
+ * 2. A direction's key never comes from the pool: it is taken before any button is dealt one.
+ * 3. A direction reaches the actions the game ships on its key (an action's native key). A button
+ *    carrying such an action may send that same key: two ways to do one thing, with no finding
+ *    and no bind sheet row. This holds with the game's file written too, for a key it can name.
+ * 4. Different actions on one key is a key-collision error on the stick, in each mode where the
+ *    other action is on a button or a fixed control. The same key on a button in another mode
+ *    is judged in that mode.
+ * 5. A bind sheet row, or a rewritten game file, never moves an action off a key a stick sends
+ *    for it: it would break the stick. The resolver says so (`stick-key-rebind`) instead.
+ * 6. missing-required counts an action a stick direction reaches.
+ * 7. The ledger holds button keys only. A stick's keys are never written into it.
+ */
+
+/** Every key a key-mode stick sends, by signal id, with the hand that sends it. */
+function stickKeySignals(scheme: Scheme): Map<string, 'left' | 'right'> {
+  const out = new Map<string, 'left' | 'right'>();
+  for (const [prefix, hand] of [
+    ['L', 'left'],
+    ['R', 'right'],
+  ] as const) {
+    const stick = scheme.behaviour[`${prefix}.stick`]?.stick;
+    if (stick?.mode !== 'keys') continue;
+    for (const direction of STICK_DIRECTIONS) {
+      const signal = stick.directions?.[direction];
+      if (signal && !out.has(signalId(signal))) out.set(signalId(signal), hand);
+    }
+  }
+  return out;
+}
+
 /**
  * Key output. In device order, each control-press that carries an action gets one signal for
  * every mode: its ledger entry if it has one; otherwise, with the game's file written, the next
@@ -95,10 +132,14 @@ function dealKeys(scheme: Scheme, game: Game, controls: readonly string[]): Deal
     }
   }
 
+  // Rule 2: a key a stick direction sends is not the pool's to give.
+  const stickKeys = stickKeySignals(scheme);
+
   const fromPool = (): Signal | undefined => {
     const code = KEY_POOL.find(
       (key) =>
         !taken.has(signalId({ kind: 'key', code: key })) &&
+        !stickKeys.has(signalId({ kind: 'key', code: key })) &&
         (format === undefined || formatCanName(format, key)),
     );
     return code === undefined ? undefined : { kind: 'key', code };
@@ -119,12 +160,18 @@ function dealKeys(scheme: Scheme, game: Game, controls: readonly string[]): Deal
           message: `This button sends ${signal.code}, which the game's file has no name for. Move its action to another button.`,
         });
       }
-      if (!signal && format === undefined) {
-        // The game's own key, from the first mode that has a usable one.
+      if (!signal) {
+        // The game's own key, from the first mode that has a usable one. With the game's file
+        // written only a key a stick already sends for the action counts (rule 3).
         signal = carriedHere
           .map((c) => actions.get(c.action)?.native?.key)
           .find(
-            (s): s is Signal => s !== undefined && canSend(s, press) && !taken.has(signalId(s)),
+            (s): s is Signal =>
+              s !== undefined &&
+              canSend(s, press) &&
+              !taken.has(signalId(s)) &&
+              (format === undefined ||
+                (stickKeys.has(signalId(s)) && s.kind === 'key' && formatCanName(format, s.code))),
           );
       }
       signal ??= fromPool();
@@ -143,12 +190,19 @@ function dealKeys(scheme: Scheme, game: Game, controls: readonly string[]): Deal
       taken.add(signalId(signal));
       (ledger[control] ??= {})[press] = signal;
       signals.set(slot(control, press), signal);
-      if (format === undefined) {
-        for (const c of carriedHere) {
-          const native = actions.get(c.action)?.native?.key;
-          if (!native || signalId(native) !== signalId(signal)) {
-            bindSheet.push({ mode: c.mode, action: c.action, signal });
-          }
+      for (const c of carriedHere) {
+        const native = actions.get(c.action)?.native?.key;
+        if (native && stickKeys.has(signalId(native)) && signalId(native) !== signalId(signal)) {
+          // Rule 5: this would move the action off the key the stick sends for it.
+          findings.push({
+            rule: 'stick-key-rebind',
+            severity: 'error',
+            control,
+            mode: c.mode,
+            message: `${actions.get(c.action)?.name ?? c.action} would move off ${native.kind === 'key' ? native.code : 'its own key'}, which the ${stickKeys.get(signalId(native))} stick sends for it. Keep it on its own key, on one button.`,
+          });
+        } else if (format === undefined && (!native || signalId(native) !== signalId(signal))) {
+          bindSheet.push({ mode: c.mode, action: c.action, signal });
         }
       }
     }
@@ -189,12 +243,15 @@ function unitProfile(
       return pin;
     });
   const stickBehaviour = scheme.behaviour[`${prefix}.stick`]?.stick ?? defaultStick(scheme, unit);
+  // Rule 1: directions belong to key mode only.
+  const { directions, ...rest } = stickBehaviour;
   return {
     deviceId: unit.id,
     hand: unit.hand,
     pins,
     stick: {
-      ...stickBehaviour,
+      ...rest,
+      ...(stickBehaviour.mode === 'keys' && directions ? { directions } : {}),
       angle: unit.stick.angle,
       invertX: stickBehaviour.invertX ?? unit.stick.invertX,
     },

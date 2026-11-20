@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BUILT_IN_DEVICES } from './devices/index';
-import type { Game, Scheme, Signal } from './model';
+import type { Game, Scheme, Signal, StickDirections } from './model';
 import type { Plan } from './plan';
 import { KEY_POOL, formatCanName } from './pool';
 import { copyScheme, gameKeysPreset } from './presets/keys';
@@ -69,8 +69,25 @@ const game: Game = {
   file: { format: 'elite-binds' },
 };
 
+// Key sticks with their directions given, so the stick checks stay quiet here.
+const wasd = {
+  up: { kind: 'key', code: 'W' },
+  down: { kind: 'key', code: 'S' },
+  left: { kind: 'key', code: 'A' },
+  right: { kind: 'key', code: 'D' },
+} satisfies StickDirections;
+const keyedSticks: Scheme['behaviour'] = {
+  'L.stick': { stick: { mode: 'keys', directions: wasd } },
+  'R.stick': { stick: { mode: 'keys', directions: wasd } },
+};
+
 function scheme(over: Partial<Scheme> = {}): Scheme {
-  return { ...gameKeysPreset(game), writeGameFile: true, ...over };
+  return {
+    ...gameKeysPreset(game),
+    writeGameFile: true,
+    ...over,
+    behaviour: { ...keyedSticks, ...over.behaviour },
+  };
 }
 
 const key = (code: string): Signal => ({ kind: 'key', code }) as Signal;
@@ -123,6 +140,93 @@ describe('keys, game file written', () => {
     await expect(`${JSON.stringify(plan, null, 2)}\n`).toMatchFileSnapshot(
       './__golden__/skiff-keys.plan.json',
     );
+  });
+});
+
+describe('stick directions', () => {
+  const stickUp = (code: string): Scheme['behaviour'] => ({
+    ...keyedSticks,
+    'L.stick': { stick: { mode: 'keys', directions: { ...wasd, up: key(code) } } },
+  });
+
+  it('keep their keys out of the pool: a button is never dealt a key a direction sends', () => {
+    const plan = resolve(
+      scheme({
+        behaviour: stickUp('Insert'),
+        map: { ship: { 'L.index_1': { tap: 'boost' }, 'L.index_2': { tap: 'map' } } },
+      }),
+      game,
+      BUILT_IN_DEVICES,
+    );
+    // Insert is the pool's first key, and the left stick's up direction already sends it.
+    expect(sent(plan, 'L.index_1')).toEqual({ tap: key('Home') });
+    expect(sent(plan, 'L.index_2')).toEqual({ tap: key('PageUp') });
+    expect(plan.findings.filter((f) => f.rule === 'key-collision')).toEqual([]);
+  });
+
+  it('keep the right stick keys out of the pool too, and only while the stick is in key mode', () => {
+    const rightUp = {
+      ...keyedSticks,
+      'R.stick': { stick: { mode: 'keys', directions: { ...wasd, up: key('Insert') } } },
+    } satisfies Scheme['behaviour'];
+    const map = { ship: { 'L.index_1': { tap: 'boost' } } };
+    const right = resolve(scheme({ behaviour: rightUp, map }), game, BUILT_IN_DEVICES);
+    expect(sent(right, 'L.index_1')).toEqual({ tap: key('Home') });
+    const mouse = {
+      ...rightUp,
+      'R.stick': { stick: { mode: 'mouse' } },
+    } satisfies Scheme['behaviour'];
+    const free = resolve(scheme({ behaviour: mouse, map }), game, BUILT_IN_DEVICES);
+    expect(sent(free, 'L.index_1')).toEqual({ tap: key('Insert') });
+  });
+
+  it('are reported when a key a button already holds is also a direction', () => {
+    const plan = resolve(
+      scheme({
+        behaviour: stickUp('Insert'),
+        ledger: { 'L.index_1': { tap: key('Insert') } },
+        map: { ship: { 'L.index_1': { tap: 'boost' } } },
+      }),
+      game,
+      BUILT_IN_DEVICES,
+    );
+    expect(plan.findings.filter((f) => f.rule === 'key-collision')).toEqual([
+      expect.objectContaining({
+        severity: 'error',
+        control: 'L.stick',
+        mode: 'ship',
+        message:
+          "In Ship, the left stick's up and Boost are both on Insert: the game does them at once.",
+      }),
+    ]);
+  });
+});
+
+describe('a stick direction and a button on the same action', () => {
+  // Boost is Tab in this game. The left stick's up sends Tab, and so can a button.
+  const tabUp = {
+    ...keyedSticks,
+    'L.stick': { stick: { mode: 'keys', directions: { ...wasd, up: key('Tab') } } },
+  } satisfies Scheme['behaviour'];
+  const collisions = (action: string) =>
+    resolve(
+      scheme({
+        behaviour: tabUp,
+        ledger: { 'L.index_1': { tap: key('Tab') } },
+        map: { ship: { 'L.index_1': { tap: action } } },
+      }),
+      game,
+      BUILT_IN_DEVICES,
+    ).findings.filter((f) => f.rule === 'key-collision');
+
+  it('is not a collision: two ways to send the one action', () => {
+    expect(collisions('boost')).toEqual([]);
+  });
+
+  it('is a collision when the button carries a different action', () => {
+    expect(collisions('map')).toEqual([
+      expect.objectContaining({ control: 'L.stick', mode: 'ship', severity: 'error' }),
+    ]);
   });
 });
 

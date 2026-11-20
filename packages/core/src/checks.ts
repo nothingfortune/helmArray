@@ -12,8 +12,9 @@ import type {
   Role,
   Scheme,
   Signal,
+  StickDirection,
 } from './model';
-import { PRESSES } from './model';
+import { PRESSES, STICK_DIRECTIONS } from './model';
 import type { Finding, PinPlan, Plan, UnitProfile } from './plan';
 import { signalId } from './signal';
 
@@ -27,6 +28,7 @@ export const CHECK_RULES = [
   'hold-on-movement',
   'mixed-input',
   'stick-not-keyboard',
+  'stick-no-directions',
 ] as const;
 export type CheckRule = (typeof CHECK_RULES)[number];
 
@@ -150,6 +152,19 @@ const sticks = (plan: Unchecked): [ControlId, UnitProfile['stick']][] => [
   ['R.stick', plan.units.right.stick],
 ];
 
+/** Every key a stick in key mode sends, with the stick and direction that sends it. */
+function stickKeys(plan: Unchecked) {
+  const out: { control: ControlId; direction: StickDirection; signal: Signal }[] = [];
+  for (const [control, stick] of sticks(plan)) {
+    if (stick.mode !== 'keys') continue;
+    for (const direction of STICK_DIRECTIONS) {
+      const signal = stick.directions?.[direction];
+      if (signal) out.push({ control, direction, signal });
+    }
+  }
+  return out;
+}
+
 /** Two actions live at once on the same signal: the game does both. Modes are never live together. */
 function keyCollision(ctx: Context): Finding[] {
   const out: Finding[] = [];
@@ -182,6 +197,42 @@ function keyCollision(ctx: Context): Finding[] {
           message: `In ${modeName(ctx.game, mode.id)}, ${listed} are ${names.length === 2 ? 'both' : 'all'} on ${signalName(mine.signal)}: the game does them at once.`,
         });
       }
+    }
+  }
+  // A stick direction is live in every mode (rules in resolve.ts: STICK DIRECTION KEYS). A button
+  // or fixed control sending its key does both at once, unless it is the same action: a second
+  // way to do one thing. The stick reaches the actions the game ships on its key.
+  for (const { control, direction, signal } of stickKeys(ctx.plan)) {
+    for (const mode of ctx.game.modes) {
+      const reached = new Set(
+        ctx.game.actions
+          .filter(
+            (a) =>
+              a.mode === mode.id &&
+              a.native?.key !== undefined &&
+              signalId(a.native.key) === signalId(signal),
+          )
+          .map((a) => a.id),
+      );
+      const live: { action: ActionId; signal: Signal }[] = ctx.plan.bindings.filter(
+        (b) => b.mode === mode.id,
+      );
+      for (const fixed of controlsIn(ctx, mode.id)) {
+        const sends = ctx.known.get(fixed)?.sends;
+        const action = ctx.scheme.map[mode.id]?.[fixed]?.tap;
+        if (sends && action !== undefined) live.push({ action, signal: sends });
+      }
+      const clash = live.find(
+        (b) => signalId(b.signal) === signalId(signal) && !reached.has(b.action),
+      );
+      if (!clash) continue;
+      out.push({
+        rule: 'key-collision',
+        severity: 'error',
+        control,
+        mode: mode.id,
+        message: `In ${modeName(ctx.game, mode.id)}, the ${control.startsWith('L.') ? 'left' : 'right'} stick's ${direction} and ${actionName(ctx.game, clash.action)} are both on ${signalName(signal)}: the game does them at once.`,
+      });
     }
   }
   return out;
@@ -242,11 +293,14 @@ function missingRequired(ctx: Context): Finding[] {
       if (stick.mode === 'pad-right') RIGHT_STICK.forEach((c) => padSent.add(c));
     }
   }
+  // A key stick reaches an action when a direction sends the key the game ships it on.
+  const stickSent = new Set(stickKeys(ctx.plan).map((k) => signalId(k.signal)));
   const out: Finding[] = [];
   for (const mode of ctx.game.modes) {
     for (const action of ctx.game.actions) {
       if (action.mode !== mode.id || !action.required) continue;
       if (onButton.has(`${mode.id}|${action.id}`)) continue;
+      if (action.native?.key !== undefined && stickSent.has(signalId(action.native.key))) continue;
       if (action.native?.pad !== undefined && padSent.has(action.native.pad)) continue;
       out.push({
         rule: 'missing-required',
@@ -352,6 +406,22 @@ function stickNotKeyboard(ctx: Context): Finding[] {
     }));
 }
 
+/** A stick in key mode with no direction keys: it is set to send keys and sends none. */
+function stickNoDirections(ctx: Context): Finding[] {
+  return sticks(ctx.plan)
+    .filter(
+      ([, stick]) =>
+        stick.mode === 'keys' &&
+        !STICK_DIRECTIONS.some((direction) => stick.directions?.[direction] !== undefined),
+    )
+    .map(([control]) => ({
+      rule: 'stick-no-directions',
+      severity: 'error' as const,
+      control,
+      message: `The ${control.startsWith('L.') ? 'left' : 'right'} stick sends nothing: give its directions keys or set it to a controller stick.`,
+    }));
+}
+
 const CHECKS: Record<CheckRule, (ctx: Context) => Finding[]> = {
   'key-collision': keyCollision,
   'sends-nothing': sendsNothing,
@@ -361,6 +431,7 @@ const CHECKS: Record<CheckRule, (ctx: Context) => Finding[]> = {
   'hold-on-movement': holdOnMovement,
   'mixed-input': mixedInput,
   'stick-not-keyboard': stickNotKeyboard,
+  'stick-no-directions': stickNoDirections,
 };
 
 /**

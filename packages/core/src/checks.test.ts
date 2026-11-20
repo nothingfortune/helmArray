@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CHECK_RULES } from './checks';
 import { BUILT_IN_DEVICES } from './devices/index';
-import type { Game, Scheme, Signal } from './model';
+import type { Game, Scheme, Signal, StickDirections } from './model';
 import type { Plan } from './plan';
 import { KEY_POOL, formatCanName } from './pool';
 import { gameKeysPreset } from './presets/keys';
@@ -69,12 +69,25 @@ const game: Game = {
   file: { format: 'elite-binds' },
 };
 
+const WASD = {
+  up: { kind: 'key', code: 'W' },
+  down: { kind: 'key', code: 'S' },
+  left: { kind: 'key', code: 'A' },
+  right: { kind: 'key', code: 'D' },
+} satisfies StickDirections;
+/** Both sticks in key mode with their directions given, so no stick is found. */
+const keyedSticks: Scheme['behaviour'] = {
+  'L.stick': { stick: { mode: 'keys', directions: WASD } },
+  'R.stick': { stick: { mode: 'keys', directions: WASD } },
+};
+
 /** A key scheme with every required action placed, so only what a test adds is found. */
 function keys(over: Partial<Scheme> = {}, map: Scheme['map'] = {}): Scheme {
   return {
     ...gameKeysPreset(game),
     writeGameFile: true,
     ...over,
+    behaviour: { ...keyedSticks, ...over.behaviour },
     map: {
       fight: { 'L.index_1': { tap: 'fire' }, 'L.index_2': { tap: 'boost' }, ...map['fight'] },
       drive: { 'L.middle_1': { tap: 'throttle' }, ...map['drive'] },
@@ -337,6 +350,49 @@ describe('stick-not-keyboard: the stick not sending keys, for a game that needs 
   it('passes with both sticks sending keys, and for a game that never asked', () => {
     expect(found(run(keys(), picky), 'stick-not-keyboard')).toEqual([]);
     expect(found(run(xboxControllerPreset(game)), 'stick-not-keyboard')).toEqual([]);
+  });
+});
+
+describe('stick-no-directions: a key-mode stick with no direction keys sends nothing', () => {
+  const keyStick = (directions?: StickDirections): Scheme['behaviour'] => ({
+    'L.stick': { stick: { mode: 'keys', ...(directions ? { directions } : {}) } },
+  });
+
+  it('is an error on a stick set to keys with no directions at all', () => {
+    const plan = run(keys({ behaviour: keyStick() }));
+    expect(found(plan, 'stick-no-directions')).toEqual([
+      expect.objectContaining({
+        severity: 'error',
+        control: 'L.stick',
+        message:
+          'The left stick sends nothing: give its directions keys or set it to a controller stick.',
+      }),
+    ]);
+  });
+
+  it('is an error when the directions are an empty set', () => {
+    const plan = run(keys({ behaviour: keyStick({}) }));
+    expect(found(plan, 'stick-no-directions').map((f) => f.control)).toEqual(['L.stick']);
+  });
+
+  it('is an error on a unit left on its default, which is keys with none given', () => {
+    const plan = run({ ...keys(), behaviour: {} });
+    expect(found(plan, 'stick-no-directions').map((f) => f.control)).toEqual([
+      'L.stick',
+      'R.stick',
+    ]);
+  });
+
+  it('passes when at least one direction has a key', () => {
+    const plan = run(keys({ behaviour: keyStick({ up: key('W') }) }));
+    expect(found(plan, 'stick-no-directions')).toEqual([]);
+  });
+
+  it('passes with all four directions, and for a stick that is not in key mode', () => {
+    expect(found(run(keys()), 'stick-no-directions')).toEqual([]);
+    expect(found(run(xboxControllerPreset(game)), 'stick-no-directions')).toEqual([]);
+    const mouse = keys({ behaviour: { 'R.stick': { stick: { mode: 'mouse' } } } });
+    expect(found(run(mouse), 'stick-no-directions').map((f) => f.control)).toEqual([]);
   });
 });
 

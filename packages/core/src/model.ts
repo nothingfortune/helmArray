@@ -156,6 +156,11 @@ export const PRESSES: readonly Press[] = ['tap', 'long', 'double'];
 
 export type StickMode = 'keys' | 'pad-left' | 'pad-right' | 'mouse';
 
+export const STICK_DIRECTIONS = ['up', 'down', 'left', 'right'] as const;
+export type StickDirection = (typeof STICK_DIRECTIONS)[number];
+/** What a key-mode stick sends in each direction. A direction left out sends nothing. */
+export type StickDirections = Partial<Record<StickDirection, Signal>>;
+
 export interface StickBehaviour {
   mode: StickMode;
   /** 0–100, percent of travel. */
@@ -166,6 +171,8 @@ export interface StickBehaviour {
   sensitivity?: number;
   invertX?: boolean;
   invertY?: boolean;
+  /** Keys mode only: the key each direction sends. */
+  directions?: StickDirections;
 }
 
 /**
