@@ -183,6 +183,7 @@ async function startServices(): Promise<() => Promise<void>> {
     hands,
     azeronAppRunning: azeronOpen,
     saveApplied: (schemeId, plan) => data.saveApplied(schemeId, plan),
+    saveScheme: (scheme) => data.saveScheme(scheme),
     setActive: (gameId, schemeId) => data.setActive(gameId, schemeId),
     settled: () => helm.plansChanged(),
     trace: (line) => log.write('(apply)', line),

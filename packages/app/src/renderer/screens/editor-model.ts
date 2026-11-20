@@ -320,6 +320,28 @@ export function commit<T>(history: History<T>, next: T): History<T> {
   };
 }
 
+/**
+ * Gives every scheme in the history (the past and future too) the ledger it was given: the keys
+ * Apply dealt and saved. The editor never changes a ledger, and a key once given never moves, so
+ * an undo must not hand back the older, shorter one. The same history comes back when every
+ * scheme already has it, so nothing re-renders and nothing is saved.
+ */
+export function adoptLedger(history: History<Scheme>, ledger: Scheme['ledger']): History<Scheme> {
+  const wanted = JSON.stringify(ledger);
+  const adopt = (scheme: Scheme): Scheme =>
+    JSON.stringify(scheme.ledger) === wanted
+      ? scheme
+      : { ...scheme, ledger: structuredClone(ledger) };
+  const past = history.past.map(adopt);
+  const present = adopt(history.present);
+  const future = history.future.map(adopt);
+  const same =
+    present === history.present &&
+    past.every((s, i) => s === history.past[i]) &&
+    future.every((s, i) => s === history.future[i]);
+  return same ? history : { past, present, future };
+}
+
 export const canUndo = (history: History<unknown>): boolean => history.past.length > 0;
 export const canRedo = (history: History<unknown>): boolean => history.future.length > 0;
 

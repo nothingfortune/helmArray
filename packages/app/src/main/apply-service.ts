@@ -11,12 +11,15 @@
 //   - While it runs the devices service is held (`Devices.exclusive`): it neither polls nor opens
 //     nor reads a unit, so nothing else talks to a unit mid-write; afterwards it reads both units
 //     again, so what the pill compares is what they hold now, whatever came of the apply.
-//   - Only a successful apply is remembered (`saveApplied`) and makes the scheme the active one.
+//   - Only a successful apply is remembered (`saveApplied`), makes the scheme the active one, and
+//     writes the keys the plan dealt (`plan.ledger`) into the scheme, so a later edit never gives a
+//     button another key: a key once given never moves. The scheme is written only if it still
+//     resolves to the plan that was previewed, so what is saved is what was applied.
 //
 // Nothing here throws at a caller: every refusal and failure comes back as a sentence.
 // Pure: the store, the units and the running programs are handed in.
 
-import type { Hand, Plan } from '@helmarray/core';
+import type { Hand, Plan, Scheme } from '@helmarray/core';
 import type {
   ApplyPreview,
   ApplyResult,
@@ -32,7 +35,7 @@ import type { UnitOps } from './gated-session';
 import type { HandStore } from './hands';
 import { handsFor } from './hands';
 import type { PlanSource } from './scheme-plan';
-import { planFingerprint } from './plan-fingerprint';
+import { canonical, planFingerprint } from './plan-fingerprint';
 import { planFor } from './scheme-plan';
 
 /** A look at the units no older than this is used as it is when the drawer opens. */
@@ -59,6 +62,8 @@ export interface ApplyServiceDeps {
   azeronAppRunning(): Promise<boolean>;
   /** Remembers the plan just applied for the scheme. Called only after a successful apply. */
   saveApplied(schemeId: string, plan: Plan): Promise<void>;
+  /** Saves the scheme as it is now (through the store, like an edit). */
+  saveScheme(scheme: Scheme): void | Promise<void>;
   /** Makes the scheme the game's active one, and the game the active one. */
   setActive(gameId: string, schemeId: string): Promise<void>;
   /** An apply ended, however it ended: the state is to be worked out again. */
@@ -237,19 +242,53 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
 
   const refused = (message: string): ApplyResult => ({ ok: false, message, units: [] });
 
-  /** Remembers the plan and makes the scheme active, after units that now hold it. */
-  const remember = async (schemeId: string, gameId: string, plan: Plan): Promise<string | null> => {
+  /**
+   * The keys the plan dealt go into the scheme, so they are never dealt again. Only when the
+   * scheme, as it is now, still resolves to the layout that was previewed and applied: an edit
+   * that got in meanwhile is not written over. The plan resolved from the scheme afterwards is
+   * the plan applied, so nothing then reads as a change not applied.
+   */
+  const keepLedger = async (schemeId: string, fingerprint: string, plan: Plan) => {
+    const now = await planFor(schemeId, deps.plans);
+    if (!now.ok || planFingerprint(now.plan) !== fingerprint) {
+      return "Both units now run the layout, but the scheme was edited meanwhile, so the keys it was given weren't kept: apply again.";
+    }
+    if (canonical(now.scheme.ledger) === canonical(plan.ledger)) return null;
+    await deps.saveScheme({ ...now.scheme, ledger: structuredClone(plan.ledger) });
+    return null;
+  };
+
+  /**
+   * After units that now hold the plan: remembers it, makes the scheme active, and keeps its keys
+   * in the scheme. The keys are kept whatever became of the others (they were dealt on the units
+   * either way); the first problem is said.
+   */
+  const remember = async (
+    schemeId: string,
+    gameId: string,
+    plan: Plan,
+    fingerprint: string,
+  ): Promise<string | null> => {
+    let problem: string | null = null;
     try {
       await deps.saveApplied(schemeId, plan);
     } catch (error) {
-      return `Both units now run the layout, but helmArray couldn't keep a note of it (${messageOf(error)}), so it can't say they are in sync.`;
+      problem = `Both units now run the layout, but helmArray couldn't keep a note of it (${messageOf(error)}), so it can't say they are in sync.`;
     }
     try {
-      await deps.setActive(gameId, schemeId);
+      // Not made the active scheme when no note of it could be kept.
+      if (problem === null) await deps.setActive(gameId, schemeId);
     } catch (error) {
-      return `Both units now run the layout, but it couldn't be made the current scheme (${messageOf(error)}).`;
+      problem ??= `Both units now run the layout, but it couldn't be made the current scheme (${messageOf(error)}).`;
     }
-    return null;
+    try {
+      const kept = await keepLedger(schemeId, fingerprint, plan);
+      if (kept !== null) trace(`ledger: ${kept}`);
+      problem ??= kept;
+    } catch (error) {
+      problem ??= `Both units now run the layout, but the keys it was given couldn't be kept in the scheme (${messageOf(error)}), so a later edit may give a button another key.`;
+    }
+    return problem;
   };
 
   const apply = async (schemeId: string, fingerprint: string): Promise<ApplyResult> => {
@@ -292,7 +331,7 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
           // Whatever came of it, what the units hold now is read, before the hold is let go.
           await tools.refresh();
         }
-        const problem = result.ok ? await remember(schemeId, game.id, plan) : null;
+        const problem = result.ok ? await remember(schemeId, game.id, plan, fingerprint) : null;
         return { result, problem };
       });
 

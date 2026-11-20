@@ -8,6 +8,7 @@ import type { ApplyServiceDeps } from './apply-service';
 import type { ClosableTransport } from './devices';
 import { Devices, POLL_MS } from './devices';
 import { verifyUnits } from './apply-units';
+import { pendingChanges } from './sync-state';
 import { heldUnits } from './app-state';
 import { handsFor } from './hands';
 
@@ -70,6 +71,7 @@ async function rig(
     azeron?: () => Promise<boolean>;
     saveApplied?: ApplyServiceDeps['saveApplied'];
     setActive?: ApplyServiceDeps['setActive'];
+    saveScheme?: ApplyServiceDeps['saveScheme'];
   } = {},
 ) {
   const units = new Map<string, FakeUnit>([
@@ -118,10 +120,17 @@ async function rig(
   const saveApplied = vi.fn(over.saveApplied ?? (() => Promise.resolve()));
   const setActive = vi.fn(over.setActive ?? (() => Promise.resolve()));
   const settled = vi.fn();
-  const useScheme = over.scheme ?? scheme;
+  // The store, as far as Apply sees it: the scheme as saved, which a save replaces.
+  const store = { scheme: over.scheme ?? scheme };
+  const saveScheme = vi.fn(
+    over.saveScheme ??
+      ((next: Scheme) => {
+        store.scheme = next;
+      }),
+  );
   const service = createApplyService({
     plans: {
-      getScheme: (id) => Promise.resolve(id === useScheme.id ? useScheme : null),
+      getScheme: (id) => Promise.resolve(id === store.scheme.id ? store.scheme : null),
       getGame: (id) => Promise.resolve(id === game.id ? game : undefined),
     },
     devices,
@@ -129,6 +138,7 @@ async function rig(
     azeronAppRunning: (): Promise<boolean> => look.fn(),
     saveApplied,
     setActive,
+    saveScheme,
     settled,
   });
   const reports = () => [...units.values()].reduce((n, u) => n + u.received.length, 0);
@@ -139,6 +149,8 @@ async function rig(
     bench,
     saveApplied,
     setActive,
+    saveScheme,
+    store,
     settled,
     reports,
     left: units.get('left-path') as FakeUnit,
@@ -366,6 +378,122 @@ describe('Apply as the windows ask for it', () => {
     });
   });
 
+  describe('keeping the keys that were dealt', () => {
+    const planOf = (s: Scheme) => resolve(s, game, BUILT_IN_DEVICES);
+    const keyOf = (p: Plan, control: string) => {
+      const pin = [...p.units.left.pins, ...p.units.right.pins].find((x) => x.control === control);
+      return JSON.stringify(pin?.presses);
+    };
+
+    it('writes the plan ledger into the scheme, and nothing else of it, after a good apply', async () => {
+      r = await rig();
+      expect(plan.ledger).not.toEqual({});
+      expect(scheme.ledger).toEqual({});
+      const result = await r.service.apply(scheme.id, fp(scheme));
+      expect(result.ok).toBe(true);
+      expect(r.saveScheme).toHaveBeenCalledTimes(1);
+      expect(r.saveScheme).toHaveBeenCalledWith({ ...scheme, ledger: plan.ledger });
+      expect(r.store.scheme.ledger).toEqual(plan.ledger);
+    });
+
+    it('leaves nothing to apply: the scheme with its ledger resolves to the plan that was applied', async () => {
+      r = await rig();
+      const before = (await r.service.preview(scheme.id)).fingerprint;
+      await r.service.apply(scheme.id, fp(scheme));
+      const after = planOf(r.store.scheme);
+      expect(planFingerprint(after)).toBe(planFingerprint(plan));
+      expect(after).toEqual(plan);
+      // So the pill has no change to report, and the next preview is of the same layout.
+      expect(pendingChanges(plan, after)).toBe(0);
+      expect((await r.service.preview(scheme.id)).fingerprint).toBe(before);
+    });
+
+    it('gives a button the key it has, whatever is added on an earlier button afterwards', async () => {
+      const two: Scheme = {
+        ...scheme,
+        map: { ship: { 'L.index_1': { tap: 'boost' }, 'R.index_1': { tap: 'fire' } } },
+      };
+      const added: Scheme['map'] = {
+        ship: { ...two.map['ship'], 'L.middle_1': { tap: 'map' } },
+      };
+      const withMap: Game = {
+        ...game,
+        actions: [
+          ...game.actions,
+          { id: 'map', name: 'Map', mode: 'ship', role: 'menu', required: false },
+        ],
+      };
+      const resolveWith = (s: Scheme) => resolve(s, withMap, BUILT_IN_DEVICES);
+      r = await rig({ scheme: two });
+      const applied = planOf(two);
+      await r.service.apply(two.id, fp(two));
+
+      // Without the ledger in the scheme, an earlier button takes the first key and the others move.
+      const moved = resolveWith({ ...two, map: added });
+      expect(keyOf(moved, 'L.index_1')).not.toBe(keyOf(applied, 'L.index_1'));
+      // With it, the two that were dealt keys keep them, and the new button gets a new one.
+      const kept = resolveWith({ ...r.store.scheme, map: added });
+      expect(keyOf(kept, 'L.index_1')).toBe(keyOf(applied, 'L.index_1'));
+      expect(keyOf(kept, 'R.index_1')).toBe(keyOf(applied, 'R.index_1'));
+      expect(keyOf(kept, 'L.middle_1')).not.toBe(keyOf(applied, 'L.index_1'));
+      expect(keyOf(kept, 'L.middle_1')).not.toBe(keyOf(applied, 'R.index_1'));
+    });
+
+    it('does not touch the scheme when the apply failed, in part or whole, or was refused', async () => {
+      let looks = 0;
+      r = await rig({ azeron: () => Promise.resolve(++looks === 2) });
+      expect((await r.service.apply(scheme.id, fp(scheme))).ok).toBe(false);
+      expect((await r.service.apply(scheme.id, 'another layout')).ok).toBe(false);
+      expect(r.saveScheme).not.toHaveBeenCalled();
+      expect(r.store.scheme.ledger).toEqual({});
+    });
+
+    it('writes nothing when the units already held the layout and the scheme already has its keys', async () => {
+      r = await rig();
+      await r.service.apply(scheme.id, fp(scheme));
+      await r.service.apply(scheme.id, fp(scheme));
+      expect(r.saveScheme).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not write over an edit that landed while it was writing, and says so', async () => {
+      const held: { rig?: Awaited<ReturnType<typeof rig>> } = {};
+      const edited: Scheme = {
+        ...scheme,
+        map: { ship: { ...scheme.map['ship'], 'R.index_1': { tap: 'boost' } } },
+      };
+      r = await rig({
+        saveApplied: () => {
+          if (held.rig) held.rig.store.scheme = edited;
+          return Promise.resolve();
+        },
+      });
+      held.rig = r;
+      const result = await r.service.apply(scheme.id, fp(scheme));
+      expect(result.ok).toBe(false);
+      expect(result.message).toMatch(/the scheme was edited meanwhile/);
+      expect(r.saveScheme).not.toHaveBeenCalled();
+      expect(r.store.scheme).toBe(edited);
+    });
+
+    it('says so when the scheme could not be saved, the units being set', async () => {
+      r = await rig({ saveScheme: () => Promise.reject(new Error('disk full')) });
+      const result = await r.service.apply(scheme.id, fp(scheme));
+      expect(result.ok).toBe(false);
+      expect(result.message).toMatch(
+        /keys it was given couldn't be kept in the scheme \(disk full\)/,
+      );
+      expect(result.units.map((u) => u.status)).toEqual(['applied', 'applied']);
+      expect(r.saveApplied).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the keys even when the note of the apply could not be saved', async () => {
+      r = await rig({ saveApplied: () => Promise.reject(new Error('disk full')) });
+      const result = await r.service.apply(scheme.id, fp(scheme));
+      expect(result.ok).toBe(false);
+      expect(r.saveScheme).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('writing exactly what was previewed', () => {
     it('gives a fingerprint with the preview, the same for the same layout and another for another', async () => {
       r = await rig();
@@ -408,6 +536,7 @@ describe('Apply as the windows ask for it', () => {
         azeronAppRunning: () => Promise.resolve(false),
         saveApplied: r.saveApplied,
         setActive: r.setActive,
+        saveScheme: r.saveScheme,
       });
       const seen = await live.preview(scheme.id);
       current = {

@@ -5,6 +5,7 @@ import {
   HISTORY_LIMIT,
   KEPT_REASON,
   acceptFinding,
+  adoptLedger,
   actionAt,
   assign,
   canRedo,
@@ -429,6 +430,33 @@ describe('historyShortcut', () => {
     expect(press('a', { ctrlKey: true })).toBeNull();
     expect(press('z', { ctrlKey: true, altKey: true })).toBeNull();
     expect(press('y', { ctrlKey: true, shiftKey: true })).toBeNull();
+  });
+});
+
+describe('adoptLedger', () => {
+  const given = { 'L.index_1': { tap: { kind: 'key', code: 'Home' } } } as Scheme['ledger'];
+  const with_ = (s: Scheme, ledger: Scheme['ledger']): Scheme => ({ ...s, ledger });
+
+  it('gives the present, the past and the future the keys that were dealt, and changes no edit', () => {
+    const a = with_(padScheme(), {});
+    const b = { ...a, name: 'B' };
+    const c = { ...a, name: 'C' };
+    const next = adoptLedger({ past: [a], present: b, future: [c] }, given);
+    expect(next.past[0]).toEqual({ ...a, ledger: given });
+    expect(next.present).toEqual({ ...b, ledger: given });
+    expect(next.future[0]).toEqual({ ...c, ledger: given });
+    // Undo does not hand the older, keyless scheme back.
+    expect(undo(next).present.ledger).toEqual(given);
+  });
+
+  it('is the same history when every scheme already has them: nothing to render, nothing to save', () => {
+    const h = startHistory(with_(padScheme(), given));
+    expect(adoptLedger(h, structuredClone(given))).toBe(h);
+  });
+
+  it('does not share the ledger it is given', () => {
+    const next = adoptLedger(startHistory(with_(padScheme(), {})), given);
+    expect(next.present.ledger).not.toBe(given);
   });
 });
 

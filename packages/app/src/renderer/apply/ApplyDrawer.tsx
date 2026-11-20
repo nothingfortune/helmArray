@@ -10,6 +10,8 @@ export interface ApplyDrawerProps {
   schemeId: string;
   open: boolean;
   onClose(): void;
+  /** An apply ran, and may have written keys into the scheme: whoever shows it takes them. */
+  onApplied?(): void;
   /** The app state: when a unit or the Azeron app changes, what is ready is looked at again. */
   state: AppState | null;
 }
@@ -27,7 +29,7 @@ function Mark({ ok }: { ok: boolean }) {
  * unit, then Cancel and Apply. Opened by the Editor's Apply button; closed by Cancel, Escape or
  * the scrim, but never while it writes.
  */
-export function ApplyDrawer({ schemeId, open, onClose, state }: ApplyDrawerProps) {
+export function ApplyDrawer({ schemeId, open, onClose, onApplied, state }: ApplyDrawerProps) {
   const [drawer, dispatch] = useReducer(reduce, START);
   // The newest look wins: an answer that comes back after a newer ask is dropped.
   const asked = useRef(0);
@@ -75,6 +77,7 @@ export function ApplyDrawer({ schemeId, open, onClose, state }: ApplyDrawerProps
     window.helm.apply(schemeId, drawer.preview.fingerprint).then(
       (result) => {
         dispatch({ type: 'applied', result });
+        if (result.units.length > 0) onApplied?.();
         if (result.changed === true) look();
       },
       (error: unknown) =>
