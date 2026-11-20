@@ -326,6 +326,14 @@ export class DataStore {
    * helmArray wrote or one the disk won't read; keeps a corrupt one aside first.
    */
   private put<K extends StoredKind>(kind: K, file: string, doc: StoredKinds[K]): Promise<void> {
+    // The document is turned into its text now, before the wait for its turn, so what is written
+    // is what was handed in, whatever the caller does to it afterwards.
+    let text: string;
+    try {
+      text = `${JSON.stringify(store(kind, doc), null, 2)}\n`;
+    } catch (error) {
+      return Promise.reject(new StoreError(`${file} can't be saved: ${messageOf(error)}`));
+    }
     return this.enqueue(async () => {
       const path = join(this.root, file);
       const there = await readStored(kind, path);
@@ -346,7 +354,7 @@ export class DataStore {
         this.open.delete(file);
       }
       try {
-        await writeAtomic(path, `${JSON.stringify(store(kind, doc), null, 2)}\n`);
+        await writeAtomic(path, text);
       } catch (error) {
         this.report(file, `The file couldn't be written (${messageOf(error)}).`);
         throw new StoreError(`${file} couldn't be written: ${messageOf(error)}`);

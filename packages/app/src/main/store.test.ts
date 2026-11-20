@@ -145,6 +145,81 @@ describe('ids that are also names on every object', () => {
   });
 });
 
+describe('what is handed in is what is written', () => {
+  it('keeps a plan as it was when applied, whatever the caller does with it after', async () => {
+    const { data } = await openStore();
+    const scheme = await data.createSchemeFromPreset('skiff', 'xbox');
+    const plan = resolve(scheme, SKIFF, BUILT_IN_DEVICES);
+    const asApplied = structuredClone(plan);
+    const saved = data.saveApplied(scheme.id, plan);
+    plan.findings.push({ rule: 'later', severity: 'error', message: 'changed after' });
+    plan.units.left.hand = 'right';
+    plan.bindings.length = 0;
+    await saved;
+    expect(await data.getApplied(scheme.id)).toEqual(asApplied);
+    const file = await readJson('applied', `${scheme.id}.json`);
+    expect(JSON.stringify(file)).not.toContain('changed after');
+  });
+
+  it('keeps a plan as it was when a write is already ahead of it in the queue', async () => {
+    const { data } = await openStore();
+    const scheme = await data.createSchemeFromPreset('skiff', 'xbox');
+    const plan = resolve(scheme, SKIFF, BUILT_IN_DEVICES);
+    const asApplied = structuredClone(plan);
+    const first = data.setActive('skiff', scheme.id);
+    const saved = data.saveApplied(scheme.id, plan);
+    plan.findings.push({ rule: 'later', severity: 'error', message: 'changed after' });
+    await Promise.all([first, saved]);
+    expect(await data.getApplied(scheme.id)).toEqual(asApplied);
+  });
+
+  it('keeps a scheme as it was when saved, whatever the caller does with it after', async () => {
+    const { data } = await openStore();
+    const scheme = await data.createSchemeFromPreset('skiff', 'xbox');
+    const mine: Scheme = { ...scheme, name: 'As saved' };
+    data.saveScheme(mine);
+    mine.name = 'Changed after';
+    mine.padMap['L.index_1'] = 'X';
+    mine.accepted.push({ rule: 'late', reason: 'changed after' });
+    await data.flush();
+    const onDisk = await readJson('schemes', `${scheme.id}.json`);
+    expect(onDisk['name']).toBe('As saved');
+    expect(JSON.stringify(onDisk)).not.toContain('changed after');
+    expect((await data.getScheme(scheme.id))?.padMap['L.index_1']).toBe('RB');
+  });
+
+  it('keeps what it gave back separate from what it holds', async () => {
+    const { data } = await openStore();
+    const scheme = await data.createSchemeFromPreset('skiff', 'xbox');
+    scheme.name = 'Changed by the caller';
+    scheme.padMap['L.index_1'] = 'X';
+    await data.flush();
+    expect((await readJson('schemes', `${scheme.id}.json`))['name']).toBe('Xbox controller');
+
+    const waiting = { ...scheme, name: 'Waiting' };
+    data.saveScheme(waiting);
+    (await data.getScheme(scheme.id))?.accepted.push({ rule: 'x', reason: 'y' });
+    (await data.listSchemes('skiff'))[0]?.accepted.push({ rule: 'x', reason: 'y' });
+    expect((await data.getScheme(scheme.id))?.accepted).toEqual([]);
+
+    await data.setActive('skiff', scheme.id);
+    const active = data.active();
+    active.gameId = 'changed';
+    expect(data.active().gameId).toBe('skiff');
+  });
+
+  it('refuses at once, writing nothing, a plan that can’t be turned into a file', async () => {
+    const { data } = await openStore();
+    const plan = resolve(xboxControllerPreset(SKIFF), SKIFF, BUILT_IN_DEVICES);
+    const cyclic = { ...plan } as Record<string, unknown>;
+    cyclic['self'] = cyclic;
+    await expect(data.saveApplied('x', cyclic as unknown as typeof plan)).rejects.toThrow(
+      StoreError,
+    );
+    expect(await exists('applied')).toBe(false);
+  });
+});
+
 describe('flush', () => {
   it('waits for a change of the active game that is still being worked out', async () => {
     const { data } = await openStore();
