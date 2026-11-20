@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node", "vite/client"],
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "allowImportingTsExtensions": true,
+    "allowJs": true
+  },
+  "include": [
+    "packages/*/src/**/*.ts",
+    "packages/*/src/**/*.tsx",
+    "test/**/*.ts",
+    "scripts/**/*.ts"
+  ],
+  "exclude": ["**/node_modules", "packages/app/src/main/index.ts", "packages/app/src/preload"]
+}

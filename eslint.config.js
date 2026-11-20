@@ -113,6 +113,7 @@ export default tseslint.config(
       '**/out/**',
       '**/dist/**',
       'coverage/**',
+      '.stryker-tmp/**',
       '**/playwright-report/**',
       '**/test-results/**',
       'reference/**',

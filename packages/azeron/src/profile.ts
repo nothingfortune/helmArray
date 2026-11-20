@@ -185,6 +185,7 @@ function buttonRecord(pin: PinPlan, id: number): ButtonRecord {
   const long = pressBlock(pin, 'long', where);
   const double = pressBlock(pin, 'double', where);
   if (long.type === 'wheel' || double.type === 'wheel') {
+    // Stryker disable next-line StringLiteral: unreachable message; pressBlock hands back a scroll only for a tap, the guard only narrows the type
     throw new ProtocolError(`${where}: a unit scrolls only on a tap.`);
   }
   return {

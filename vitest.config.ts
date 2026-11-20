@@ -26,16 +26,16 @@ export default defineConfig({
       ],
       // json-summary is what scripts/check-coverage-drift.ts reads.
       reporter: ['text-summary', 'json-summary', 'html'],
-      // The regression floor: about 1 point under the measured totals (87.47 / 80.07 / 81.09 /
-      // 87.99 when it was set), so the gate catches a slide and never honest work. It only goes
+      // The regression floor: about 1 point under the measured totals (89.50 / 83.44 / 83.79 /
+      // 89.98 when it was last set), so the gate catches a slide and never honest work. It only goes
       // up. When coverage rises, raise it to follow: scripts/check-coverage-drift.ts fails the
       // gate when a floor is more than 2 points under measured. Never lower it to pass a PR.
       // Falling below means the new code needs tests, not that the gate needs loosening.
       thresholds: {
-        statements: 87.6,
-        branches: 80.8,
-        functions: 82,
-        lines: 88,
+        statements: 88.4,
+        branches: 82.3,
+        functions: 82.7,
+        lines: 88.9,
       },
     },
   },
