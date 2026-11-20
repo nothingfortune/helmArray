@@ -2,7 +2,7 @@
 // every place a test lives. A rule that is configured but off would let the shapes it bans in
 // without a sound.
 import { ESLint } from 'eslint';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 
 const eslint = new ESLint({ cwd: process.cwd() });
 
@@ -13,6 +13,13 @@ async function lint(filePath: string, code: string): Promise<{ rule: string; sev
     severity: m.severity,
   }));
 }
+
+// The first lint loads the whole ESLint config: about 1.7 s of CPU on a quiet machine and 8 to 40 s
+// with sixteen busy loops on twelve cores, which used to fail whichever test went first at 5 s.
+// It is paid here, once, in a hook whose timeout only a hang can reach.
+beforeAll(async () => {
+  await lint('packages/core/src/index.ts', 'export {};\n');
+}, 120_000);
 
 const header = "import { expect, it } from 'vitest';\n";
 

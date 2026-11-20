@@ -1,5 +1,5 @@
 import { ESLint } from 'eslint';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 
 const eslint = new ESLint({ cwd: process.cwd() });
 
@@ -10,6 +10,14 @@ async function problems(filePath: string, code: string): Promise<string[]> {
 
 const restricted = '@typescript-eslint/no-restricted-imports';
 const relative = 'helm/no-cross-package-relative';
+
+// The first lint loads the whole ESLint config (every plugin): about 1.7 s of CPU on a quiet
+// machine, and 8 to 40 s with sixteen busy loops on twelve cores, which used to land inside
+// whichever test went first and fail it at 5 s. It is paid here, once, in a hook with a timeout
+// that only a hang can reach. Every test after it takes milliseconds.
+beforeAll(async () => {
+  await problems('packages/core/src/index.ts', 'export {};\n');
+}, 120_000);
 
 describe('package boundaries', () => {
   describe('core', () => {
