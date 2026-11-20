@@ -309,4 +309,17 @@ describe('checks', () => {
     const edited = assign(base, { mode: 'ship', control: 'R.index_2', press: 'tap' }, 'hardpoints');
     expect(view(edited).findings.map((r) => r.key)).toEqual(view(base).findings.map((r) => r.key));
   });
+
+  it('gives every finding its own key, even when core reports one rule twice', () => {
+    // Long and double on one pad button: sends-nothing once for each.
+    let scheme = assign(
+      padScheme(),
+      { mode: 'ship', control: 'L.index_1', press: 'long' },
+      'galaxy',
+    );
+    scheme = assign(scheme, { mode: 'ship', control: 'L.index_1', press: 'double' }, 'gear');
+    const rows = [...view(scheme).findings, ...view(scheme).kept];
+    expect(rows.filter((r) => r.finding.rule === 'sends-nothing')).toHaveLength(2);
+    expect(new Set(rows.map((r) => r.key)).size).toBe(rows.length);
+  });
 });

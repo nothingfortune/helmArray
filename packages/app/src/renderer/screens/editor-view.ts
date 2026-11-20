@@ -381,8 +381,18 @@ export function editorView(input: EditorViewInput): EditorView {
     }
   }
 
+  // Core can report the same rule on the same control more than once (one per press, one per
+  // stick direction), so a repeat gets a number to keep every key unique.
+  const seen = new Map<string, number>();
   const rows: FindingRow[] = plan.findings.map((finding) => {
-    const row: FindingRow = { key: keyFor(finding), finding, canKeep: isAcceptable(finding) };
+    const base = keyFor(finding);
+    const count = seen.get(base) ?? 0;
+    seen.set(base, count + 1);
+    const row: FindingRow = {
+      key: count === 0 ? base : `${base}#${count}`,
+      finding,
+      canKeep: isAcceptable(finding),
+    };
     if (finding.accepted !== undefined) row.kept = finding.accepted;
     else {
       const fix = fixFor(finding, scheme, game, plan);

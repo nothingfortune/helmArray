@@ -302,3 +302,30 @@ export function historyShortcut(e: {
   if (key === 'y' && !e.shiftKey) return 'redo';
   return null;
 }
+
+const NON_TEXT_INPUTS = [
+  'checkbox',
+  'radio',
+  'button',
+  'submit',
+  'reset',
+  'image',
+  'range',
+  'color',
+  'file',
+];
+
+/**
+ * Whether a key press lands where typing means something, so Ctrl+Z belongs to the field. A
+ * ticked checkbox or a focused button is not one: the editor's own undo must still work there.
+ */
+export function isTextEntry(target: {
+  tagName: string;
+  type?: string;
+  isContentEditable?: boolean;
+}): boolean {
+  if (target.isContentEditable === true) return true;
+  const tag = target.tagName.toUpperCase();
+  if (tag === 'TEXTAREA' || tag === 'SELECT') return true;
+  return tag === 'INPUT' && !NON_TEXT_INPUTS.includes((target.type ?? 'text').toLowerCase());
+}
