@@ -9,7 +9,7 @@ import type {
   Signal,
   StickBehaviour,
 } from './model';
-import { PRESSES } from './model';
+import { PRESSES, STICK_DIRECTIONS } from './model';
 import type { BindSheetRow, Binding, Finding, Ledger, PinPlan, Plan, UnitProfile } from './plan';
 import { clone } from './clone';
 import { KEY_POOL, formatCanName } from './pool';
@@ -91,6 +91,16 @@ function dealKeys(scheme: Scheme, game: Game, controls: readonly string[]): Deal
   for (const control of Object.keys(ledger).sort()) {
     for (const press of PRESSES) {
       const signal = ledger[control]?.[press];
+      if (signal) taken.add(signalId(signal));
+    }
+  }
+
+  // A key a stick direction sends is taken too, before any button is dealt one.
+  for (const prefix of ['L', 'R']) {
+    const stick = scheme.behaviour[`${prefix}.stick`]?.stick;
+    if (stick?.mode !== 'keys') continue;
+    for (const direction of STICK_DIRECTIONS) {
+      const signal = stick.directions?.[direction];
       if (signal) taken.add(signalId(signal));
     }
   }

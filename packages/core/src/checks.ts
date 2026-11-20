@@ -12,6 +12,7 @@ import type {
   Role,
   Scheme,
   Signal,
+  StickDirection,
 } from './model';
 import { PRESSES, STICK_DIRECTIONS } from './model';
 import type { Finding, PinPlan, Plan, UnitProfile } from './plan';
@@ -151,6 +152,19 @@ const sticks = (plan: Unchecked): [ControlId, UnitProfile['stick']][] => [
   ['R.stick', plan.units.right.stick],
 ];
 
+/** Every key a stick in key mode sends, with the stick and direction that sends it. */
+function stickKeys(plan: Unchecked) {
+  const out: { control: ControlId; direction: StickDirection; signal: Signal }[] = [];
+  for (const [control, stick] of sticks(plan)) {
+    if (stick.mode !== 'keys') continue;
+    for (const direction of STICK_DIRECTIONS) {
+      const signal = stick.directions?.[direction];
+      if (signal) out.push({ control, direction, signal });
+    }
+  }
+  return out;
+}
+
 /** Two actions live at once on the same signal: the game does both. Modes are never live together. */
 function keyCollision(ctx: Context): Finding[] {
   const out: Finding[] = [];
@@ -183,6 +197,22 @@ function keyCollision(ctx: Context): Finding[] {
           message: `In ${modeName(ctx.game, mode.id)}, ${listed} are ${names.length === 2 ? 'both' : 'all'} on ${signalName(mine.signal)}: the game does them at once.`,
         });
       }
+    }
+  }
+  // A stick direction is live in every mode: a button sending its key does both at once.
+  for (const { control, direction, signal } of stickKeys(ctx.plan)) {
+    for (const mode of ctx.game.modes) {
+      const clash = ctx.plan.bindings.find(
+        (b) => b.mode === mode.id && signalId(b.signal) === signalId(signal),
+      );
+      if (!clash) continue;
+      out.push({
+        rule: 'key-collision',
+        severity: 'error',
+        control,
+        mode: mode.id,
+        message: `In ${modeName(ctx.game, mode.id)}, the ${control.startsWith('L.') ? 'left' : 'right'} stick's ${direction} and ${actionName(ctx.game, clash.action)} are both on ${signalName(signal)}: the game does them at once.`,
+      });
     }
   }
   return out;
@@ -243,11 +273,14 @@ function missingRequired(ctx: Context): Finding[] {
       if (stick.mode === 'pad-right') RIGHT_STICK.forEach((c) => padSent.add(c));
     }
   }
+  // A key stick reaches an action when a direction sends the key the game ships it on.
+  const stickSent = new Set(stickKeys(ctx.plan).map((k) => signalId(k.signal)));
   const out: Finding[] = [];
   for (const mode of ctx.game.modes) {
     for (const action of ctx.game.actions) {
       if (action.mode !== mode.id || !action.required) continue;
       if (onButton.has(`${mode.id}|${action.id}`)) continue;
+      if (action.native?.key !== undefined && stickSent.has(signalId(action.native.key))) continue;
       if (action.native?.pad !== undefined && padSent.has(action.native.pad)) continue;
       out.push({
         rule: 'missing-required',

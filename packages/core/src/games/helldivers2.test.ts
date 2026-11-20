@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { BUILT_IN_DEVICES } from '../devices/index';
 import { isKeyCode } from '../keys';
-import type { Role, Signal } from '../model';
+import type { Role, Signal, StickDirections } from '../model';
+import type { Plan } from '../plan';
 import { xboxControllerPreset } from '../presets/xbox';
 import { gameKeysPreset } from '../presets/keys';
 import { resolve } from '../resolve';
@@ -89,5 +90,38 @@ describe('Helldivers 2 through the presets and the resolver', () => {
       ['dive', { kind: 'key', code: 'LAlt' }],
     ]);
     expect(plan.findings.filter((f) => f.rule === 'key-collision')).toEqual([]);
+  });
+
+  describe('with a key stick sending W, A, S and D', () => {
+    const directions = {
+      up: { kind: 'key', code: 'W' },
+      down: { kind: 'key', code: 'S' },
+      left: { kind: 'key', code: 'A' },
+      right: { kind: 'key', code: 'D' },
+    } satisfies StickDirections;
+    const play = (stick: StickDirections) => {
+      const scheme = gameKeysPreset(helldivers2);
+      scheme.map['default'] = {
+        'L.index_1': { tap: 'fire_primary' },
+        'L.index_2': { tap: 'stratagem' },
+      };
+      scheme.behaviour['L.stick'] = { stick: { mode: 'keys', directions: stick } };
+      return resolve(scheme, helldivers2, BUILT_IN_DEVICES);
+    };
+    const missing = (plan: Plan) =>
+      plan.findings.filter((f) => f.rule === 'missing-required').map((f) => f.action);
+
+    it('counts movement as reachable: the stick sends the keys the game ships it on', () => {
+      expect(missing(play(directions))).toEqual([]);
+    });
+
+    it('still reports a movement action no direction sends', () => {
+      const three: StickDirections = {
+        up: directions.up,
+        down: directions.down,
+        left: directions.left,
+      };
+      expect(missing(play(three))).toEqual(['strafe_right']);
+    });
   });
 });
