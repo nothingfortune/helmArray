@@ -15,7 +15,7 @@ import {
   parseHostReport,
   parseUnitReport,
 } from './report';
-import type { StoredButton, StoredRecord } from './stored';
+import type { StoredButton, StoredRecord, StoredStick } from './stored';
 import { SlotStream, decodeStoredRecord } from './stored';
 import { verify } from './verify';
 
@@ -517,5 +517,77 @@ describe('verifying a write names the press that differed', () => {
     expect(verify([button()], [stored]).differences).toEqual([
       { id: 7, what: 'pins', meant: '[2,255]', stored: '[2,3]' },
     ]);
+  });
+});
+
+describe('every stick field is named when it differs', () => {
+  const heldStick = (record: StickRecord) =>
+    decodeStoredRecord(storedFromWritten(encodeRecord(1, record))) as StoredStick;
+  const whatDiffers = (change: (s: StoredStick) => void) => {
+    const stored = heldStick(stick);
+    change(stored);
+    return verify([stick], [stored]).differences.map((d) => d.what);
+  };
+
+  it.each<[string, (s: StoredStick) => void]>([
+    ['stick upper limit', (s) => (s.upperLimit = 1)],
+    ['stick sensitivity', (s) => (s.sensitivity = 1)],
+    ['stick eight directions', (s) => (s.isEightDirectionalTrigger = true)],
+    ['stick throttle', (s) => (s.analogThrottle = 1)],
+    ['stick smoothing', (s) => (s.isAnalogSmoothing = true)],
+    ['stick trigger magnitude', (s) => (s.triggerMagnitude = 1)],
+    ['stick invert Y', (s) => (s.invertYAxis = true)],
+    ['stick combined magnitude', (s) => (s.combinedAnalogMagnitude = 1)],
+    ['stick hold magnitude', (s) => (s.holdMagnitude = 1)],
+    ['stick hold type', (s) => (s.holdType = 2)],
+    ['stick hold keys', (s) => (s.holdKeys = [1, 2, 3])],
+    ['stick rotate button', (s) => (s.rotateStickButtonId = 1)],
+    ['stick lock zone angle', (s) => (s.lockZoneAngle = 1)],
+    ['stick lock zone size', (s) => (s.lockZoneSize = 1)],
+  ])('%s', (what, change) => {
+    expect(whatDiffers(change)).toEqual([what]);
+  });
+
+  it('a stick with combined analog, hold trigger and angle lock reads back as written', () => {
+    const switches = tuned({ isCombinedAnalog: true, isHoldTrigger: true, isAngleLock: true });
+    expect(verify([switches], [heldStick(switches)]).differences).toEqual([]);
+  });
+
+  it('an input the slot does not hold is said missing, with what was meant', () => {
+    expect(verify([stick], []).differences).toEqual([
+      { id: 24, what: 'input', meant: 'written', stored: 'missing' },
+    ]);
+  });
+
+  it('reads an angle of -32768 and sets invert Y from its switch bit', () => {
+    const read = heldStick(tuned({ angle: -32768, invertYAxis: true }));
+    expect([read.angle, read.invertYAxis]).toEqual([-32768, true]);
+  });
+});
+
+describe('more stick fields that cannot be encoded say which', () => {
+  it.each<[string, () => unknown, string]>([
+    [
+      'hold keys',
+      () => encodeRecord(1, tuned({ holdKeys: [1, 2, 3, 4] })),
+      'stick 24: hold keys has 4 entries; it holds 3.',
+    ],
+    [
+      'a rotate button',
+      () => encodeRecord(1, tuned({ rotateStickButtonId: 256 })),
+      "stick 24: rotate button is 256, which doesn't fit.",
+    ],
+    [
+      'a lock zone angle',
+      () => encodeRecord(1, tuned({ lockZoneAngle: 256 })),
+      "stick 24: lock zone angle is 256, which doesn't fit.",
+    ],
+    [
+      'a lock zone size',
+      () => encodeRecord(1, tuned({ lockZoneSize: 256 })),
+      "stick 24: lock zone size is 256, which doesn't fit.",
+    ],
+  ])('%s', (_, encode, message) => {
+    expect(encode).toThrow(message);
   });
 });

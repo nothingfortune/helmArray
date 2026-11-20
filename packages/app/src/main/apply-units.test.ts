@@ -1352,3 +1352,13 @@ describe('what it says of a verdict it kept', () => {
     ]);
   });
 });
+
+describe('the slot name, trimmed before and after it is cut', () => {
+  it('leading spaces do not count towards the 19 characters', () => {
+    expect(unitSlotName(`     ${'x'.repeat(20)}`)).toBe('x'.repeat(19));
+  });
+
+  it('a space where the name is cut is not left on the end', () => {
+    expect(unitSlotName(`${'x'.repeat(18)} yz`)).toBe('x'.repeat(18));
+  });
+});

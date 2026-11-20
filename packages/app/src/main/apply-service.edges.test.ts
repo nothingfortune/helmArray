@@ -345,3 +345,34 @@ describe('a preview while an apply runs', () => {
     ]);
   });
 });
+
+describe('what is said of units depends on whether the Azeron app is known to be closed', () => {
+  it.each<[string, () => Promise<boolean>, string]>([
+    ['open', async () => true, 'Close the Azeron app first: it talks to the units too.'],
+    [
+      'unknown',
+      async () => {
+        throw new Error('no process list');
+      },
+      "helmArray couldn't tell whether the Azeron app is open.",
+    ],
+  ])('with it %s, no unit is spoken of', async (_, look, text) => {
+    const { service } = serviceOver(
+      bench(() => [unit(LEFT), unit(RIGHT)]),
+      { azeronAppRunning: look },
+    );
+    const preview = await service.preview(scheme.id);
+    expect(preview.checks).toEqual([
+      { ok: false, text },
+      { ok: true, text: 'The scheme has no errors.' },
+    ]);
+  });
+
+  it('a failed unit with no slots is a failed unit, not one not read yet', async () => {
+    const failed = unslotted(unit(LEFT, { state: 'failed', error: 'It would not answer' }));
+    expect((await unitTexts([failed, unit(RIGHT)]))[0]).toEqual([
+      false,
+      "The left Azeron couldn't be read: It would not answer.",
+    ]);
+  });
+});
