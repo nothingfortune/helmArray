@@ -35,17 +35,23 @@ export function xboxControllerPreset(
   game: Game,
   padMap: Readonly<Record<ControlId, PadControl>> = PLACEHOLDER_PAD_MAP,
 ): Scheme {
-  const map: Record<ModeId, Record<ControlId, Partial<Record<Press, ActionId>>>> = {};
-  for (const mode of game.modes) map[mode.id] = {};
+  // Maps, not plain objects: a mode or control id such as `constructor` or `__proto__` must be
+  // an ordinary key, never an inherited property (or Object itself) to write a button onto.
+  const modes = new Map<ModeId, Map<ControlId, Partial<Record<Press, ActionId>>>>();
+  for (const mode of game.modes) modes.set(mode.id, new Map());
   for (const action of game.actions) {
     const pad = action.native?.pad;
-    const byControl = map[action.mode];
+    const byControl = modes.get(action.mode);
     if (pad === undefined || byControl === undefined) continue;
     for (const [control, sends] of Object.entries(padMap)) {
-      if (sends !== pad || byControl[control]?.tap !== undefined) continue;
-      byControl[control] = { tap: action.id };
+      if (sends !== pad || byControl.get(control)?.tap !== undefined) continue;
+      byControl.set(control, { tap: action.id });
     }
   }
+  // fromEntries defines own properties, so a mode named `__proto__` is kept as itself.
+  const map = Object.fromEntries(
+    [...modes].map(([mode, byControl]) => [mode, Object.fromEntries(byControl)]),
+  );
   return {
     id: `${game.id}-xbox`,
     gameId: game.id,

@@ -46,14 +46,12 @@ test.describe('the M4 screens', () => {
   test('J1: Helldivers 2, then Xbox controller, then Apply, with nothing to keep first', async ({
     helm,
   }) => {
-    // KNOWN GAP, found by this suite and expected to fail until the owner settles it: Helldivers
-    // 2 has no Xbox pad defaults yet (packages/core/src/games/helldivers2.ts says the preset
-    // places nothing for it), so its six required actions read as "on no button" and block
-    // Apply. J1 is two clicks and then Apply; today it is also six "Keep, I know". Remove
-    // `test.fail` when the game's pad defaults land, or the check stops asking of a pad scheme.
-    test.fail();
+    // Helldivers 2 ships its Xbox defaults (packages/core/src/games/helldivers2.ts), so the
+    // preset puts all six required actions on buttons and the left stick: nothing is flagged.
+    // J1 is two clicks, the game and the preset, then Apply.
     const { page } = helm;
     await startFrom(page, 'Xbox controller');
+    await expect(page.getByRole('button', { name: 'Keep, I know' })).toHaveCount(0);
     await page.getByRole('button', { name: 'Apply', exact: true }).click();
     await expect(applyInDrawer(page)).toBeEnabled({ timeout: 3000 });
   });
@@ -69,8 +67,8 @@ test.describe('the M4 screens', () => {
     await expect(pill(page)).toHaveText('Not checked yet');
 
     await startFrom(page, 'Xbox controller');
-    // The six checks Helldivers 2 has no pad defaults for are kept (see the test above).
-    expect(await keepEveryCheck(page)).toBe(6);
+    // Nothing is flagged, so nothing is kept (see the test above).
+    await expect(page.getByRole('button', { name: 'Keep, I know' })).toHaveCount(0);
     await page.getByRole('button', { name: 'Apply', exact: true }).click();
 
     await expect(drawer(page)).toBeVisible();
