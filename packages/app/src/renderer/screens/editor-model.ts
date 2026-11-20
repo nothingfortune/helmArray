@@ -27,8 +27,10 @@ import {
   PRESSES,
   controlSet,
   inSetup,
+  own,
   padSignalOf,
   setupOf,
+  withOwn,
 } from '@helmarray/core';
 
 /** One press of one control, in one mode: the place an action sits. */
@@ -53,22 +55,27 @@ function omit<R extends object>(record: R, key: keyof R): R {
   return Object.fromEntries(Object.entries(record).filter(([k]) => k !== key)) as R;
 }
 
-/** A copy of one mode's map that can be changed freely. */
+/**
+ * A copy of one mode's map that can be changed freely. Built with fromEntries, and changed with
+ * `withOwn`, never `out[control] = ...`: a control the scheme file names `__proto__` or
+ * `constructor` is an ordinary entry, not a prototype to replace or Object to write onto.
+ */
 function copyMode(scheme: Scheme, mode: ModeId): ByControl {
-  const out: ByControl = {};
-  for (const [control, presses] of Object.entries(scheme.map[mode] ?? {})) {
-    out[control] = { ...presses };
-  }
-  return out;
+  return Object.fromEntries(
+    Object.entries(own(scheme.map, mode) ?? {}).map(([control, presses]) => [
+      control,
+      { ...presses },
+    ]),
+  );
 }
 
 /** Drops controls left with no press, so an emptied button leaves no trace. */
 function prune(byControl: ByControl): ByControl {
-  const out: ByControl = {};
-  for (const [control, presses] of Object.entries(byControl)) {
-    if (PRESSES.some((p) => presses[p] !== undefined)) out[control] = presses;
-  }
-  return out;
+  return Object.fromEntries(
+    Object.entries(byControl).filter(([, presses]) =>
+      PRESSES.some((p) => presses[p] !== undefined),
+    ),
+  );
 }
 
 const withMode = (scheme: Scheme, mode: ModeId, byControl: ByControl): Scheme => ({
@@ -78,7 +85,7 @@ const withMode = (scheme: Scheme, mode: ModeId, byControl: ByControl): Scheme =>
 
 /** The action on a slot, if any. */
 export const actionAt = (scheme: Scheme, slot: Slot): ActionId | undefined =>
-  scheme.map[slot.mode]?.[slot.control]?.[slot.press];
+  own(own(scheme.map, slot.mode) ?? {}, slot.control)?.[slot.press];
 
 /*
  * CONTROLLER OUTPUT: THE PAD RULE.
@@ -123,8 +130,8 @@ export function shownAction(
   mode: ModeId,
   control: ControlId,
 ): { press: Press; id: ActionId } | undefined {
-  const byControl = scheme.map[mode] ?? {};
-  const presses = Object.hasOwn(byControl, control) ? byControl[control] : undefined;
+  const byControl = own(scheme.map, mode) ?? {};
+  const presses = own(byControl, control);
   for (const press of PRESSES) {
     const id = presses?.[press];
     if (id !== undefined) return { press, id };
@@ -183,15 +190,15 @@ function givePad(scheme: Scheme, control: ControlId, action: ActionId, game: Gam
   const azeron = control.startsWith('L.') || control.startsWith('R.');
   if (scheme.output !== 'pad' || !azeron || !inSetup(setup, control)) return scheme;
   const sticks = stickPads(scheme);
-  const own = game.actions.find((a) => a.id === action)?.native?.pad;
-  if (own !== undefined && sticks.has(own)) {
+  const ownPad = game.actions.find((a) => a.id === action)?.native?.pad;
+  if (ownPad !== undefined && sticks.has(ownPad)) {
     // A stick of the setup sends it: the button sends the same direction, a second way to do it,
     // as a button may send the key a key stick sends for its action. The game binding stays.
-    if (scheme.padMap[control] === own) return scheme;
-    return { ...scheme, padMap: { ...scheme.padMap, [control]: own } };
+    if (own(scheme.padMap, control) === ownPad) return scheme;
+    return { ...scheme, padMap: withOwn(scheme.padMap, control, ownPad) };
   }
   if (padSignalOf(scheme, control) !== undefined) return scheme;
-  const pick = [...(own === undefined ? [] : [own]), ...PAD_CONTROLS].find((pad) =>
+  const pick = [...(ownPad === undefined ? [] : [ownPad]), ...PAD_CONTROLS].find((pad) =>
     padFree(scheme, pad, sticks),
   );
   if (pick === undefined) return scheme;
@@ -199,7 +206,7 @@ function givePad(scheme: Scheme, control: ControlId, action: ActionId, game: Gam
   const padMap = Object.fromEntries(
     Object.entries(scheme.padMap).filter(([, sends]) => sends !== pick),
   ) as Scheme['padMap'];
-  return { ...scheme, padMap: { ...padMap, [control]: pick } };
+  return { ...scheme, padMap: withOwn(padMap, control, pick) };
 }
 
 /**
@@ -211,7 +218,7 @@ function givePad(scheme: Scheme, control: ControlId, action: ActionId, game: Gam
 export function assign(scheme: Scheme, slot: Slot, action: ActionId, game: Game): Scheme {
   if (isStick(slot.control)) return scheme;
   const given = slot.press === 'tap' ? givePad(scheme, slot.control, action, game) : scheme;
-  const byControl = copyMode(given, slot.mode);
+  let byControl = copyMode(given, slot.mode);
   let changed = given !== scheme;
   // Moving is within one of the game's binding sets: an action can be on the mouse and on a
   // button sending an Xbox control at once, as the game binds it in each set.
@@ -223,9 +230,9 @@ export function assign(scheme: Scheme, slot: Slot, action: ActionId, game: Game)
   for (const control of Object.keys(byControl)) {
     if (!sameSet(control)) continue;
     for (const press of PRESSES) {
-      const presses = byControl[control] ?? {};
+      const presses = own(byControl, control) ?? {};
       if (presses[press] === action && !(control === slot.control && press === slot.press)) {
-        byControl[control] = omit(presses, press);
+        byControl = withOwn(byControl, control, omit(presses, press));
         changed = true;
       }
     }
@@ -233,15 +240,15 @@ export function assign(scheme: Scheme, slot: Slot, action: ActionId, game: Game)
   const pad = slot.press === 'tap' ? padSignalOf(given, slot.control) : undefined;
   if (pad !== undefined) {
     for (const other of sendingIn(given, byControl, pad)) {
-      const presses = byControl[other] ?? {};
+      const presses = own(byControl, other) ?? {};
       if (other === slot.control || presses.tap === undefined) continue;
-      byControl[other] = omit(presses, 'tap');
+      byControl = withOwn(byControl, other, omit(presses, 'tap'));
       changed = true;
     }
   }
-  const here = (byControl[slot.control] ??= {});
+  const here = own(byControl, slot.control) ?? {};
   if (here[slot.press] !== action) {
-    here[slot.press] = action;
+    byControl = withOwn(byControl, slot.control, { ...here, [slot.press]: action });
     changed = true;
   }
   return changed ? withMode(given, slot.mode, byControl) : scheme;
@@ -250,10 +257,7 @@ export function assign(scheme: Scheme, slot: Slot, action: ActionId, game: Game)
 /** Whether a control carries an action in any mode. */
 const carriesAny = (scheme: Scheme, control: ControlId): boolean =>
   Object.values(scheme.map).some((byControl) =>
-    PRESSES.some(
-      (p) =>
-        (Object.hasOwn(byControl, control) ? byControl[control]?.[p] : undefined) !== undefined,
-    ),
+    PRESSES.some((p) => own(byControl, control)?.[p] !== undefined),
   );
 
 /**
@@ -265,13 +269,20 @@ export function clear(scheme: Scheme, slot: Slot): Scheme {
   if (pad === undefined) {
     if (actionAt(scheme, slot) === undefined) return scheme;
     const byControl = copyMode(scheme, slot.mode);
-    byControl[slot.control] = omit(byControl[slot.control] ?? {}, slot.press);
-    return withMode(scheme, slot.mode, byControl);
+    return withMode(
+      scheme,
+      slot.mode,
+      withOwn(byControl, slot.control, omit(own(byControl, slot.control) ?? {}, slot.press)),
+    );
   }
-  const byControl = copyMode(scheme, slot.mode);
-  const group = sendingIn(scheme, byControl, pad).filter((c) => byControl[c]?.tap !== undefined);
+  let byControl = copyMode(scheme, slot.mode);
+  const group = sendingIn(scheme, byControl, pad).filter(
+    (c) => own(byControl, c)?.tap !== undefined,
+  );
   if (group.length === 0) return scheme;
-  for (const control of group) byControl[control] = omit(byControl[control] ?? {}, 'tap');
+  for (const control of group) {
+    byControl = withOwn(byControl, control, omit(own(byControl, control) ?? {}, 'tap'));
+  }
   const cleared = withMode(scheme, slot.mode, byControl);
   const silent = Object.keys(cleared.padMap).filter(
     (control) => group.includes(control) && !carriesAny(cleared, control),
@@ -311,12 +322,12 @@ export function setDevices(scheme: Scheme, devices: SetupDevices, game: Game): S
   const before = setupOf(scheme.devices);
   const after = setupOf(next);
   if (JSON.stringify(next) === JSON.stringify(scheme.devices)) return scheme;
-  const map: Scheme['map'] = {};
-  for (const [mode, byControl] of Object.entries(scheme.map)) {
-    map[mode] = Object.fromEntries(
-      Object.entries(byControl).filter(([control]) => inSetup(after, control)),
-    );
-  }
+  const map: Scheme['map'] = Object.fromEntries(
+    Object.entries(scheme.map).map(([mode, byControl]) => [
+      mode,
+      Object.fromEntries(Object.entries(byControl).filter(([control]) => inSetup(after, control))),
+    ]),
+  );
   let out: Scheme = { ...scheme, devices: next, map };
   const gained = (control: ControlId) => inSetup(after, control) && !inSetup(before, control);
   // The fixed controls an action can go on: keys, mouse buttons, the controller's buttons.
@@ -336,7 +347,7 @@ export function setDevices(scheme: Scheme, devices: SetupDevices, game: Game): S
       if (shownAction(out, mode, home) !== undefined) continue;
       // Already on a control of that binding set (an Azeron button sending it counts): kept there.
       const set = controlSet(out, home);
-      const placed = Object.entries(out.map[mode] ?? {}).some(
+      const placed = Object.entries(own(out.map, mode) ?? {}).some(
         ([control, presses]) =>
           controlSet(out, control) === set && PRESSES.some((p) => presses[p] === action.id),
       );
@@ -431,7 +442,7 @@ function slotsOn(
   mode: ModeId,
   control: ControlId,
 ): (Slot & { action: ActionId })[] {
-  const presses = scheme.map[mode]?.[control] ?? {};
+  const presses = own(own(scheme.map, mode) ?? {}, control) ?? {};
   return PRESSES.flatMap((press) => {
     const action = presses[press];
     return action === undefined ? [] : [{ mode, control, press, action }];

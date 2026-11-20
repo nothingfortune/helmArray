@@ -26,6 +26,7 @@ import {
   currentVersion,
   gameKeysPreset,
   load,
+  own,
   store,
   xboxControllerPreset,
 } from '@helmarray/core';
@@ -71,10 +72,6 @@ const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
 const RESERVED = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$/i;
 export const isSafeId = (value: unknown): value is string =>
   typeof value === 'string' && SAFE_ID.test(value) && !value.endsWith('.') && !RESERVED.test(value);
-
-/** `record[key]` only when the record has it itself: `constructor` is not a game's choice. */
-const own = <T>(record: Readonly<Record<string, T>>, key: string): T | undefined =>
-  Object.hasOwn(record, key) ? record[key] : undefined;
 
 type Rec = Record<string, unknown>;
 const isRecord = (value: unknown): value is Rec =>

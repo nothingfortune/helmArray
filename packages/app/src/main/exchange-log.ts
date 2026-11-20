@@ -102,26 +102,52 @@ export function createExchangeLog(options: ExchangeLogOptions): ExchangeLog {
     return queue;
   };
 
-  const append = async (text: string) => {
+  // Lines wait here until a job takes them all: an Apply traces thousands in a row, and a size
+  // check and an open per line made the log the slowest part of it (seconds on an idle disk).
+  let waiting: string[] = [];
+  let scheduled = false;
+
+  /**
+   * Writes every waiting line with one size check and as few appends as the rotation needs. The
+   * size is counted from the lines as they go, so the file rotates at the same line as when each
+   * was written alone: once it holds `maxBytes` or more, before the next line.
+   */
+  const drain = async () => {
+    scheduled = false;
+    const lines = waiting;
+    waiting = [];
+    if (lines.length === 0) return;
     if (!dirReady) {
       await files.ensureDir(dir);
       dirReady = true;
     }
-    if ((await files.size(currentPath)) >= maxBytes) {
-      try {
-        await files.rename(currentPath, previousPath);
-      } catch (error) {
-        // A viewer holding the file open can refuse the move. Say so, and still write the
-        // line: a log that stops while full is lost exactly when it is wanted.
-        onError(error);
+    let size = await files.size(currentPath);
+    let chunk = '';
+    for (const line of lines) {
+      if (size >= maxBytes) {
+        if (chunk !== '') await files.append(currentPath, chunk);
+        chunk = '';
+        try {
+          await files.rename(currentPath, previousPath);
+          size = 0;
+        } catch (error) {
+          // A viewer holding the file open can refuse the move. Say so, and still write the
+          // line: a log that stops while full is lost exactly when it is wanted.
+          onError(error);
+        }
       }
+      chunk += line;
+      size += Buffer.byteLength(line, 'utf8');
     }
-    await files.append(currentPath, text);
+    if (chunk !== '') await files.append(currentPath, chunk);
   };
 
   const write = (unit: string, line: string) => {
-    const text = `${now().toISOString()} [${oneLine(unit)}] ${oneLine(line)}\n`;
-    void enqueue(() => append(text));
+    waiting.push(`${now().toISOString()} [${oneLine(unit)}] ${oneLine(line)}
+`);
+    if (scheduled) return;
+    scheduled = true;
+    void enqueue(drain);
   };
 
   const flush = () => enqueue(() => Promise.resolve());

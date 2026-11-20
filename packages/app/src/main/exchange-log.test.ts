@@ -140,6 +140,71 @@ describe('exchange log', () => {
     });
   });
 
+  describe('the cost of a burst', () => {
+    // An Apply traces thousands of lines in a row. The log used to size-check and open the file
+    // once per line, so a test that flushed after one Apply spent seconds on the disk (and
+    // "Hook timed out in 10000ms" when the machine was busy).
+    const counting = () => {
+      const calls = { append: 0, size: 0, rename: 0 };
+      const files: LogFiles = {
+        ...diskLogFiles,
+        append: (path, text) => {
+          calls.append++;
+          return diskLogFiles.append(path, text);
+        },
+        size: (path) => {
+          calls.size++;
+          return diskLogFiles.size(path);
+        },
+        rename: (from, to) => {
+          calls.rename++;
+          return diskLogFiles.rename(from, to);
+        },
+      };
+      return { calls, files };
+    };
+
+    it('writes lines traced together with one size check and one append', async () => {
+      const { calls, files } = counting();
+      const log = createExchangeLog({ dir, files, now: at('2026-11-19T10:00:00.000Z') });
+      for (let i = 0; i < 1000; i++) log.write('left', `line ${i}`);
+      await log.flush();
+      expect(calls).toEqual({ append: 1, size: 1, rename: 0 });
+    });
+
+    it('still writes every one of those lines, in order', async () => {
+      const log = createExchangeLog({ dir, now: at('2026-11-19T10:00:00.000Z') });
+      for (let i = 0; i < 1000; i++) log.write('left', `line ${i}`);
+      expect((await log.recent(2000)).map((l) => l.split('] ')[1])).toEqual(
+        Array.from({ length: 1000 }, (_, i) => `line ${i}`),
+      );
+    });
+
+    it('rotates inside a burst at the same line it would have one at a time', async () => {
+      const burst = createExchangeLog({
+        dir: join(dir, 'burst'),
+        maxBytes: 300,
+        now: at('2026-11-19T10:00:00.000Z'),
+      });
+      const single = createExchangeLog({
+        dir: join(dir, 'single'),
+        maxBytes: 300,
+        now: at('2026-11-19T10:00:00.000Z'),
+      });
+      for (let i = 0; i < 40; i++) burst.write('left', `line ${i}`);
+      await burst.flush();
+      for (let i = 0; i < 40; i++) {
+        single.write('left', `line ${i}`);
+        await single.flush();
+      }
+      const read = async (folder: string) => [
+        await readFile(join(dir, folder, 'exchange.1.log'), 'utf8'),
+        await readFile(join(dir, folder, 'exchange.log'), 'utf8'),
+      ];
+      expect(await read('burst')).toEqual(await read('single'));
+    });
+  });
+
   describe('recent', () => {
     it('gives the last n lines, oldest first, across both files', async () => {
       const log = createExchangeLog({ dir, maxBytes: 100, now: at('2026-11-19T10:00:00.000Z') });

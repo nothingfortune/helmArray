@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import type { Finding, Game, Scheme } from '@helmarray/core';
 import {
   AZERONS_ONLY,
@@ -885,5 +885,34 @@ describe('the sends-nothing fix on a fixed control', () => {
     const fix = fixFor(before[0] as Finding, scheme, game, plan(scheme));
     const after = (fix as NonNullable<typeof fix>).apply(scheme);
     expect(after.map['ship']?.['nope.1']).toBeUndefined();
+  });
+});
+
+describe('a control or mode named like an Object property', () => {
+  afterEach(() => {
+    // A failing run writes onto Object itself; leave nothing behind.
+    Reflect.deleteProperty(Object, 'tap');
+  });
+
+  it('assign puts an action on a button named constructor, and never on Object', () => {
+    const next = assign(frozen(), slot('ship', 'constructor'), 'gear', game);
+    expect({
+      placed: actionAt(next, slot('ship', 'constructor')),
+      onObject: Object.hasOwn(Object, 'tap'),
+    }).toEqual({ placed: 'gear', onObject: false });
+  });
+
+  it('assign keeps a control the scheme file names __proto__ as an entry of its own', () => {
+    const scheme = keysScheme();
+    scheme.map['ship'] = JSON.parse('{"__proto__": {"tap": "lights"}}') as Scheme['map'][string];
+    const next = assign(scheme, slot('ship', 'L.index_2'), 'gear', game);
+    expect(Object.keys(next.map['ship'] ?? {})).toEqual(['__proto__', 'L.index_2']);
+  });
+
+  it('clear takes an action off a button named constructor, as that entry', () => {
+    const placed = assign(frozen(), slot('ship', 'constructor'), 'gear', game);
+    expect(actionAt(clear(placed, slot('ship', 'constructor')), slot('ship', 'constructor'))).toBe(
+      undefined,
+    );
   });
 });

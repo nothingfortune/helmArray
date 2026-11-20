@@ -17,7 +17,7 @@ import type {
   Signal,
   StickDirection,
 } from '@helmarray/core';
-import { PRESSES, STICK_DIRECTIONS, padSignalOf, signalId } from '@helmarray/core';
+import { PRESSES, STICK_DIRECTIONS, own, padSignalOf, signalId } from '@helmarray/core';
 import type { StickLabels, UnitKey } from '../unit/Unit';
 import { handPrefix, positionName, positionOf } from '../unit/layout';
 import { fixFor, isAcceptable, isStick, shownAction } from './editor-model';
@@ -53,7 +53,7 @@ const KEY_WORDS: Readonly<Record<string, string>> = {
 const MOD_WORDS = { ctrl: 'Ctrl', shift: 'Shift', alt: 'Alt' } as const;
 
 function keyWord(code: string): string {
-  const known = KEY_WORDS[code];
+  const known = own(KEY_WORDS, code);
   if (known !== undefined) return known;
   const numpad = /^Num(\d)$/.exec(code);
   return numpad?.[1] !== undefined ? `Num ${numpad[1]}` : code;
@@ -76,7 +76,7 @@ const PAD_WORDS: Readonly<Record<string, string>> = {
   DPAD_RIGHT: 'D-pad right',
 };
 
-export const padWord = (control: PadControl): string => PAD_WORDS[control] ?? control;
+export const padWord = (control: PadControl): string => own(PAD_WORDS, control) ?? control;
 
 /** What a signal is called in the mono caption: `Num +`, `Left Shift+F13`, `Xbox RB`. */
 export function signalText(signal: Signal): string {
@@ -212,7 +212,7 @@ function unitKeys(
   const keys: Record<ControlId, UnitKey> = {};
   // Every control with an action of its own, and every one sending an Xbox control another does.
   const controls = new Set([
-    ...Object.keys(scheme.map[mode] ?? {}),
+    ...Object.keys(own(scheme.map, mode) ?? {}),
     ...Object.keys(scheme.padMap).filter((c) => padSignalOf(scheme, c) !== undefined),
   ]);
   for (const control of controls) {
@@ -289,7 +289,8 @@ function sendsFor(
   const signal = pins.find((p) => p.control === control)?.presses[press];
   if (signal === undefined) return { text: null, note: '' };
   const shown = shownAction(scheme, mode, control);
-  const action = shown?.press === press ? shown.id : scheme.map[mode]?.[control]?.[press];
+  const action =
+    shown?.press === press ? shown.id : own(own(scheme.map, mode) ?? {}, control)?.[press];
   const onSheet = plan.bindSheet.some((r) => r.mode === mode && r.action === action);
   const written = scheme.writeGameFile && game.file !== undefined;
   const note =
@@ -333,7 +334,7 @@ function panelFor(input: PanelInput): PanelView {
       sendsNote: sends.note,
     };
   }
-  const here = { ...(scheme.map[mode]?.[control] ?? {}) };
+  const here = { ...(own(own(scheme.map, mode) ?? {}, control) ?? {}) };
   // A control sending an Xbox control shows what that control does (THE PAD RULE).
   const shown = shownAction(scheme, mode, control);
   if (here.tap === undefined && shown?.press === 'tap') here.tap = shown.id;
@@ -382,7 +383,7 @@ export function editorView(input: EditorViewInput): EditorView {
   const press = input.press ?? 'tap';
 
   const placed = new Set<ActionId>();
-  for (const presses of Object.values(scheme.map[mode] ?? {})) {
+  for (const presses of Object.values(own(scheme.map, mode) ?? {})) {
     for (const p of PRESSES) {
       const id = presses[p];
       if (id !== undefined) placed.add(id);

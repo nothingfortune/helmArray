@@ -375,3 +375,13 @@ describe('controller output: the game is rebound, and the panel says so', () => 
     expect([v.right.keys['R.index_1']?.label, v.panel?.title]).toEqual(['Fire', 'Fire']);
   });
 });
+
+describe('words for a signal that names an Object property', () => {
+  it('writes a key code of constructor as itself', () => {
+    expect(signalText({ kind: 'key', code: 'constructor' as never })).toBe('constructor');
+  });
+
+  it('writes a pad control of toString as itself', () => {
+    expect(signalText({ kind: 'pad', control: 'toString' as never })).toBe('Xbox toString');
+  });
+});

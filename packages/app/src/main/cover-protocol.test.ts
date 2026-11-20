@@ -108,3 +108,15 @@ describe('the answer', () => {
     });
   });
 });
+
+describe('a cover whose file extension is also an Object property', () => {
+  const odd: CoverFiles = new Map([
+    ['1', { portrait: `${DIR}/1/library.constructor` }],
+    ['2', { portrait: `${DIR}/2/library.__proto__` }],
+    ['3', { portrait: `${DIR}/3/library.toString` }],
+  ]);
+
+  it.each(['1', '2', '3'])('is not served: app %s has a type the app does not know', (app) => {
+    expect(resolveCover(coverUrl(app, 'portrait'), odd)).toBeNull();
+  });
+});
