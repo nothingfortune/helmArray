@@ -1362,3 +1362,31 @@ describe('the slot name, trimmed before and after it is cut', () => {
     expect(unitSlotName(`${'x'.repeat(18)} yz`)).toBe('x'.repeat(18));
   });
 });
+
+describe('counting the inputs of a read-back that is not clean', () => {
+  it('counts an input once when it both differs and cannot be read', async () => {
+    const [left, right] = twoUnits({ slots: { 0: { name: 'Default' } } });
+    const state = await rig(left, right);
+    const base = must(state.deps.unit('left'));
+    const first = must(records.left[0]);
+    const session: UnitOps = {
+      identify: () => base.session.identify(),
+      readSlots: () => base.session.readSlots(),
+      runningSlot: () => base.session.runningSlot(),
+      switchTo: (slot) => base.session.switchTo(slot),
+      deleteSlot: (slot) => base.session.deleteSlot(slot),
+      write: async (...args) => ({
+        ...(await base.session.write(...args)),
+        differences: [{ id: first.id, what: 'tap keys', meant: '[1]', stored: '[2]' }],
+        unchecked: [{ id: first.id, raw: Uint8Array.of(1) }],
+      }),
+    };
+    const result = await applyUnits(plan, {
+      ...state.deps,
+      unit: (hand) => (hand === 'left' ? { ...base, session } : state.deps.unit(hand)),
+    });
+    expect(result.units[0]?.message).toContain(
+      `read back differently from the layout (1 input, first: input ${first.id} tap keys)`,
+    );
+  });
+});

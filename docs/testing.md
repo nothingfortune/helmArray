@@ -13,7 +13,7 @@ coverage, and the coverage drift check. If it passes locally it passes in CI.
 | Unit               | Pure modules: core, azeron, games, app's shared and renderer logic                                   | `*.test.ts` beside the source, and root `test/`        | In the gate |
 | Integration        | Main-process services wired together, with a fake HID unit and temp folders                          | `test/integration/`, `*.test.ts` in `packages/app/src/main` |  In the gate |
 | End to end         | The real app: Playwright on Electron over fake units, a temp data folder and a fake Steam (the M4 journeys, the keyboard, axe) | `packages/app/e2e/*.spec.ts`, run by `pnpm test:e2e` | Outside the gate |
-| Mutation           | Whether the tests notice when the code is broken: Stryker                                            | Later PR                                               | Coming    |
+| Mutation           | Whether the tests notice when the code is broken: Stryker, over the pure logic that can do damage   | `pnpm test:mutation`, `.github/workflows/mutation.yml` | Outside the gate, informational |
 | Hardware checklist | The real units, pedals and a game, run by hand                                                       | [`hardware-checklist.md`](hardware-checklist.md)       | Manual    |
 
 The hardware checklist is never automated. No test, in any layer, touches a real unit, a real
@@ -130,11 +130,81 @@ see the lines).
 Coverage says a line ran, not that anything checked it. A line covered by the wrong branch counts
 as covered. That is what mutation testing is for.
 
-## Mutation testing (coming)
+## Mutation testing
 
-Mutation testing answers what coverage cannot: can this code be broken without a test noticing?
-Stryker comes in a later PR. Until then, "assert what separates the branches" is the rule that
-stands in for it: before calling a test done, ask what change to the code it would not catch.
+Mutation testing answers what coverage cannot: **can this code be broken without a test noticing?**
+Stryker changes the source one small way at a time (flips a `<`, drops a branch, empties a
+string) and runs the tests for each change, a mutant. A mutant the tests fail on is killed. One
+they pass on survived: the code can be broken that way and nothing would say so. Coverage cannot
+tell, because a line the wrong branch ran still counts as covered.
+
+**It is informational. It does not block, so it must not look like it blocks.** It is not in
+`pnpm check`, not a pull-request check and not a required status: `thresholds.break` is `null`,
+and `.github/workflows/mutation.yml` runs only when someone dispatches it. The score is read and
+acted on by a person.
+
+### What it mutates
+
+The pure logic that can do damage, listed in `stryker.config.mjs` (`mutate`):
+
+- `packages/azeron/src`: the report and command protocol, the record encoding, the profile, the
+  session, what is read back and what a write is verified against. Not `index.ts` or `fake.ts`.
+- `packages/core/src`: `resolve.ts`, the presets, `checks.ts` (the findings) and the games.
+- `packages/games/src`.
+- `packages/app/src/main`: `apply-units`, `apply-service`, `gated-session`, `plan-fingerprint`,
+  `scheme-plan`, `active-plans`, `sync-state`, `devices` and `devices-gate`, `hands`,
+  `hand-finder`, `store`, `hid-transport`, `processes`, `exchange-log`, `e2e-seam` and `compose`.
+- `packages/app/src/renderer`: the pure models `editor-model`, `editor-view`, `libraryView`,
+  `libraryFlow` and `applyFlow`.
+
+Not React components, CSS, `index.ts` or the preload: the Playwright e2e suite covers those, and
+mutating them would measure the wrong suite.
+
+### Thresholds
+
+`high: 90`, `low: 75`, `break: null`. Under 75 the report colours a file red, under 90 amber. The
+score is mutants killed or timed out, over those and the survivors and the ones nothing ran. A
+mutant that does not compile is discarded by the TypeScript checker and is not counted.
+
+### Reading a run
+
+`reports/mutation/mutation.html` lists every survivor with the line, what it was changed to, and
+the tests that ran and passed. Each one is one of:
+
+1. **A missing test.** Write one that asserts the behavior through the public interface, and watch
+   it fail on the mutant. Do not export an internal to reach it.
+2. **A real bug.** Write the failing test first, then fix.
+3. **An equivalent mutant**, one no test can tell from the original. Prefer removing the redundant
+   code that makes it equivalent. If the code stays, accept the mutant in the source:
+
+   `// Stryker disable next-line <Mutator>[,<Mutator>]: <reason>`
+
+   on the line before the one the mutant is on. Only that single-line form is allowed, with the
+   mutators named (never `all`) and a reason given. **"Hard to test" is not a reason**, and
+   neither is "tests would be long": only a true equivalent (a guard the types or the caller make
+   unreachable, a label that can never be printed). A directive is line-wide for the mutators it
+   names, so it must not also hide a mutant a test can kill. `test/stryker-disable-comments.test.ts`
+   refuses every other form, an unknown mutator name and the obvious non-reasons, and runs over
+   every file in `packages/`.
+
+### How it runs here
+
+- `vitest.stryker.config.ts` extends the base config and drops what a mutation run cannot use:
+  coverage, and the meta-tests that spawn child runs or lint the repository.
+- The packages reach each other through `node_modules` links that lead back to the real,
+  unmutated tree. The Stryker config points `@helmarray/azeron`, `core` and `games` at the
+  sandbox's own source, so every test that uses them (the reference-capture tests in `test/`, the
+  integration tests, the app's own) can kill a mutant in them.
+- Temp containment still holds: `scripts/vitest-stryker-tmp-setup.ts` is `vitest-tmp-setup.ts` with
+  the run folder made inside the sandbox. Stryker kills and restarts its runner whenever a mutant
+  makes a test hang, a killed runner never reaches its teardown, and in the real temp folder that
+  left a `helm-test-*` folder behind for each restart. Inside the sandbox they go when Stryker
+  removes it, and a test that leaks still fails the run.
+- `incremental: true`, with `reports/mutation/incremental.json` committed: a re-run tests only the
+  mutants whose code or tests changed. `pnpm exec stryker run --force` ignores it
+  and tests everything.
+- Concurrency is 3: the build rig can take more, a laptop with little memory cannot.
+- A full run takes hours (about 1.5 hours for `packages/azeron` alone). Run it per area.
 
 ## Running them
 
@@ -145,5 +215,7 @@ stands in for it: before calling a test done, ask what change to the code it wou
 | `pnpm test:coverage`  | The tests with coverage and the floor                                     |
 | `pnpm coverage:drift` | Whether the floor is within 2 points of the last measured totals          |
 | `pnpm lint`           | Just lint, including the test-integrity rules                             |
+| `pnpm test:mutation`  | Stryker over the whole scope. Hours. Not in the gate, informational       |
+| `pnpm test:mutation:file -- <glob>` | Stryker over one file or glob, e.g. `packages/azeron/src/records.ts`; the exclusions in the config (tests, barrels, fakes) still apply |
 
 To run one file: `pnpm vitest run packages/core/src/resolve.test.ts`.
