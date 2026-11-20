@@ -17,17 +17,10 @@ Work follows the roadmap's milestones, in order.
 
 ## The workspace
 
-Node 24 and pnpm (the version `packageManager` pins; `corepack enable` or a global install).
+Install, commands and where the app keeps its files: [`docs/setup.md`](docs/setup.md). Keep
+them there, not here; this file adds only what an agent needs on top.
 
-| Command        | Does                                                                            |
-| -------------- | ------------------------------------------------------------------------------- |
-| `pnpm install` | Install.                                                                        |
-| `pnpm check`   | The gate: typecheck, lint, format, tests. CI runs exactly this.                 |
-| `pnpm dev`     | The app with hot reload. `--play` on the built app also opens Play view.        |
-| `pnpm tokens`  | Rewrite `styles/tokens.css` from `src/shared/tokens.ts` after changing a token. |
-
-- pnpm refuses a dependency version newer than its minimum release age. Pin an older version
-  rather than adding an exclusion.
+- `pnpm check` is the gate.
 - `packages/core`, `azeron`, `games` ship TypeScript source; `app` bundles them. The package
   boundaries from `02-architecture.md` are lint rules (`eslint.config.js`), tested in
   `test/boundaries.test.ts`.
