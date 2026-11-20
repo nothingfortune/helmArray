@@ -140,6 +140,8 @@ describe('the IPC channels', () => {
 
   it.each([
     ['getScheme', ['../settings']],
+    ['getScheme', ['__proto__']],
+    ['listSchemes', ['con']],
     ['getScheme', [42]],
     ['listSchemes', ['a/b']],
     ['createScheme', ['skiff', 'mine']],

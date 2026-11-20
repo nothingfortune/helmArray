@@ -66,8 +66,14 @@ export interface ActiveSelection {
 /** An id that is safe as a file name: ids come from windows and from files, so nothing else. */
 const MAX_ID_LENGTH = 100;
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
+/** Windows treats these as devices, with or without an extension: never a file name. */
+const RESERVED = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$/i;
 export const isSafeId = (value: unknown): value is string =>
-  typeof value === 'string' && SAFE_ID.test(value) && !value.endsWith('.');
+  typeof value === 'string' && SAFE_ID.test(value) && !value.endsWith('.') && !RESERVED.test(value);
+
+/** `record[key]` only when the record has it itself: `constructor` is not a game's choice. */
+const own = <T>(record: Readonly<Record<string, T>>, key: string): T | undefined =>
+  Object.hasOwn(record, key) ? record[key] : undefined;
 
 type Rec = Record<string, unknown>;
 const isRecord = (value: unknown): value is Rec =>
@@ -217,6 +223,8 @@ export class DataStore {
   /** Schemes edited and not yet safely on disk: what a read of them must give back. */
   /** The settings are changed one call at a time. */
   private settingsTurn: Promise<unknown> = Promise.resolve();
+  /** Changes still under way, for `flush()` to wait for. */
+  private readonly ops = new Set<Promise<void>>();
   private readonly unsaved = new Map<string, Scheme>();
   private readonly timers = new Map<string, Timer>();
 
@@ -396,7 +404,11 @@ export class DataStore {
    * Using a preset copies it: a new scheme with a new id, written at once. The preset itself,
    * which lives in core, is never edited.
    */
-  async createSchemeFromPreset(gameId: string, preset: Preset): Promise<Scheme> {
+  createSchemeFromPreset(gameId: string, preset: Preset): Promise<Scheme> {
+    return this.track(this.makeScheme(gameId, preset));
+  }
+
+  private async makeScheme(gameId: string, preset: Preset): Promise<Scheme> {
     const game = await this.findGame(gameId);
     if (!game) throw new StoreError('There is no such game.');
     if (!isSafeId(game.id)) throw new StoreError("This game's id can't be used in a file name.");
@@ -457,8 +469,22 @@ export class DataStore {
   async flush(): Promise<void> {
     for (const timer of this.timers.values()) clearTimeout(timer);
     this.timers.clear();
+    // A change still looking things up isn't queued to write yet: wait for it first.
+    while (this.ops.size > 0) await Promise.allSettled([...this.ops]);
     await Promise.all([...this.unsaved.keys()].map((id) => this.writeScheme(id)));
     await this.chain;
+  }
+
+  /** Remembers a change that is under way until it is done, so `flush()` can wait for it. */
+  private track<T>(change: Promise<T>): Promise<T> {
+    const done: Promise<void> = change
+      .then(
+        () => undefined,
+        () => undefined,
+      )
+      .then(() => void this.ops.delete(done));
+    this.ops.add(done);
+    return change;
   }
 
   // Settings ----------------------------------------------------------------------------------
@@ -466,7 +492,7 @@ export class DataStore {
   /** The active game, and that game's active scheme. */
   active(): ActiveSelection {
     const gameId = this.settings.activeGameId;
-    const schemeId = gameId === null ? null : (this.settings.activeScheme[gameId] ?? null);
+    const schemeId = gameId === null ? null : (own(this.settings.activeScheme, gameId) ?? null);
     return { gameId, schemeId };
   }
 
@@ -475,7 +501,7 @@ export class DataStore {
     // One change at a time, in the order asked: each reads the settings the one before left.
     const run = this.settingsTurn.then(() => this.changeActive(gameId, schemeId));
     this.settingsTurn = run.catch(() => undefined);
-    return run;
+    return this.track(run);
   }
 
   private async changeActive(gameId: string, schemeId: string | null): Promise<void> {
@@ -506,10 +532,11 @@ export class DataStore {
   // Applied plans -----------------------------------------------------------------------------
 
   /** Remembers the plan just applied for this scheme. */
-  async saveApplied(schemeId: string, plan: Plan): Promise<void> {
-    if (!isSafeId(schemeId)) throw new StoreError("That isn't a scheme id.");
-    if (!isPlan(plan)) throw new StoreError("That isn't a plan helmArray can save.");
-    await this.put('applied', `applied/${schemeId}.json`, plan);
+  saveApplied(schemeId: string, plan: Plan): Promise<void> {
+    if (!isSafeId(schemeId)) return Promise.reject(new StoreError("That isn't a scheme id."));
+    if (!isPlan(plan))
+      return Promise.reject(new StoreError("That isn't a plan helmArray can save."));
+    return this.track(this.put('applied', `applied/${schemeId}.json`, plan));
   }
 
   /** The plan last applied for this scheme, or null when none was (or it can't be read). */
