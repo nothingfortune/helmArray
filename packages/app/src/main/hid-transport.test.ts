@@ -147,14 +147,21 @@ describe('the transport', () => {
     return r;
   };
 
-  it('sends a report as it is, report id 0 first', async () => {
+  it('writes report id 0 ahead of the whole 64-byte frame, which goes on the wire as it is', async () => {
+    // hidapi takes the first byte written as the report id and puts only the rest on the wire.
+    // The app's own frames start with a 0 that is data (112-write.pcap: `00 00 12 ba 01 01 …`),
+    // so without the extra id byte every command reached the unit one byte short and was ignored.
     const device = new ScriptedDevice();
     const unit = await openUnit(withDevice(device), LEFT);
     const frame = hostReports('FIRMWARE_VERSION', 7, new Uint8Array())[0] as Uint8Array;
     await unit.send(frame);
     expect(device.written).toHaveLength(1);
-    expect(Array.from(device.written[0] as Uint8Array)).toEqual(Array.from(frame));
-    expect(device.written[0]?.[0]).toBe(0);
+    const written = device.written[0] as Uint8Array;
+    expect(written).toHaveLength(65);
+    expect(written[0]).toBe(0);
+    const wire = Array.from(written.slice(1));
+    expect(wire).toEqual(Array.from(frame));
+    expect(wire.slice(0, 6)).toEqual([0x00, 0x00, 0x05, 7, 0x01, 0x01]);
   });
 
   it('refuses to send anything that is not a 64-byte report', async () => {
@@ -213,8 +220,12 @@ describe('the transport', () => {
 describe('a session over the transport', () => {
   it('identifies a unit that answers as a Cyborg II does', async () => {
     const fake = new FakeUnit({ deviceId: 49229 });
+    // As hidapi does: the first byte written is the report id, and only the rest reaches the unit.
     const device: HidDevice = {
-      write: (data) => fake.send(data),
+      write: async (data) => {
+        if (data[0] !== 0) throw new Error(`report id ${data[0]}, not 0`);
+        await fake.send(data.slice(1));
+      },
       read: async () => (await fake.receive()) ?? undefined,
       close: async () => undefined,
     };

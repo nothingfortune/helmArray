@@ -81,8 +81,11 @@ export async function openUnit(hid: HidBackend, path: string): Promise<UnitTrans
       if (report.length !== REPORT_LENGTH) {
         throw new Error(`A report is ${REPORT_LENGTH} bytes, not ${report.length}.`);
       }
-      // The frame already starts with report id 0, which is what the device is written with.
-      await device.write(report);
+      // The units' reports are unnumbered, so hidapi wants report id 0 ahead of the data and
+      // puts only the rest on the wire. The frame's own leading 0 is data, not that id.
+      const out = new Uint8Array(REPORT_LENGTH + 1);
+      out.set(report, 1);
+      await device.write(out);
     },
     async receive(timeoutMs) {
       live();
