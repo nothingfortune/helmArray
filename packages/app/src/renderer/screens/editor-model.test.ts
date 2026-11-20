@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import type { Finding, Scheme } from '@helmarray/core';
-import { DEFAULT_TURBO_INTERVAL } from '@helmarray/core';
+import type { Finding, Game, Scheme } from '@helmarray/core';
+import {
+  AZERONS_ONLY,
+  CYBORG2_LEFT,
+  CYBORG2_RIGHT,
+  DEFAULT_TURBO_INTERVAL,
+  PAD_CONTROLS,
+  helldivers2,
+  padSignalOf,
+  xboxControllerPreset,
+} from '@helmarray/core';
 import {
   HISTORY_LIMIT,
   KEPT_REASON,
@@ -19,8 +28,10 @@ import {
   isTextEntry,
   move,
   redo,
+  setDevices,
   setLatch,
   setTurbo,
+  shownAction,
   startHistory,
   unacceptFinding,
   undo,
@@ -494,85 +505,365 @@ describe('isTextEntry', () => {
 });
 
 describe('controller output: the pad rule', () => {
-  const pinSends = (scheme: Scheme, control: string, press: Slot['press'] = 'tap') => {
-    const p = plan(scheme, padGame);
-    return [...p.units.left.pins, ...p.units.right.pins].find((x) => x.control === control)
-      ?.presses[press];
+  const pinSends = (scheme: Scheme, control: string, g: Game = padGame) => {
+    const p = plan(scheme, g);
+    return [...(p.units.left?.pins ?? []), ...(p.units.right?.pins ?? [])].find(
+      (x) => x.control === control,
+    )?.presses.tap;
   };
+  /** What the game's controller bindings put an action on, in a mode. */
+  const boundTo = (scheme: Scheme, action: string, mode = 'ship', g: Game = padGame) =>
+    plan(scheme, g)
+      .gameBindings.filter((b) => b.set === 'controller' && b.mode === mode && b.action === action)
+      .map((b) => b.signal);
   const pad = (control: string) => ({ kind: 'pad', control });
   const base = () => deepFreeze(padScheme());
+  const withController = (scheme: Scheme): Scheme =>
+    deepFreeze({ ...scheme, devices: { ...scheme.devices, controller: true } });
 
-  it('rule 1: an action with a native pad control makes its button send that control', () => {
-    const next = assign(base(), slot('ship', 'L.index_3'), 'hardpoints', padGame);
-    expect(next.padMap['L.index_3']).toBe('Y');
-    expect(pinSends(next, 'L.index_3')).toEqual(pad('Y'));
-  });
-
-  it('rule 1: a moved action brings its control with it, and the old button keeps its own', () => {
-    const next = move(base(), slot('ship', 'L.index_1'), slot('ship', 'L.index_3'), padGame);
-    expect(next.padMap['L.index_3']).toBe('RB');
-    expect(pinSends(next, 'L.index_3')).toEqual(pad('RB'));
-    expect(next.map['ship']?.['L.index_1']).toBeUndefined();
-    expect(pinSends(next, 'L.index_1')).toEqual(pad('RB'));
-  });
-
-  it('rule 1: replaces the control a button sent before', () => {
+  it('rule 1: the button keeps its Xbox control, and the game binding follows the action', () => {
+    // Left index 1 sends RB; Hardpoints ships on Y.
     const next = assign(base(), slot('ship', 'L.index_1'), 'hardpoints', padGame);
-    expect(next.padMap['L.index_1']).toBe('Y');
-    expect(pinSends(next, 'L.index_1')).toEqual(pad('Y'));
+    expect([
+      next.padMap['L.index_1'],
+      pinSends(next, 'L.index_1'),
+      boundTo(next, 'hardpoints'),
+    ]).toEqual(['RB', pad('RB'), [pad('RB')]]);
   });
 
-  it('rule 1: two buttons may send the same control', () => {
-    const next = assign(base(), slot('ship', 'L.index_3'), 'boost', padGame);
-    expect(next.padMap['L.index_3']).toBe('RB');
-    expect(next.padMap['L.index_1']).toBe('RB');
+  it('rule 1: what was on the button is unplaced, and the game takes it off the control', () => {
+    const next = assign(base(), slot('ship', 'L.index_1'), 'hardpoints', padGame);
+    expect([actionAt(next, slot('ship', 'L.index_1')), boundTo(next, 'boost')]).toEqual([
+      'hardpoints',
+      [null],
+    ]);
   });
 
-  it('rule 1: follows the action of the mode it is dropped in', () => {
-    const next = assign(base(), slot('srv', 'L.index_3'), 'srv_fire', padGame);
-    expect(next.padMap['L.index_3']).toBe('RT');
+  it('rule 1: displaces the action of another Azeron button sending the same control', () => {
+    const twice: Scheme = deepFreeze({
+      ...padScheme(),
+      padMap: { ...padScheme().padMap, 'L.index_3': 'RB' },
+      map: {
+        ...padScheme().map,
+        ship: { ...padScheme().map['ship'], 'L.index_3': { tap: 'silent' } },
+      },
+    });
+    const next = assign(twice, slot('ship', 'L.index_1'), 'hardpoints', padGame);
+    expect([
+      next.map['ship']?.['L.index_3'],
+      plan(next, padGame).findings.filter((f) => f.rule === 'key-collision'),
+    ]).toEqual([undefined, []]);
   });
 
-  it('rule 2: an action with no native pad control keeps the button its own control', () => {
-    const next = assign(base(), slot('ship', 'L.index_1'), 'gear', padGame);
-    expect(next.padMap).toEqual(padScheme().padMap);
-    expect(next.map['ship']?.['L.index_1']).toEqual({ tap: 'gear' });
-    expect(pinSends(next, 'L.index_1')).toEqual(pad('RB'));
+  it("rule 1: displaces the controller's own button sending the same control, which then shows the action", () => {
+    const scheme = withController({
+      ...padScheme(),
+      map: {
+        ...padScheme().map,
+        ship: { ...padScheme().map['ship'], 'pad.RB': { tap: 'galaxy' } },
+      },
+    });
+    const next = assign(scheme, slot('ship', 'L.index_1'), 'hardpoints', padGame);
+    expect([
+      next.map['ship']?.['pad.RB'],
+      shownAction(next, 'ship', 'pad.RB')?.id,
+      plan(next, padGame).findings.filter((f) => f.rule === 'key-collision'),
+    ]).toEqual([undefined, 'hardpoints', []]);
   });
 
-  it('rule 2: on a button with no pad control it sends nothing, and core says so', () => {
+  it("rule 1: an action put on the controller's button is shown on the Azeron button sending it", () => {
+    const next = assign(withController(padScheme()), slot('ship', 'pad.RB'), 'hardpoints', padGame);
+    expect([
+      shownAction(next, 'ship', 'L.index_1')?.id,
+      next.map['ship']?.['L.index_1'],
+      boundTo(next, 'hardpoints'),
+    ]).toEqual(['hardpoints', undefined, [pad('RB')]]);
+  });
+
+  it('rule 2: a button sending nothing gets the control the game ships the action on, when free', () => {
+    const next = assign(base(), slot('ship', 'L.index_4'), 'hardpoints', padGame);
+    expect([next.padMap['L.index_4'], boundTo(next, 'hardpoints')]).toEqual(['Y', [pad('Y')]]);
+  });
+
+  it('rule 2: else the first free control, never one a button with an action already sends', () => {
+    // A (Lite's FSD, on L.middle_1) and RB, RT are taken; B is the first free one.
     const next = assign(base(), slot('ship', 'L.index_4'), 'gear', padGame);
-    expect('L.index_4' in next.padMap).toBe(false);
-    expect(pinSends(next, 'L.index_4')).toBeUndefined();
-    const found = plan(next, padGame).findings.find((f) => f.rule === 'sends-nothing');
-    expect(found?.control).toBe('L.index_4');
+    expect([next.padMap['L.index_4'], plan(next, padGame).findings]).toEqual(['B', []]);
   });
 
-  it('rule 4: clearing takes the label off and the button still sends its control', () => {
+  it('rule 2: takes a control from a button that sends it with nothing on it', () => {
+    const idle: Scheme = deepFreeze({
+      ...padScheme(),
+      padMap: { ...padScheme().padMap, 'L.index_2': 'Y' },
+    });
+    const next = assign(idle, slot('ship', 'L.index_4'), 'hardpoints', padGame);
+    expect([next.padMap['L.index_4'], 'L.index_2' in next.padMap]).toEqual(['Y', false]);
+  });
+
+  it('rule 2: never a stick direction a stick of the setup sends', () => {
+    const g: Game = {
+      ...padGame,
+      actions: [
+        ...padGame.actions,
+        {
+          id: 'walk',
+          name: 'Walk',
+          mode: 'ship',
+          role: 'movement',
+          required: false,
+          native: { pad: 'LS_UP' },
+        },
+      ],
+    };
+    const next = assign(base(), slot('ship', 'L.index_4'), 'walk', g);
+    expect(next.padMap['L.index_4']).toBe('B');
+  });
+
+  it('rule 2: with no control free the button sends nothing, and core says so', () => {
+    const controls = PAD_CONTROLS.filter((c) => !/^[LR]S_/.test(c));
+    const g: Game = {
+      id: 'many',
+      name: 'Many',
+      modes: [{ id: 'm', name: 'M' }],
+      actions: [...controls, 'last'].map((id) => ({
+        id: `a_${id}`,
+        name: id,
+        mode: 'm',
+        role: 'ability' as const,
+        required: false,
+      })),
+    };
+    const positions = CYBORG2_LEFT.positions
+      .filter((p) => p.name !== 'stick')
+      .map((p) => `L.${p.name}`);
+    const full: Scheme = deepFreeze({
+      ...padScheme(),
+      gameId: 'many',
+      padMap: Object.fromEntries(controls.map((c, i) => [positions[i], c])),
+      map: { m: Object.fromEntries(controls.map((c, i) => [positions[i], { tap: `a_${c}` }])) },
+    });
+    const free = `R.${CYBORG2_LEFT.positions[0]?.name ?? ''}`;
+    const next = assign(full, { mode: 'm', control: free, press: 'tap' }, 'a_last', g);
+    expect([
+      free in next.padMap,
+      plan(next, g)
+        .findings.filter((f) => f.rule === 'sends-nothing')
+        .map((f) => f.control),
+    ]).toEqual([false, [free]]);
+  });
+
+  it('rule 3: clearing takes the action off, and a button left with nothing stops sending', () => {
+    // Right index 1 carries Fire in the ship and nothing in the SRV.
+    const next = clear(base(), slot('ship', 'R.index_1'));
+    expect([
+      next.map['ship']?.['R.index_1'],
+      'R.index_1' in next.padMap,
+      pinSends(next, 'R.index_1'),
+    ]).toEqual([undefined, false, undefined]);
+  });
+
+  it('rule 3: a button still carrying an action in another mode keeps its control', () => {
+    // Left index 1: Boost in the ship, Jump in the SRV.
     const next = clear(base(), slot('ship', 'L.index_1'));
-    expect(next.map['ship']?.['L.index_1']).toBeUndefined();
-    expect(next.padMap).toEqual(padScheme().padMap);
-    expect(pinSends(next, 'L.index_1')).toEqual(pad('RB'));
+    expect([next.map['ship']?.['L.index_1'], next.padMap['L.index_1']]).toEqual([undefined, 'RB']);
   });
 
-  it('touches nothing with key output, and nothing for a press other than the tap', () => {
+  it("rule 3: clearing the controller's button takes the action off the Azeron button sending it too", () => {
+    const scheme = withController(padScheme());
+    const next = clear(scheme, slot('ship', 'pad.RT'));
+    expect([shownAction(next, 'ship', 'pad.RT'), next.map['ship']?.['R.index_1']]).toEqual([
+      undefined,
+      undefined,
+    ]);
+  });
+
+  it('rule 4: moving clears the source and assigns the target', () => {
+    const next = move(base(), slot('ship', 'R.index_1'), slot('ship', 'L.index_4'), padGame);
+    // Fire ships on RT; R.index_1 sent it and, emptied, gave it up: RT is free for the target.
+    expect([next.padMap['L.index_4'], 'R.index_1' in next.padMap, boundTo(next, 'fire')]).toEqual([
+      'RT',
+      false,
+      [pad('RT')],
+    ]);
+  });
+
+  it('touches no pad map with key output, nor for a press other than the tap', () => {
     const keys = assign(deepFreeze(keysScheme()), slot('ship', 'L.index_3'), 'hardpoints', padGame);
     expect(keys.padMap).toEqual({});
     const long = assign(base(), slot('ship', 'L.index_3', 'long'), 'hardpoints', padGame);
     expect('L.index_3' in long.padMap).toBe(false);
   });
 
-  it('returns the same scheme when the action is already there and sends its control', () => {
+  it('returns the same scheme when the action is already there', () => {
     const scheme = base();
     expect(assign(scheme, slot('ship', 'L.index_1'), 'boost', padGame)).toBe(scheme);
   });
 
-  it('undo and redo carry the pad map with the labels', () => {
+  it('undo and redo carry the pad map with the map', () => {
     const start = base();
     const edited = assign(start, slot('ship', 'L.index_3'), 'hardpoints', padGame);
     const h = commit(startHistory(start), edited);
-    expect(undo(h).present.padMap).toEqual(padScheme().padMap);
-    expect(redo(undo(h)).present.padMap['L.index_3']).toBe('Y');
+    expect([undo(h).present.padMap, redo(undo(h)).present.padMap['L.index_3']]).toEqual([
+      padScheme().padMap,
+      'Y',
+    ]);
+  });
+});
+
+describe('one control per binding set', () => {
+  it('moves an action within its binding set only: on the mouse and on a controller button at once', () => {
+    const scheme: Scheme = deepFreeze({
+      ...padScheme(),
+      devices: { ...AZERONS_ONLY, mouse: true },
+      map: { ship: { 'mouse.left': { tap: 'fire' }, 'R.index_1': { tap: 'fire' } } },
+    });
+    const next = assign(scheme, slot('ship', 'L.index_4'), 'fire', padGame);
+    expect([
+      next.map['ship']?.['mouse.left'],
+      next.map['ship']?.['R.index_1'],
+      next.map['ship']?.['L.index_4'],
+    ]).toEqual([{ tap: 'fire' }, undefined, { tap: 'fire' }]);
+  });
+});
+
+describe('setDevices', () => {
+  const both = deepFreeze(xboxControllerPreset(helldivers2));
+  const leftAndMouse = { ...AZERONS_ONLY, azerons: 'left' as const };
+
+  it('the left Azeron brings the mouse, whatever it is told', () => {
+    expect(setDevices(both, leftAndMouse, helldivers2).devices).toEqual({
+      azerons: 'left',
+      keyboard: false,
+      mouse: true,
+      controller: false,
+    });
+  });
+
+  it('takes the actions off the right unit, which the setup no longer has', () => {
+    const next = setDevices(both, leftAndMouse, helldivers2);
+    expect(Object.keys(next.map['default'] ?? {}).filter((c) => c.startsWith('R.'))).toEqual([]);
+  });
+
+  it('starts the mouse from what the game ships: Fire and Aim on its buttons, beside the unit', () => {
+    const next = setDevices(both, leftAndMouse, helldivers2);
+    expect([
+      next.map['default']?.['mouse.left'],
+      next.map['default']?.['mouse.right'],
+      next.map['default']?.['L.index_2'],
+    ]).toEqual([{ tap: 'fire_primary' }, { tap: 'aim' }, { tap: 'fire_primary' }]);
+  });
+
+  it('keeps the game binding of every action the mouse ships on, so the mouse does what it did', () => {
+    const p = plan(setDevices(both, leftAndMouse, helldivers2), helldivers2);
+    expect(
+      p.gameBindings
+        .filter((b) => b.set === 'keyboard' && b.signal?.kind === 'mouse')
+        .map((b) => [b.action, b.signal]),
+    ).toEqual([
+      ['fire_primary', { kind: 'mouse', button: 'left' }],
+      ['aim', { kind: 'mouse', button: 'right' }],
+    ]);
+  });
+
+  it('adds a controller with nothing new where the Azerons already send what the game ships', () => {
+    const next = setDevices(both, { ...AZERONS_ONLY, controller: true }, helldivers2);
+    expect([
+      Object.keys(next.map['default'] ?? {}).filter((c) => c.startsWith('pad.')),
+      shownAction(next, 'default', 'pad.X')?.id,
+    ]).toEqual([[], 'reload']);
+  });
+
+  it('returns the same scheme for the same devices', () => {
+    expect(setDevices(both, AZERONS_ONLY, helldivers2)).toBe(both);
+  });
+});
+
+describe('controller output: what every control shows is what the game does', () => {
+  // Helldivers 2 from the Xbox controller preset, edited by a long run of drags, clears and
+  // moves. After every edit, on every Xbox control something of the setup sends, the action the
+  // controls sending it show is the one the game's controller bindings put on it, and no other
+  // (bar the game's own second uses of one button, such as Climb on a held A next to Interact).
+  const g = helldivers2;
+  // A stick sends the moves: an action a stick sends for is the stick's, not a button's.
+  const actions = g.actions
+    .filter((a) => a.native?.pad === undefined || !/^LS_/.test(a.native.pad))
+    .map((a) => a.id);
+  const buttons = [
+    ...CYBORG2_LEFT.positions.filter((p) => p.name !== 'stick').map((p) => `L.${p.name}`),
+    ...CYBORG2_RIGHT.positions.filter((p) => p.name !== 'stick').map((p) => `R.${p.name}`),
+  ];
+  const pads = PAD_CONTROLS.filter((c) => !/^[LR]S_/.test(c)).map((c) => `pad.${c}`);
+
+  /** Deterministic: the same run every time. */
+  function* steps(seed: number, count: number, controls: readonly string[]) {
+    let x = seed;
+    const next = (n: number) => {
+      x = (x * 1103515245 + 12345) % 2147483648;
+      return x % n;
+    };
+    for (let i = 0; i < count; i++) {
+      const kind = next(3);
+      const control = controls[next(controls.length)] ?? '';
+      const other = controls[next(controls.length)] ?? '';
+      const action = actions[next(actions.length)] ?? '';
+      yield { kind, control, other, action };
+    }
+  }
+
+  function faults(scheme: Scheme): string[] {
+    const p = plan(scheme, g);
+    const out: string[] = [];
+    const bad = p.findings.filter(
+      (f) => f.rule === 'key-collision' || f.rule === 'pad-bound-twice',
+    );
+    if (bad.length > 0) out.push(`findings: ${bad.map((f) => f.rule).join(', ')}`);
+    const controls = [...buttons, ...pads].filter((c) => padSignalOf(scheme, c) !== undefined);
+    for (const pc of new Set(controls.map((c) => padSignalOf(scheme, c)))) {
+      const senders = controls.filter((c) => padSignalOf(scheme, c) === pc);
+      const shown = new Set(senders.map((c) => shownAction(scheme, 'default', c)?.id ?? null));
+      if (shown.size > 1) out.push(`${pc}: shown differently on ${senders.join(', ')}`);
+      const one = [...shown][0] ?? null;
+      const shownNative =
+        one === null ? undefined : g.actions.find((a) => a.id === one)?.native?.pad;
+      const bound = p.gameBindings
+        .filter(
+          (b) => b.set === 'controller' && b.signal?.kind === 'pad' && b.signal.control === pc,
+        )
+        .map((b) => b.action)
+        .filter((a) => a === one || g.actions.find((x) => x.id === a)?.native?.pad !== shownNative);
+      const want = one === null ? [] : [one];
+      if (JSON.stringify(bound) !== JSON.stringify(want)) {
+        out.push(`${pc}: shows ${String(one)}, the game does ${bound.join(', ') || 'nothing'}`);
+      }
+    }
+    return out;
+  }
+
+  it.each([
+    ['both Azerons', AZERONS_ONLY, buttons],
+    [
+      'both Azerons and the controller',
+      { ...AZERONS_ONLY, controller: true },
+      [...buttons, ...pads],
+    ],
+    ['the controller only', { ...AZERONS_ONLY, azerons: 'none' as const, controller: true }, pads],
+  ])('holds through 300 edits with %s', (_, devices, controls) => {
+    let scheme: Scheme = { ...xboxControllerPreset(g), devices };
+    if (devices.azerons === 'none') scheme = { ...scheme, padMap: {}, map: { default: {} } };
+    const found: string[] = [];
+    let n = 0;
+    for (const step of steps(7 + controls.length, 300, controls)) {
+      n++;
+      const at = { mode: 'default', control: step.control, press: 'tap' as const };
+      scheme =
+        step.kind === 0
+          ? assign(scheme, at, step.action, g)
+          : step.kind === 1
+            ? clear(scheme, at)
+            : move(scheme, at, { ...at, control: step.other }, g);
+      for (const fault of faults(scheme)) found.push(`after edit ${n}: ${fault}`);
+    }
+    expect(found).toEqual([]);
   });
 });
 
@@ -580,6 +871,7 @@ describe('the sends-nothing fix on a fixed control', () => {
   it('keeps a working tap and takes off only the press that sends nothing', () => {
     const scheme = deepFreeze({
       ...keysScheme(),
+      devices: { ...AZERONS_ONLY, keyboard: true },
       map: { ...keysScheme().map, ship: { 'key.J': { tap: 'fsd', long: 'galaxy' } } },
     });
     const before = plan(scheme).findings.find((f) => f.rule === 'sends-nothing');

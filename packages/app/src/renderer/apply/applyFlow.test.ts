@@ -5,6 +5,7 @@ import type { DrawerState } from './applyFlow';
 
 const unit = (over: Partial<ApplyUnitChange> = {}): ApplyUnitChange => ({
   hand: 'left',
+  used: true,
   connected: true,
   differs: true,
   inputsChanged: 3,
@@ -33,6 +34,7 @@ const preview = (over: Partial<ApplyPreview> = {}): ApplyPreview => ({
   anyChange: true,
   left: unit(),
   right: unit({ hand: 'right', inputsChanged: 1, deletes: [] }),
+  game: { via: 'sheet', rows: [] },
   ...over,
 });
 
@@ -81,6 +83,14 @@ describe('the Apply drawer flow', () => {
     expect(canApply(START)).toBe(false);
     expect(drawerView(ready({ ready: false })).apply).toEqual({ label: 'Apply', disabled: true });
     expect(drawerView(ready()).apply).toEqual({ label: 'Apply', disabled: false });
+  });
+
+  it('shows a section for each unit the setup uses, and none for one it does not', () => {
+    const leftOnly = ready({
+      right: unit({ hand: 'right', used: false, differs: false, write: null, deletes: [] }),
+    });
+    expect(drawerView(leftOnly).sections.map((section) => section.hand)).toEqual(['left']);
+    expect(drawerView(ready()).sections.map((section) => section.hand)).toEqual(['left', 'right']);
   });
 
   it('does not start an apply that is not ready, nor from any other step', () => {

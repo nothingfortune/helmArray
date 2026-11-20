@@ -1,7 +1,13 @@
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { BUILT_IN_DEVICES, currentVersion, resolve, xboxControllerPreset } from '@helmarray/core';
+import {
+  BUILT_IN_DEVICES,
+  currentVersion,
+  resolve,
+  unitOf,
+  xboxControllerPreset,
+} from '@helmarray/core';
 import type { Game, Scheme } from '@helmarray/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AUTOSAVE_MS, DataStore, StoreError, isSafeId, isScheme } from './store';
@@ -166,7 +172,7 @@ describe('what is handed in is what is written', () => {
     const asApplied = structuredClone(plan);
     const saved = data.saveApplied(scheme.id, plan);
     plan.findings.push({ rule: 'later', severity: 'error', message: 'changed after' });
-    plan.units.left.hand = 'right';
+    unitOf(plan, 'left').hand = 'right';
     plan.bindings.length = 0;
     await saved;
     expect(await data.getApplied(scheme.id)).toEqual(asApplied);

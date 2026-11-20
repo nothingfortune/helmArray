@@ -6,7 +6,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Plan, Scheme } from '@helmarray/core';
 import type { ApplyPreview, ApplyResult } from '../../packages/app/src/shared/api';
-import { assign } from '../../packages/app/src/renderer/screens/editor-model';
+import { assign, move } from '../../packages/app/src/renderer/screens/editor-model';
 import { isWrite } from './support/fake-hid';
 import { World, expectedSlot, heldSlot, holding } from './support/world';
 
@@ -122,5 +122,95 @@ describe('J2: moving Fire to another button of the right unit', () => {
 
   it('the keys the plan dealt are six, one for each action placed', () => {
     expect(Object.keys(appliedPlan.ledger)).toHaveLength(6);
+  });
+});
+
+// J2 on the owner's model (M4.5): Azerons as a controller on Helldivers 2. Reload goes from its
+// button (sending X) onto Left index 1, which sends RB. The unit is written, the right unit isn't,
+// and the drawer lists the game's controller bindings to change: Reload onto RB, and Ping, which
+// the game ships on RB, off it.
+describe('J2: moving Reload onto another button of the left unit, Azerons as a controller', () => {
+  let world: World;
+  let applied: Plan;
+  let edited: Plan;
+  let preview: ApplyPreview;
+  let result: ApplyResult;
+  let afterApply: ApplyPreview;
+  let rightSentBefore: number;
+
+  beforeAll(async () => {
+    world = await World.create();
+    await world.boot();
+    const created = await world.createScheme('xbox');
+    applied = await world.planOf(created);
+    const first = await world.previewAndApply(created.id);
+    // The test starts from the preset applied and read back in sync.
+    expect([first.result.ok, world.state.sync.label]).toEqual([true, 'In sync']);
+    // Reload is on the left unit's middle 1, which sends X, as the game ships it.
+    expect(created.map['default']?.['L.middle_1']).toEqual({ tap: 'reload' });
+
+    const after = await world.edit(created.id, (scheme, game) =>
+      move(
+        scheme,
+        { mode: 'default', control: 'L.middle_1', press: 'tap' },
+        { mode: 'default', control: 'L.index_1', press: 'tap' },
+        game,
+      ),
+    );
+    edited = await world.planOf(after);
+    await world.until('the pill to notice the edit', () => world.state.sync.label !== 'In sync');
+    rightSentBefore = world.right.commands().length;
+    ({ preview, result } = await world.previewAndApply(created.id));
+    await world.idle();
+    afterApply = await world.helm.previewApply(created.id);
+  });
+
+  afterAll(async () => {
+    await world.dispose();
+  });
+
+  it('the edit changed the left unit’s half only: middle 1 stops sending, index 1 still sends RB', () => {
+    expect([
+      isDeepStrictEqual(expectedSlot(edited, 'left', 1), expectedSlot(applied, 'left', 1)),
+      isDeepStrictEqual(expectedSlot(edited, 'right', 1), expectedSlot(applied, 'right', 1)),
+      edited.units.left?.pins.find((p) => p.control === 'L.index_1')?.presses.tap,
+      edited.units.left?.pins.find((p) => p.control === 'L.middle_1')?.presses.tap,
+    ]).toEqual([false, true, { kind: 'pad', control: 'RB' }, undefined]);
+  });
+
+  it('the drawer lists the unit write and the two game bindings to set', () => {
+    expect({
+      left: preview.left.write?.slot,
+      right: preview.right.write,
+      game: preview.game.rows.map((row) => [row.set, row.actionName, row.from, row.to]),
+    }).toEqual({
+      left: 0,
+      right: null,
+      game: [
+        ['controller', 'Reload', { kind: 'pad', control: 'X' }, { kind: 'pad', control: 'RB' }],
+        ['controller', 'Ping / comms wheel', { kind: 'pad', control: 'RB' }, null],
+      ],
+    });
+  });
+
+  it('Apply writes the left unit, and sends the right unit no write', () => {
+    expect([
+      result.units.map((u) => [u.hand, u.status]),
+      world.right.commands().slice(rightSentBefore).filter(isWrite),
+    ]).toEqual([
+      [
+        ['left', 'applied'],
+        ['right', 'unchanged'],
+      ],
+      [],
+    ]);
+  });
+
+  it('the pill is back to In sync', () => {
+    expect(world.state.sync).toEqual({ label: 'In sync', tone: 'ok' });
+  });
+
+  it('a second look lists no game binding: the game holds what was applied', () => {
+    expect(afterApply.game.rows).toEqual([]);
   });
 });

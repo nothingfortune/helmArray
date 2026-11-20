@@ -12,12 +12,17 @@
 //                   to compare it with. A disconnected unit can't be in sync, and what it
 //                   last held is stale, so it is ignored in step 1.
 //   4. in-sync      Both units connected, both read, both match, nothing pending.
+//
+// Only the units the setup uses are judged: for *left Azeron + mouse* the right unit is neither
+// connected nor not, and what it holds is nothing to the pill.
 
 import type { Verdict } from '@helmarray/azeron';
 import type { Hand, Plan } from '@helmarray/core';
 import { canonical } from './plan-fingerprint';
 
 export interface HandSync {
+  /** The setup uses this unit. One it doesn't is not judged at all. Defaults to true. */
+  used?: boolean;
   connected: boolean;
   /**
    * `verify()` of what the unit holds against the last applied layout, or null when nothing
@@ -48,7 +53,10 @@ export type SyncState = SyncKind & { label: string; tone: SyncTone };
 const HANDS: Hand[] = ['left', 'right'];
 const name = (hand: Hand | undefined) => (hand === 'right' ? 'Right' : 'Left');
 
+const judged = (unit: HandSync) => unit.used !== false;
+
 const differs = (unit: HandSync) =>
+  judged(unit) &&
   unit.connected &&
   unit.verdict !== null &&
   (unit.verdict.differences.length > 0 || unit.verdict.unchecked.length > 0);
@@ -74,7 +82,7 @@ export function syncState(input: SyncInput): SyncState {
     };
   }
 
-  const away = HANDS.filter((hand) => !input[hand].connected);
+  const away = HANDS.filter((hand) => judged(input[hand]) && !input[hand].connected);
   if (away.length > 0) {
     return {
       kind: 'unknown',
@@ -93,7 +101,7 @@ export function syncState(input: SyncInput): SyncState {
       tone: 'warning',
     };
   }
-  const unread = HANDS.filter((hand) => input[hand].verdict === null);
+  const unread = HANDS.filter((hand) => judged(input[hand]) && input[hand].verdict === null);
   if (unread.length > 0) {
     return {
       kind: 'unknown',
@@ -135,9 +143,10 @@ function says(plan: Plan | null): Map<string, string[]> {
     out.set(control, [...(out.get(control) ?? []), canonical(what)]);
   if (plan === null) return out;
   for (const hand of HANDS) {
-    const { pins, stick } = plan.units[hand];
-    for (const pin of pins) if (Object.keys(pin.presses).length > 0) add(pin.control, pin);
-    add(STICK[hand], stick);
+    const unit = plan.units[hand];
+    if (unit === undefined) continue;
+    for (const pin of unit.pins) if (Object.keys(pin.presses).length > 0) add(pin.control, pin);
+    add(STICK[hand], unit.stick);
   }
   for (const binding of plan.bindings) add(binding.control, binding);
   return out;

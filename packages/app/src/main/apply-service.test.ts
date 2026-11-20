@@ -72,6 +72,7 @@ async function rig(
     saveApplied?: ApplyServiceDeps['saveApplied'];
     setActive?: ApplyServiceDeps['setActive'];
     saveScheme?: ApplyServiceDeps['saveScheme'];
+    gameHolds?: ApplyServiceDeps['gameHolds'];
   } = {},
 ) {
   const units = new Map<string, FakeUnit>([
@@ -140,6 +141,7 @@ async function rig(
     setActive,
     saveScheme,
     settled,
+    ...(over.gameHolds ? { gameHolds: over.gameHolds } : {}),
   });
   const reports = () => [...units.values()].reduce((n, u) => n + u.received.length, 0);
   return {
@@ -381,7 +383,9 @@ describe('Apply as the windows ask for it', () => {
   describe('keeping the keys that were dealt', () => {
     const planOf = (s: Scheme) => resolve(s, game, BUILT_IN_DEVICES);
     const keyOf = (p: Plan, control: string) => {
-      const pin = [...p.units.left.pins, ...p.units.right.pins].find((x) => x.control === control);
+      const pin = [...(p.units.left?.pins ?? []), ...(p.units.right?.pins ?? [])].find(
+        (x) => x.control === control,
+      );
       return JSON.stringify(pin?.presses);
     };
 
@@ -757,5 +761,144 @@ describe('Apply as the windows ask for it', () => {
     ]);
     expect(applied.ok).toBe(true);
     expect(preview.schemeName).toBe('Main');
+  });
+});
+
+describe('Apply for a setup that uses some of the units, or none', () => {
+  let r: Awaited<ReturnType<typeof rig>> | undefined;
+  beforeEach(() => void vi.useFakeTimers());
+  afterEach(async () => {
+    await r?.devices.stop();
+    r = undefined;
+    vi.useRealTimers();
+  });
+
+  const leftOnly: Scheme = {
+    ...scheme,
+    devices: { azerons: 'left', keyboard: false, mouse: true, controller: false },
+    accepted: [{ rule: 'stick-no-directions', control: 'L.stick', reason: 'No stick' }],
+    map: { ship: { 'L.index_1': { tap: 'boost' }, 'L.middle_1': { tap: 'fire' } } },
+  };
+  const noUnit: Scheme = {
+    ...scheme,
+    devices: { azerons: 'none', keyboard: true, mouse: true, controller: false },
+    accepted: [],
+    map: { ship: { 'key.B': { tap: 'boost' }, 'mouse.left': { tap: 'fire' } } },
+  };
+
+  it('is ready with the right unit unplugged, and asks only about the left', async () => {
+    r = await rig({ scheme: leftOnly, right: false });
+    const preview = await r.service.preview(leftOnly.id);
+    expect([preview.ready, preview.checks.map((c) => c.text), preview.right.used]).toEqual([
+      true,
+      ['The Azeron app is closed.', 'The left Azeron is connected.', 'The scheme has no errors.'],
+      false,
+    ]);
+  });
+
+  it('writes the left unit and nothing to the right one, which keeps what it holds', async () => {
+    r = await rig({ scheme: leftOnly });
+    const right = r.right as FakeUnit;
+    const slotsBefore = [...right.slots.keys()];
+    const result = await r.service.apply(leftOnly.id, fp(leftOnly));
+    expect({
+      ok: result.ok,
+      message: result.message,
+      units: result.units.map((u) => u.hand),
+      rightWrites: writesTo(right),
+      rightSlots: [...right.slots.keys()],
+      leftWrote: writesTo(r.left).length > 0,
+    }).toEqual({
+      ok: true,
+      message: 'The left unit now runs the layout.',
+      units: ['left'],
+      rightWrites: [],
+      rightSlots: slotsBefore,
+      leftWrote: true,
+    });
+  });
+
+  it('needs no unit, and not the Azeron app closed, for a setup with no Azeron', async () => {
+    r = await rig({ scheme: noUnit, azeron: () => Promise.resolve(true) });
+    const preview = await r.service.preview(noUnit.id);
+    expect([preview.ready, preview.checks.map((c) => c.text)]).toEqual([
+      true,
+      ['The scheme has no errors.'],
+    ]);
+  });
+
+  it('applies a setup with no Azeron without a word to either unit, and remembers it', async () => {
+    r = await rig({ scheme: noUnit, azeron: () => Promise.resolve(true) });
+    const before = r.reports();
+    const result = await r.service.apply(noUnit.id, fp(noUnit));
+    expect([result, r.reports() - before, r.saveApplied.mock.calls.length]).toEqual([
+      { ok: true, message: 'This setup uses no Azeron.', units: [] },
+      0,
+      1,
+    ]);
+  });
+});
+
+describe('the game half of the Apply drawer', () => {
+  let r: Awaited<ReturnType<typeof rig>> | undefined;
+  beforeEach(() => void vi.useFakeTimers());
+  afterEach(async () => {
+    await r?.devices.stop();
+    r = undefined;
+    vi.useRealTimers();
+  });
+
+  // Skiff ships Boost and Fire on no key, so the game's own keys hand each a key of the pool:
+  // two of the game's keyboard bindings change, and the file isn't written, so by hand.
+  const single: Scheme = {
+    ...scheme,
+    map: { ship: { 'L.index_1': { tap: 'boost' }, 'L.middle_1': { tap: 'fire' } } },
+  };
+  const singlePlan = resolve(single, game, BUILT_IN_DEVICES);
+
+  it('lists each game binding that changes, in the game’s words, from what the game ships', async () => {
+    r = await rig({ scheme: single });
+    const preview = await r.service.preview(single.id);
+    expect(preview.game).toEqual({
+      via: 'sheet',
+      rows: [
+        {
+          set: 'keyboard',
+          mode: 'ship',
+          modeName: 'Ship',
+          action: 'boost',
+          actionName: 'Boost',
+          to: { kind: 'key', code: 'Home' },
+          from: null,
+        },
+        {
+          set: 'keyboard',
+          mode: 'ship',
+          modeName: 'Ship',
+          action: 'fire',
+          actionName: 'Fire',
+          to: { kind: 'key', code: 'Insert' },
+          from: null,
+        },
+      ],
+    });
+  });
+
+  it('lists nothing the game already holds from the setup applied to it last', async () => {
+    r = await rig({ scheme: single, gameHolds: () => Promise.resolve(singlePlan) });
+    expect((await r.service.preview(single.id)).game.rows).toEqual([]);
+  });
+
+  it('lists a binding back to where the game ships it, when the setup applied last moved it', async () => {
+    const moved: Plan = {
+      ...singlePlan,
+      gameBindings: singlePlan.gameBindings.map((b) =>
+        b.action === 'boost' ? { ...b, signal: { kind: 'key', code: 'End' } } : b,
+      ),
+    };
+    r = await rig({ scheme: single, gameHolds: () => Promise.resolve(moved) });
+    expect(
+      (await r.service.preview(single.id)).game.rows.map((row) => [row.action, row.from, row.to]),
+    ).toEqual([['boost', { kind: 'key', code: 'End' }, { kind: 'key', code: 'Home' }]]);
   });
 });

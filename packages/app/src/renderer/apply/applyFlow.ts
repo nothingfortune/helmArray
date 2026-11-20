@@ -199,7 +199,10 @@ export function drawerView(state: DrawerState): DrawerView {
     title: preview.schemeName === '' ? 'Apply' : `Apply ${preview.schemeName}`,
     subtitle: preview.gameName === '' ? 'What changes' : `${preview.gameName} · what changes`,
   };
-  const sections = [preview.left, preview.right].map((u) => unitSection(u, preview.azeronOpen));
+  // A unit the setup doesn't use (the right one, for the left Azeron and the mouse) has no section.
+  const sections = [preview.left, preview.right]
+    .filter((u) => u.used)
+    .map((u) => unitSection(u, preview.azeronOpen));
   if (state.phase === 'ready') {
     return {
       ...head,

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { UnitSession, unitRecords } from '@helmarray/azeron';
 import type { Game, Plan, Scheme } from '@helmarray/core';
-import { BUILT_IN_DEVICES, CYBORG2_LEFT, gameKeysPreset, resolve } from '@helmarray/core';
+import { BUILT_IN_DEVICES, CYBORG2_LEFT, gameKeysPreset, resolve, unitOf } from '@helmarray/core';
 import type { E2eControl } from './e2e-fakes';
 import { fakeBackends } from './e2e-fakes';
 import { E2E_UNIT_IDS } from './e2e-seam';
@@ -107,7 +107,12 @@ describe('what the control says the units hold', () => {
     const session = await sessionOn(0);
     const identity = await session.identify();
     await session.readSlots();
-    await session.write(1, 'Skiff', unitRecords(plan.units.left, CYBORG2_LEFT), identity.deviceId);
+    await session.write(
+      1,
+      'Skiff',
+      unitRecords(unitOf(plan, 'left'), CYBORG2_LEFT),
+      identity.deviceId,
+    );
     await session.switchTo(1);
     const unit = control.units()[0];
     expect([unit?.running, unit?.slots.find((s) => s.slot === 1)?.taps.length]).toEqual([1, 1]);

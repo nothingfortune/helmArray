@@ -17,10 +17,10 @@ import type {
   Signal,
   StickDirection,
 } from '@helmarray/core';
-import { PRESSES, STICK_DIRECTIONS, signalId } from '@helmarray/core';
+import { PRESSES, STICK_DIRECTIONS, padSignalOf, signalId } from '@helmarray/core';
 import type { StickLabels, UnitKey } from '../unit/Unit';
 import { handPrefix, positionName, positionOf } from '../unit/layout';
-import { fixFor, isAcceptable, isStick } from './editor-model';
+import { fixFor, isAcceptable, isStick, shownAction } from './editor-model';
 import type { Fix } from './editor-model';
 
 // ---- Signals, as words for a caption ----
@@ -196,15 +196,11 @@ function actionRef(game: Game, id: ActionId): ActionRef {
   return action === undefined ? { id, name: id } : { id, name: action.name, role: action.role };
 }
 
-/** The action a control carries in a mode: its tap, else its long press, else its double tap. */
-function leadingAction(scheme: Scheme, mode: ModeId, control: ControlId) {
-  const presses = scheme.map[mode]?.[control];
-  for (const press of PRESSES) {
-    const id = presses?.[press];
-    if (id !== undefined) return { press, id };
-  }
-  return undefined;
-}
+/**
+ * The action a control shows in a mode: its tap, else its long press, else its double tap; for a
+ * control sending an Xbox control, what that control does (THE PAD RULE in editor-model.ts).
+ */
+const leadingAction = shownAction;
 
 function unitKeys(
   scheme: Scheme,
@@ -214,7 +210,12 @@ function unitKeys(
 ): Record<ControlId, UnitKey> {
   const prefix = `${handPrefix(hand)}.`;
   const keys: Record<ControlId, UnitKey> = {};
-  for (const control of Object.keys(scheme.map[mode] ?? {})) {
+  // Every control with an action of its own, and every one sending an Xbox control another does.
+  const controls = new Set([
+    ...Object.keys(scheme.map[mode] ?? {}),
+    ...Object.keys(scheme.padMap).filter((c) => padSignalOf(scheme, c) !== undefined),
+  ]);
+  for (const control of controls) {
     if (!control.startsWith(prefix) || isStick(control)) continue;
     const lead = leadingAction(scheme, mode, control);
     if (lead === undefined) continue;
@@ -284,19 +285,23 @@ function sendsFor(
   control: ControlId,
   press: Press,
 ): { text: string | null; note: string } {
-  const pins = [...plan.units.left.pins, ...plan.units.right.pins];
+  const pins = [...(plan.units.left?.pins ?? []), ...(plan.units.right?.pins ?? [])];
   const signal = pins.find((p) => p.control === control)?.presses[press];
   if (signal === undefined) return { text: null, note: '' };
-  const action = scheme.map[mode]?.[control]?.[press];
+  const shown = shownAction(scheme, mode, control);
+  const action = shown?.press === press ? shown.id : scheme.map[mode]?.[control]?.[press];
   const onSheet = plan.bindSheet.some((r) => r.mode === mode && r.action === action);
+  const written = scheme.writeGameFile && game.file !== undefined;
   const note =
-    scheme.output === 'pad'
-      ? 'your pad bindings'
+    action === undefined
+      ? 'does nothing in the game'
       : onSheet
         ? "set it in the game's controls"
-        : scheme.writeGameFile && game.file !== undefined
+        : written
           ? 'chosen for you'
-          : "the game's own key";
+          : scheme.output === 'pad'
+            ? "the game's own button"
+            : "the game's own key";
   return { text: signalText(signal), note };
 }
 
@@ -328,13 +333,12 @@ function panelFor(input: PanelInput): PanelView {
       sendsNote: sends.note,
     };
   }
-  const here = scheme.map[mode]?.[control] ?? {};
+  const here = { ...(scheme.map[mode]?.[control] ?? {}) };
+  // A control sending an Xbox control shows what that control does (THE PAD RULE).
+  const shown = shownAction(scheme, mode, control);
+  if (here.tap === undefined && shown?.press === 'tap') here.tap = shown.id;
   const tap = here.tap;
   const sends = sendsFor(scheme, game, plan, mode, control, press);
-  // THE PAD RULE (editor-model.ts): taking the label off leaves the button sending its control.
-  const stillPad =
-    scheme.output === 'pad' && tap === undefined ? scheme.padMap[control] : undefined;
-  if (stillPad !== undefined && press === 'tap') sends.note = `Still sends ${padWord(stillPad)}`;
   return {
     control,
     where,
@@ -371,52 +375,6 @@ function panelFor(input: PanelInput): PanelView {
 export const assignable = (game: Game, mode: ModeId, actionId: ActionId): boolean =>
   game.actions.some((a) => a.id === actionId && a.mode === mode);
 
-/**
- * The editor's own findings about controller output (THE PAD RULE in editor-model.ts). A button
- * with no pad control at all is core's `sends-nothing`, so it is not repeated here. One that the
- * player kept comes back marked with their reason.
- */
-export function padFindings(scheme: Scheme, game: Game): Finding[] {
-  if (scheme.output !== 'pad') return [];
-  const out: Finding[] = [];
-  for (const mode of game.modes) {
-    for (const [control, presses] of Object.entries(scheme.map[mode.id] ?? {})) {
-      const action = presses.tap;
-      const sent = scheme.padMap[control];
-      if (action === undefined || sent === undefined || isStick(control)) continue;
-      const def = game.actions.find((a) => a.id === action && a.mode === mode.id);
-      const name = def?.name ?? action;
-      const native = def?.native?.pad;
-      let finding: Finding | undefined;
-      if (def !== undefined && native === undefined) {
-        finding = {
-          rule: 'pad-default-unknown',
-          severity: 'warning',
-          control,
-          action,
-          mode: mode.id,
-          message: `${game.name}'s controller default for ${name} isn't known: check it's on ${padWord(sent)} in the game's controls menu.`,
-        };
-      } else if (native !== undefined && native !== sent) {
-        finding = {
-          rule: 'pad-mismatch',
-          severity: 'warning',
-          control,
-          action,
-          mode: mode.id,
-          message: `${name} is on ${padWord(native)} in ${game.name} by default, but this button sends ${padWord(sent)} in every mode: move it to a button that sends ${padWord(native)}.`,
-        };
-      }
-      if (finding === undefined) continue;
-      const kept = scheme.accepted.find(
-        (a) => a.rule === finding.rule && a.control === control && a.action === action,
-      );
-      out.push(kept ? { ...finding, accepted: kept.reason } : finding);
-    }
-  }
-  return out;
-}
-
 const SEVERITY_ORDER = { error: 0, warning: 1 } as const;
 
 export function editorView(input: EditorViewInput): EditorView {
@@ -434,7 +392,7 @@ export function editorView(input: EditorViewInput): EditorView {
   // Core can report the same rule on the same control more than once (one per press, one per
   // stick direction), so a repeat gets a number to keep every key unique.
   const seen = new Map<string, number>();
-  const rows: FindingRow[] = [...plan.findings, ...padFindings(scheme, game)].map((finding) => {
+  const rows: FindingRow[] = plan.findings.map((finding) => {
     const base = keyFor(finding);
     const count = seen.get(base) ?? 0;
     seen.set(base, count + 1);

@@ -8,11 +8,11 @@ import {
   CLOSE_AZERON_FIRST,
   applyInDrawer,
   drawer,
-  flagAnAction,
   helldivers,
   leftUnit,
   keepEveryCheck,
   startFrom,
+  startWithChecks,
 } from './screens';
 
 // Legacy mode runs axe inside the page itself: the default opens a second page, which an
@@ -103,18 +103,18 @@ test.describe('axe: no serious or critical violations', () => {
 
   test('the Editor, with findings', async ({ helm }) => {
     const { page } = helm;
-    await startFrom(page, 'Xbox controller');
-    await flagAnAction(page);
-    await page.getByRole('button', { name: 'Close', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Keep, I know' }).first()).toBeVisible();
+    await startWithChecks(page);
     expect(await seriousViolations(page)).toEqual([]);
   });
 
   test('the Editor, with findings and the side panel open', async ({ helm }) => {
     const { page } = helm;
-    await startFrom(page, 'Xbox controller');
-    await flagAnAction(page);
+    await startWithChecks(page);
+    // A drop opens the side panel on the button it landed on.
+    const action = page.locator('.ed-actions').getByRole('button', { name: 'Throw grenade' });
+    await action.dragTo(leftUnit(page).getByRole('button', { name: 'Empty, middle 2' }));
     await expect(page.locator('.ed-panel-title')).toHaveText('Throw grenade');
+    await expect(page.getByRole('button', { name: 'Keep, I know' }).first()).toBeVisible();
     expect(await seriousViolations(page)).toEqual([]);
   });
 

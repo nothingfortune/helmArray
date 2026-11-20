@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Game, Hand, Plan, Scheme } from '@helmarray/core';
-import { BUILT_IN_DEVICES, gameKeysPreset, resolve } from '@helmarray/core';
+import { BUILT_IN_DEVICES, gameKeysPreset, resolve, unitOf } from '@helmarray/core';
 import {
   Command,
   FakeUnit,
@@ -44,8 +44,8 @@ const scheme: Scheme = {
 };
 const plan: Plan = resolve(scheme, game, BUILT_IN_DEVICES);
 const records: Record<Hand, UnitRecord[]> = {
-  left: unitRecords(plan.units.left, CYBORG2_LEFT),
-  right: unitRecords(plan.units.right, CYBORG2_RIGHT),
+  left: unitRecords(unitOf(plan, 'left'), CYBORG2_LEFT),
+  right: unitRecords(unitOf(plan, 'right'), CYBORG2_RIGHT),
 };
 
 const LEFT_ID = 49229; // what a FakeUnit says unless told otherwise
@@ -852,5 +852,121 @@ describe('the slot name', () => {
     expect(unitSlotName('x'.repeat(40))).toHaveLength(19);
     expect(unitSlotName('日本語')).toBe('helmArray');
     expect(unitSlotName(undefined)).toBe('helmArray');
+  });
+});
+
+// A setup of the left Azeron and the mouse: the plan has the left unit only.
+const leftOnly: Plan = resolve(
+  { ...scheme, devices: { azerons: 'left', keyboard: false, mouse: true, controller: false } },
+  game,
+  BUILT_IN_DEVICES,
+);
+// A setup with no Azeron at all.
+const noUnit: Plan = resolve(
+  { ...scheme, devices: { azerons: 'none', keyboard: true, mouse: true, controller: false } },
+  game,
+  BUILT_IN_DEVICES,
+);
+
+describe('a setup of the left Azeron and the mouse', () => {
+  // The right unit holds a layout of its own in two slots: anything done to it would show.
+  const rightHolds = { slots: { 0: { name: 'Default' }, 3: { name: 'Mine' } }, running: 3 };
+
+  it('has a plan with the left unit only', () => {
+    expect(Object.keys(leftOnly.units)).toEqual(['left']);
+  });
+
+  it('writes the left unit, and sends the right unit nothing at all', async () => {
+    const [left, right] = twoUnits({}, rightHolds);
+    const { deps } = await rig(left, right);
+    const before = right.received.length;
+    const result = await applyUnits(leftOnly, deps);
+    expect({
+      ok: result.ok,
+      message: result.message,
+      units: result.units.map((u) => [u.hand, u.status]),
+      toRight: right.received.length - before,
+      rightSlots: slotsOf(right),
+      rightRuns: right.running,
+    }).toEqual({
+      ok: true,
+      message: 'The left unit now runs the layout.',
+      units: [['left', 'applied']],
+      toRight: 0,
+      rightSlots: [0, 3],
+      rightRuns: 3,
+    });
+  });
+
+  it('applies with the right unit unplugged', async () => {
+    const [left, right] = twoUnits();
+    const { deps } = await rig(left, right);
+    const result = await applyUnits(leftOnly, {
+      ...deps,
+      unit: (hand) => (hand === 'left' ? deps.unit('left') : undefined),
+    });
+    expect([result.ok, result.message]).toEqual([true, 'The left unit now runs the layout.']);
+  });
+
+  it('previews nothing for the right unit, though it holds something else', async () => {
+    const [left, right] = twoUnits({}, rightHolds);
+    const held = await (await rig(left, right)).held();
+    const preview = previewUnits(leftOnly, held, { name: NAME });
+    expect({
+      left: [preview.left.used, preview.left.write?.slot],
+      right: preview.right,
+      changes: preview.changes.filter((c) => c.includes('right unit')),
+    }).toEqual({
+      left: [true, 1],
+      right: {
+        hand: 'right',
+        used: false,
+        connected: true,
+        differs: false,
+        inputsChanged: 0,
+        write: null,
+        deletes: [],
+        changes: [],
+        problem: null,
+      },
+      changes: [],
+    });
+  });
+
+  it('does not ask for the right unit to be connected', () => {
+    expect(previewUnits(leftOnly, {}, { name: NAME }).problems).toEqual([
+      'The left unit is not connected.',
+    ]);
+  });
+
+  it('gives the sync pill no verdict on the right unit, however it differs', async () => {
+    const [left, right] = twoUnits({}, rightHolds);
+    const held = await (await rig(left, right)).held();
+    expect(verifyUnits(leftOnly, held).right).toBeNull();
+  });
+});
+
+describe('a setup with no Azeron', () => {
+  it('touches neither unit, and says no unit is part of it', async () => {
+    const [left, right] = twoUnits();
+    const { deps } = await rig(left, right);
+    const before = [left.received.length, right.received.length];
+    const result = await applyUnits(noUnit, deps);
+    expect([
+      result,
+      [left.received.length - (before[0] ?? 0), right.received.length - (before[1] ?? 0)],
+    ]).toEqual([{ ok: true, units: [], message: 'This setup uses no Azeron.' }, [0, 0]]);
+  });
+
+  it('previews no change on either unit', async () => {
+    const [left, right] = twoUnits();
+    const held = await (await rig(left, right)).held();
+    const preview = previewUnits(noUnit, held, { name: NAME });
+    expect([preview.left.used, preview.right.used, preview.anyChange, preview.changes]).toEqual([
+      false,
+      false,
+      false,
+      [],
+    ]);
   });
 });

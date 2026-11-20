@@ -14,6 +14,29 @@ const away: HandSync = { connected: false, verdict: null };
 const unread: HandSync = { connected: true, verdict: null };
 const wrong: HandSync = { connected: true, verdict: differing };
 
+describe('syncState, for a unit the setup does not use', () => {
+  const unused = (sync: HandSync): HandSync => ({ ...sync, used: false });
+
+  it('does not judge what it holds, however it differs', () => {
+    expect(syncState({ left: matching, right: unused(wrong), pendingChanges: 0 }).kind).toBe(
+      'in-sync',
+    );
+  });
+
+  it('does not ask for it to be connected or read', () => {
+    expect([
+      syncState({ left: matching, right: unused(away), pendingChanges: 0 }).kind,
+      syncState({ left: matching, right: unused(unread), pendingChanges: 0 }).kind,
+    ]).toEqual(['in-sync', 'in-sync']);
+  });
+
+  it('still judges the unit the setup does use', () => {
+    expect(syncState({ left: away, right: unused(matching), pendingChanges: 0 }).label).toBe(
+      'Left unit not connected',
+    );
+  });
+});
+
 describe('syncState', () => {
   it('is in sync only when both units are connected, read, matching and nothing is pending', () => {
     expect(syncState({ left: matching, right: matching, pendingChanges: 0 })).toEqual({

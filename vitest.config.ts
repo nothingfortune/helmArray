@@ -32,10 +32,10 @@ export default defineConfig({
       // gate when a floor is more than 2 points under measured. Never lower it to pass a PR.
       // Falling below means the new code needs tests, not that the gate needs loosening.
       thresholds: {
-        statements: 87,
-        branches: 80,
-        functions: 81,
-        lines: 87,
+        statements: 87.6,
+        branches: 80.8,
+        functions: 82,
+        lines: 88,
       },
     },
   },

@@ -12,6 +12,7 @@ import {
   CYBORG2_RIGHT,
   gameKeysPreset,
   resolve,
+  unitOf,
 } from '@helmarray/core';
 import {
   FakeUnit,
@@ -69,7 +70,7 @@ const ids = { left: LEFT, right: RIGHT };
 
 /** A unit snapshot holding `plan`'s layout for `hand` in slot 1, as a real read of it would say. */
 async function holding(hand: Hand, plan: Plan, running = 1): Promise<UnitSnapshot> {
-  const records = unitRecords(plan.units[hand], DEVICE[hand]).map((r) =>
+  const records = unitRecords(unitOf(plan, hand), DEVICE[hand]).map((r) =>
     storedFromWritten(encodeRecord(1, r)),
   );
   const session = new UnitSession(
@@ -187,6 +188,45 @@ describe('the sync pill is the units against what was applied', () => {
     expect(pill(both, { active: false, applied: null, current: null }).label).toBe(
       'Not checked yet',
     );
+  });
+});
+
+describe('the sync pill for a setup of the left Azeron and the mouse', () => {
+  const left: Scheme = {
+    ...base,
+    devices: { azerons: 'left', keyboard: false, mouse: true, controller: false },
+    map: { ship: { 'L.index_1': { tap: 'boost' }, 'L.middle_1': { tap: 'fire' } } },
+    accepted: [{ rule: 'stick-no-directions', control: 'L.stick', reason: 'No stick' }],
+  };
+  const LEFT_PLAN = planOf(left);
+  // The right unit holds a layout of its own, which a setup of both units would call a difference.
+  const other: Scheme = { ...base, map: { ship: { 'R.index_1': { tap: 'boost' } } } };
+
+  it('says In sync with the left unit holding it, whatever the right unit holds', async () => {
+    const units = [await holding('left', LEFT_PLAN), await holding('right', planOf(other))];
+    expect(pill(units, active(LEFT_PLAN, LEFT_PLAN))).toEqual({ label: 'In sync', tone: 'ok' });
+  });
+
+  it('says In sync with the right unit unplugged', async () => {
+    expect(pill([await holding('left', LEFT_PLAN)], active(LEFT_PLAN, LEFT_PLAN))).toEqual({
+      label: 'In sync',
+      tone: 'ok',
+    });
+  });
+
+  it('still says the left unit is not connected when it is the one unplugged', async () => {
+    expect(pill([await holding('right', APPLIED)], active(LEFT_PLAN, LEFT_PLAN)).label).toBe(
+      'Left unit not connected',
+    );
+  });
+
+  it('says In sync for a setup with no Azeron, with no unit plugged in', () => {
+    const none = planOf({
+      ...base,
+      devices: { azerons: 'none', keyboard: true, mouse: true, controller: false },
+      map: { ship: { 'key.Tab': { tap: 'boost' }, 'mouse.left': { tap: 'fire' } } },
+    });
+    expect(pill([], active(none, none))).toEqual({ label: 'In sync', tone: 'ok' });
   });
 });
 
