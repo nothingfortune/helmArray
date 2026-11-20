@@ -7,12 +7,14 @@
     "node": ">=24"
   },
   "scripts": {
-    "check": "node --run typecheck && node --run lint && node --run format:check && node --run test",
+    "check": "node --run typecheck && node --run lint && node --run format:check && node --run test:coverage && node --run coverage:drift",
     "typecheck": "tsc -p tsconfig.json && tsc -p packages/core && tsc -p packages/azeron && tsc -p packages/games && tsc -p packages/app/tsconfig.node.json && tsc -p packages/app/tsconfig.web.json",
     "lint": "eslint --max-warnings=0 .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "coverage:drift": "node scripts/check-coverage-drift.ts",
     "dev": "cd packages/app && node --run dev",
     "tokens": "cd packages/app && node --run tokens"
   },
@@ -21,6 +23,8 @@
     "@helmarray/azeron": "workspace:*",
     "@helmarray/core": "workspace:*",
     "@types/node": "24.19.2",
+    "@vitest/coverage-v8": "5.1.0",
+    "@vitest/eslint-plugin": "1.6.28",
     "eslint": "10.15.0",
     "eslint-plugin-react-hooks": "7.1.1",
     "globals": "17.14.0",
@@ -28,6 +32,7 @@
     "typescript": "6.0.3",
     "typescript-eslint": "8.73.0",
     "vite": "8.3.8",
-    "vitest": "5.1.0"
+    "vitest": "5.1.0",
+    "yaml": "2.9.1"
   }
 }

@@ -74,8 +74,8 @@ describe.each([
   });
 
   it('the stick X fact matches, where the map states one', () => {
-    if (reference.stickInvertX !== undefined)
-      expect(unit.stick.invertX).toBe(reference.stickInvertX);
+    // A map that states no fact has nothing to compare, so it is compared with itself.
+    expect(unit.stick.invertX).toBe(reference.stickInvertX ?? unit.stick.invertX);
   });
 });
 

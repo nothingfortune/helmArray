@@ -120,6 +120,7 @@ describe('unitLayout: the drawn geometry', () => {
   });
 
   it('never overlaps two keys (the stick press sits on the stick, by design)', () => {
+    const faults: string[] = [];
     for (const hand of ['left', 'right'] as const) {
       const keys = unitLayout(hand).keys;
       for (let i = 0; i < keys.length; i++) {
@@ -128,30 +129,38 @@ describe('unitLayout: the drawn geometry', () => {
           const b = keys[j];
           if (!a || !b) continue;
           const pressOnStick = [a.shape, b.shape].sort().join() === 'press,stick';
-          if (pressOnStick) {
-            const press = a.shape === 'press' ? a : b;
-            const stick = a.shape === 'press' ? b : a;
-            expect(inside(press, stick), `${a.id}/${b.id}`).toBe(true);
-          } else {
-            expect(overlap(a, b), `${a.id} vs ${b.id} (${hand})`).toBe(false);
-          }
+          const press = a.shape === 'press' ? a : b;
+          const stick = a.shape === 'press' ? b : a;
+          if (pressOnStick && !inside(press, stick))
+            faults.push(`${a.id}/${b.id} (${hand}): press is off the stick`);
+          if (!pressOnStick && overlap(a, b)) faults.push(`${a.id} vs ${b.id} (${hand}): overlap`);
         }
       }
     }
+    expect(faults).toEqual([]);
   });
 
   it('keeps each cluster in its own zone and the finger keys out of every zone', () => {
+    const faults: string[] = [];
     for (const hand of ['left', 'right'] as const) {
       const l = unitLayout(hand);
-      const zone = (name: string) => l.zones.find((z) => z.name === name);
+      const zone = (name: string) => l.zones.find((z) => z.name === name) as Rect;
       for (const k of l.keys) {
-        if (k.pos.startsWith('dpad')) expect(inside(k, zone('D-pad') as Rect), k.id).toBe(true);
-        else if (k.pos.startsWith('thumb'))
-          expect(inside(k, zone('Thumb') as Rect), k.id).toBe(true);
-        else if (k.shape !== 'key') expect(inside(k, zone('Stick') as Rect), k.id).toBe(true);
-        else for (const z of l.zones) expect(overlap(k, z), `${k.id} in ${z.name}`).toBe(false);
+        const home = k.pos.startsWith('dpad')
+          ? 'D-pad'
+          : k.pos.startsWith('thumb')
+            ? 'Thumb'
+            : k.shape !== 'key'
+              ? 'Stick'
+              : undefined;
+        if (home !== undefined && !inside(k, zone(home)))
+          faults.push(`${k.id} (${hand}) is outside ${home}`);
+        if (home === undefined)
+          for (const z of l.zones)
+            if (overlap(k, z)) faults.push(`${k.id} (${hand}) is in ${z.name}`);
       }
     }
+    expect(faults).toEqual([]);
   });
 
   it('keeps the stick chips in the stick zone and off the stick itself', () => {
@@ -159,10 +168,11 @@ describe('unitLayout: the drawn geometry', () => {
       const l = unitLayout(hand);
       const stickZone = l.zones.find((z) => z.name === 'Stick') as Rect;
       const stick = l.keys.find((k) => k.shape === 'stick') as Rect;
-      for (const c of l.chips) {
-        expect(inside(c, stickZone), c.direction).toBe(true);
-        expect(overlap(c, stick), c.direction).toBe(false);
-      }
+      const faults = l.chips.flatMap((c) => [
+        ...(inside(c, stickZone) ? [] : [`${c.direction} (${hand}) is outside the stick zone`]),
+        ...(overlap(c, stick) ? [`${c.direction} (${hand}) sits on the stick`] : []),
+      ]);
+      expect(faults).toEqual([]);
     }
   });
 
