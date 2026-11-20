@@ -20,6 +20,8 @@ export interface CoordinatorDeps {
   gate: DevicesGate;
   /** The last lines of the exchange log. */
   readLog(lines: number): Promise<string[]>;
+  /** The active game and scheme, read afresh each time the state is worked out. */
+  active?(): { gameId: string | null; schemeId: string | null };
   trace?(unit: string, line: string): void;
 }
 
@@ -30,6 +32,8 @@ export interface Coordinator {
   /** The Azeron app opened or closed (or the first look at the running programs came back). */
   azeronChanged(state: ProcessState): void;
   chooseHand(unitId: number, hand: Hand): Promise<void>;
+  /** The active game or scheme was changed: works out the state again and tells the listeners. */
+  activeChanged(): Promise<void>;
   recentLog(lines: number): Promise<string[]>;
   /** Starts following the devices service. */
   start(): void;
@@ -63,6 +67,7 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
     devices: devices.snapshot(),
     hands: handsFor(idsOf(devices.snapshot()), store),
     writeBlock,
+    active: deps.active?.(),
   });
   let currentJson = JSON.stringify(current);
   let queue: Promise<void> = Promise.resolve();
@@ -96,7 +101,7 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
     // A unit unplugged for the question settles both hands: the state worked out here would
     // show the one left behind as asked about for a moment, so the next one is announced instead.
     if (finder.update(pendingAsk(snapshot, hands), blocked(), ids)) return;
-    const next = composeAppState({ devices: snapshot, hands, writeBlock });
+    const next = composeAppState({ devices: snapshot, hands, writeBlock, active: deps.active?.() });
     const json = JSON.stringify(next);
     if (json === currentJson) return;
     current = next;
@@ -141,6 +146,7 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
       await store.assign(unitId, hand);
       await refresh();
     },
+    activeChanged: () => refresh(),
     recentLog: (lines) => deps.readLog(lines),
     start: () => {
       stopListening ??= devices.onChange(() => void refresh());

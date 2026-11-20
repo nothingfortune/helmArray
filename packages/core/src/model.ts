@@ -211,3 +211,16 @@ export interface Scheme {
    */
   accepted: { rule: RuleId; control?: ControlId; action?: ActionId; reason: string }[];
 }
+
+/**
+ * What the app remembers between runs besides schemes (settings.json): which game is open and
+ * which scheme is the active one for each game.
+ */
+export interface AppSettings {
+  /** The game the app is set to, or null before one is chosen. */
+  activeGameId: string | null;
+  /** Per game id: the id of its active scheme. A game with none has no entry. */
+  activeScheme: Record<string, string>;
+}
+
+export const DEFAULT_SETTINGS: Readonly<AppSettings> = { activeGameId: null, activeScheme: {} };
