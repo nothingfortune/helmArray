@@ -19,7 +19,7 @@ export default defineConfig({
         // Types only: no statements to run.
         'packages/app/src/renderer/helm.d.ts',
         // Electron glue: these import `electron`, which no test may load. The Playwright e2e
-        // suite (coming) is what covers them; their logic lives in the counted modules beside
+        // suite (`pnpm test:e2e`) is what covers them; their logic lives in the counted modules beside
         // them.
         'packages/app/src/main/index.ts',
         'packages/app/src/preload/index.ts',
@@ -34,7 +34,7 @@ export default defineConfig({
       thresholds: {
         statements: 86,
         branches: 79,
-        functions: 80,
+        functions: 81,
         lines: 87,
       },
     },

@@ -6,3 +6,5 @@ out/
 dist/
 coverage/
 .claude/
+playwright-report/
+test-results/
