@@ -899,6 +899,110 @@ describe('the settings', () => {
   });
 });
 
+describe('copying a scheme', () => {
+  it('makes a new scheme of the same game with everything, the keys it was given included', async () => {
+    const { data } = await openStore();
+    const scheme = await data.createSchemeFromPreset('skiff', 'keys');
+    const dealt = {
+      ...scheme,
+      ledger: { 'L.index_1': { tap: { kind: 'key' as const, code: 'F13' as const } } },
+    };
+    data.saveScheme(dealt);
+    const copy = await data.copyScheme(scheme.id);
+    expect([copy.id === scheme.id, copy.name, copy.gameId, copy.ledger]).toEqual([
+      false,
+      "Game's own keys copy",
+      'skiff',
+      dealt.ledger,
+    ]);
+    expect((await readJson('schemes', `${copy.id}.json`))['name']).toBe("Game's own keys copy");
+  });
+
+  it('gives a second copy a name of its own', async () => {
+    const { data } = await openStore();
+    const scheme = await data.createSchemeFromPreset('skiff', 'xbox');
+    await data.copyScheme(scheme.id);
+    expect((await data.copyScheme(scheme.id)).name).toBe('Xbox controller copy 2');
+  });
+
+  it('refuses a scheme that is not there', async () => {
+    const { data } = await openStore();
+    await expect(data.copyScheme('missing')).rejects.toThrow('There is no such scheme.');
+  });
+});
+
+describe('deleting a scheme', () => {
+  it('removes its file and its applied plan, and the game no longer lists it', async () => {
+    const { data } = await openStore();
+    const keep = await data.createSchemeFromPreset('skiff', 'xbox');
+    const gone = await data.createSchemeFromPreset('skiff', 'keys');
+    await data.saveApplied(gone.id, resolve(gone, SKIFF, BUILT_IN_DEVICES));
+    await data.saveApplied(keep.id, resolve(keep, SKIFF, BUILT_IN_DEVICES));
+    await data.deleteScheme(gone.id);
+    expect([
+      (await data.listSchemes('skiff')).map((s) => s.id),
+      await exists('schemes', `${gone.id}.json`),
+      await exists('applied', `${gone.id}.json`),
+      await data.getScheme(gone.id),
+    ]).toEqual([[keep.id], false, false, null]);
+  });
+
+  it('calls off an edit still waiting, so the file never comes back', async () => {
+    const clock = handClock();
+    const { data } = await openStore(undefined, clock.schedule);
+    const scheme = await data.createSchemeFromPreset('skiff', 'xbox');
+    data.saveScheme({ ...scheme, name: 'Waiting' });
+    await data.deleteScheme(scheme.id);
+    await clock.advance(AUTOSAVE_MS);
+    await data.flush();
+    expect([clock.waiting(), await exists('schemes', `${scheme.id}.json`)]).toEqual([0, false]);
+  });
+
+  it('leaves the game with no active scheme when it was the active one', async () => {
+    const { data } = await openStore();
+    const scheme = await data.createSchemeFromPreset('skiff', 'xbox');
+    await data.setActive('skiff', scheme.id);
+    await data.deleteScheme(scheme.id);
+    expect([data.active(), data.activeSchemeOf('skiff')]).toEqual([
+      { gameId: 'skiff', schemeId: null },
+      null,
+    ]);
+    expect((await openStore()).data.activeSchemeOf('skiff')).toBeNull();
+  });
+
+  it('keeps what the game holds when the scheme deleted is the one applied to it last', async () => {
+    const { data } = await openStore();
+    const older = await data.createSchemeFromPreset('skiff', 'keys');
+    const last = await data.createSchemeFromPreset('skiff', 'xbox');
+    const lastPlan = resolve(last, SKIFF, BUILT_IN_DEVICES);
+    await data.saveApplied(older.id, resolve(older, SKIFF, BUILT_IN_DEVICES));
+    // A moment later, so the order of the two applies is plain from the files.
+    await new Promise((r) => setTimeout(r, 20));
+    await data.saveApplied(last.id, lastPlan);
+    await data.deleteScheme(last.id);
+    const holds = await data.lastApplied('skiff');
+    expect(holds?.schemeId === older.id).toBe(false);
+    expect(await data.getApplied(holds?.schemeId ?? '')).toEqual(lastPlan);
+  });
+
+  it('a later apply of another scheme is what the game holds after that', async () => {
+    const { data } = await openStore();
+    const gone = await data.createSchemeFromPreset('skiff', 'xbox');
+    const next = await data.createSchemeFromPreset('skiff', 'keys');
+    await data.saveApplied(gone.id, resolve(gone, SKIFF, BUILT_IN_DEVICES));
+    await data.deleteScheme(gone.id);
+    await new Promise((r) => setTimeout(r, 20));
+    await data.saveApplied(next.id, resolve(next, SKIFF, BUILT_IN_DEVICES));
+    expect((await data.lastApplied('skiff'))?.schemeId).toBe(next.id);
+  });
+
+  it('refuses a scheme that is not there, and an id that is no id', async () => {
+    const { data } = await openStore();
+    await expect(data.deleteScheme('missing')).rejects.toThrow('There is no such scheme.');
+    await expect(data.deleteScheme('../x')).rejects.toThrow('There is no such scheme.');
+  });
+});
+
 describe('the applied plans', () => {
   it('keep the last plan applied for each scheme', async () => {
     const { data } = await openStore();

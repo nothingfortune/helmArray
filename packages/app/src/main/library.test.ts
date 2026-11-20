@@ -54,7 +54,9 @@ describe('the merged library', () => {
         name: 'HELLDIVERS™ 2',
         appId: '553850',
         gameId: 'helldivers2',
-        schemes: [{ id: hd2Scheme.id, name: 'Xbox controller', output: 'pad' }],
+        schemes: [
+          { id: hd2Scheme.id, name: 'Xbox controller', output: 'pad', devices: hd2Scheme.devices },
+        ],
         activeSchemeId: hd2Scheme.id,
         applied: null,
         nativeKeys: true,
@@ -149,29 +151,50 @@ describe('the merged library', () => {
       games: [{ game: SKIFF, builtIn: false }],
       schemes: new Map([['skiff', [own]]]),
       activeSchemeOf: () => null,
-      appliedOf: () => ({ schemeId, at: 1234 }),
+      appliedOf: () => ({ schemeId, at: 1234, changes: 2 }),
     });
-    expect(mergeLibrary(input(own.id))[0]?.applied).toEqual({ schemeId: own.id, at: 1234 });
+    expect(mergeLibrary(input(own.id))[0]?.applied).toEqual({
+      schemeId: own.id,
+      at: 1234,
+      changes: 2,
+    });
     expect(mergeLibrary(input('gone'))[0]?.applied).toBeNull();
     expect(mergeLibrary({ ...input(own.id), appliedOf: () => null })[0]?.applied).toBeNull();
   });
 
-  it('asks the store which scheme of each game was applied last', async () => {
+  it('asks the store which scheme of each game was applied last, and how it has changed since', async () => {
     const own = gameKeysPreset(SKIFF);
     const lastApplied = vi.fn((gameId: string) =>
       Promise.resolve(gameId === 'skiff' ? { schemeId: own.id, at: 77 } : null),
     );
+    const changesOf = vi.fn((schemeId: string) => Promise.resolve(schemeId === own.id ? 3 : 0));
     const { library } = service({
       games: () => Promise.resolve([HD2, { game: SKIFF, builtIn: false }]),
       listSchemes: (gameId) => Promise.resolve(gameId === 'skiff' ? [own] : []),
       lastApplied,
+      changesOf,
     });
     const entries = await library.list();
     expect(entries.find((e) => e.gameId === 'skiff')?.applied).toEqual({
       schemeId: own.id,
       at: 77,
+      changes: 3,
     });
     expect(entries.find((e) => e.gameId === 'helldivers2')?.applied).toBeNull();
+  });
+
+  it('names what each scheme plays with', () => {
+    const leftOnly = {
+      ...gameKeysPreset(SKIFF),
+      devices: { ...gameKeysPreset(SKIFF).devices, azerons: 'left' as const },
+    };
+    const [entry] = mergeLibrary({
+      steam: [],
+      games: [{ game: SKIFF, builtIn: false }],
+      schemes: new Map([['skiff', [leftOnly]]]),
+      activeSchemeOf: () => null,
+    });
+    expect(entry?.schemes[0]?.devices).toEqual(leftOnly.devices);
   });
 
   it('sends no file path to a window', () => {
