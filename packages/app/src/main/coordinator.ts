@@ -34,6 +34,13 @@ export interface CoordinatorDeps {
    * (`plansChanged`).
    */
   suspended?(): boolean;
+  /** The clock, in milliseconds. Defaults to `Date.now`. */
+  now?(): number;
+  /**
+   * How often the state is worked out again though nothing happened, so a reading that has grown
+   * too old stops the pill saying In sync. Defaults to `RECHECK_MS`; 0 turns it off.
+   */
+  recheckMs?: number;
   trace?(unit: string, line: string): void;
 }
 
@@ -55,6 +62,8 @@ export interface Coordinator {
 }
 
 const LOG = '(app)';
+/** See `CoordinatorDeps.recheckMs`. Short enough that a stale reading shows within seconds. */
+export const RECHECK_MS = 3000;
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
@@ -77,6 +86,7 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
   let azeronKnown = false;
   let writeBlock: string | null = null;
   let stopListening: (() => void) | null = null;
+  let recheck: ReturnType<typeof setTimeout> | null = null;
   let current = composeAppState({
     devices: devices.snapshot(),
     hands: handsFor(idsOf(devices.snapshot()), store),
@@ -131,6 +141,7 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
       writeBlock,
       active: deps.active?.(),
       plans,
+      now: (deps.now ?? Date.now)(),
     });
     const json = JSON.stringify(next);
     if (json === currentJson) return;
@@ -193,8 +204,18 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
     start: () => {
       stopListening ??= devices.onChange(() => void refresh());
       void refresh();
+      const every = deps.recheckMs ?? RECHECK_MS;
+      if (every > 0 && recheck === null) {
+        const again = () => {
+          void refresh();
+          recheck = setTimeout(again, every);
+        };
+        recheck = setTimeout(again, every);
+      }
     },
     stop: () => {
+      if (recheck !== null) clearTimeout(recheck);
+      recheck = null;
       stopListening?.();
       stopListening = null;
       finder.stop();

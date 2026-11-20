@@ -76,7 +76,13 @@ async function holding(hand: Hand, plan: Plan, running = 1): Promise<UnitSnapsho
     new FakeUnit({ deviceId: ids[hand], slots: { 1: { name: 'Main', records } }, running }),
   );
   const identity = await session.identify();
-  return { path: hand, state: 'ready', identity, slots: await session.readSlots() };
+  return {
+    path: hand,
+    state: 'ready',
+    identity,
+    slots: await session.readSlots(),
+    readAt: Date.now(),
+  };
 }
 
 const KNOWN = { get: (id: number) => (id === LEFT ? ('left' as const) : ('right' as const)) };
@@ -346,5 +352,80 @@ describe('what is saved as applied is what is compared (a real store)', () => {
     await at(other.id, 3000);
     expect(await data.lastApplied(game.id)).toEqual({ schemeId: other.id, at: 3_000_000 });
     expect(await data.lastApplied('another-game')).toBeNull();
+  });
+});
+
+describe('the pill never says In sync from an old reading', () => {
+  const NOW = 1_000_000;
+  const aged = async (ms: number) => ({
+    ...(await holding('left', APPLIED)),
+    readAt: NOW - ms,
+  });
+  const at = async (leftAge: number, rightAge: number, now?: number) => {
+    const right = { ...(await holding('right', APPLIED)), readAt: NOW - rightAge };
+    const unitIds = [LEFT, RIGHT];
+    return composeAppState({
+      devices: { units: [await aged(leftAge), right] },
+      hands: handsFor(unitIds, KNOWN),
+      writeBlock: null,
+      plans: active(APPLIED, planOf(base)),
+      ...(now !== undefined && { now }),
+    }).sync;
+  };
+
+  it('is In sync from a reading at most 10 seconds old', async () => {
+    expect((await at(0, 10_000, NOW)).label).toBe('In sync');
+  });
+
+  it('says it has not checked once a reading is older, until the next one lands', async () => {
+    expect((await at(10_001, 0, NOW)).label).toBe('Not checked yet');
+    expect((await at(0, 60_000, NOW)).label).toBe('Not checked yet');
+  });
+
+  it('counts a unit with no date as too old, once the age matters', async () => {
+    const undated = await holding('left', APPLIED);
+    delete undated.readAt;
+    const sync = composeAppState({
+      devices: { units: [undated, await holding('right', APPLIED)] },
+      hands: handsFor([LEFT, RIGHT], KNOWN),
+      writeBlock: null,
+      plans: active(APPLIED, planOf(base)),
+      now: Date.now(),
+    }).sync;
+    expect(sync.label).toBe('Not checked yet');
+  });
+
+  it('has no age limit when it is not told the time', async () => {
+    expect((await at(10_000_000, 10_000_000)).label).toBe('In sync');
+  });
+
+  it('is re-worked by the coordinator on its own as a reading ages, with no event at all', async () => {
+    vi.useFakeTimers();
+    try {
+      const units = [await holding('left', APPLIED), await holding('right', APPLIED)];
+      const helm = createCoordinator({
+        devices: {
+          snapshot: () => ({ units: structuredClone(units) }),
+          onChange: () => () => undefined,
+        },
+        hands: KNOWN as never,
+        gate: { azeronRunning: () => Promise.resolve(), shutdown: () => Promise.resolve() },
+        readLog: () => Promise.resolve([]),
+        active: () => ({ gameId: 'skiff', schemeId: base.id }),
+        plans: () => Promise.resolve(active(APPLIED, planOf(base))),
+      });
+      helm.start();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(helm.state().sync.label).toBe('In sync');
+      await vi.advanceTimersByTimeAsync(12_000);
+      expect(helm.state().sync.label).toBe('Not checked yet');
+      // The next reading lands: in sync again.
+      for (const unit of units) unit.readAt = Date.now();
+      await vi.advanceTimersByTimeAsync(4000);
+      expect(helm.state().sync.label).toBe('In sync');
+      helm.stop();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

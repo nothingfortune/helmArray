@@ -47,11 +47,22 @@ function questionOf(ask: HandQuestion | null): ApiQuestion {
  * What each hand's unit holds as last read: only units that are ready, and only those whose hand
  * is known. A unit that is still connecting, failed, or not yet told apart holds nothing here.
  */
-export function heldUnits(devices: DevicesSnapshot, hands: HandsResult): HeldUnits {
+export function heldUnits(
+  devices: DevicesSnapshot,
+  hands: HandsResult,
+  /** With it, a unit read longer ago than `maxAgeMs` (or not dated) holds nothing here. */
+  freshness?: { now: number; maxAgeMs: number },
+): HeldUnits {
   const held: HeldUnits = {};
   for (const unit of devices.units) {
     const { identity, slots } = unit;
     if (unit.state !== 'ready' || !identity || !slots) continue;
+    if (
+      freshness !== undefined &&
+      (unit.readAt === undefined || freshness.now - unit.readAt > freshness.maxAgeMs)
+    ) {
+      continue;
+    }
     const hand: Hand | 'unknown' | undefined = hands.units.find(
       (u) => u.id === identity.deviceId,
     )?.hand;
@@ -65,6 +76,12 @@ export function heldUnits(devices: DevicesSnapshot, hands: HandsResult): HeldUni
   }
   return held;
 }
+
+/**
+ * The pill never says In sync from a reading older than this: the slot a unit runs is asked every
+ * few seconds, and a reading that is not renewed is not a reading of the unit now.
+ */
+export const MAX_READING_AGE_MS = 10_000;
 
 export interface AppStateInput {
   devices: DevicesSnapshot;
@@ -80,6 +97,11 @@ export interface AppStateInput {
    * has nothing to compare, and says so.
    */
   plans?: ActivePlans | undefined;
+  /**
+   * The time now (ms since 1970). With it, a unit read longer ago than `MAX_READING_AGE_MS` counts
+   * as not read: the pill says it has not checked. Without it, no reading is too old.
+   */
+  now?: number | undefined;
 }
 
 export function composeAppState(input: AppStateInput): AppState {
@@ -93,7 +115,14 @@ export function composeAppState(input: AppStateInput): AppState {
   // Read from the units, never from what the app last did: each unit's running slot against the
   // plan last applied for the active scheme, and the scheme as it is now against that same plan.
   const verdicts = plans.applied
-    ? verifyUnits(plans.applied, heldUnits(devices, hands))
+    ? verifyUnits(
+        plans.applied,
+        heldUnits(
+          devices,
+          hands,
+          input.now === undefined ? undefined : { now: input.now, maxAgeMs: MAX_READING_AGE_MS },
+        ),
+      )
     : { left: null, right: null };
   const syncInput: SyncInput = {
     left: { connected: there('left'), verdict: verdicts.left },
