@@ -15,7 +15,14 @@
 // what is left as it was. The units' profile button is never part of any of it.
 
 import type { StoredSlot, UnitSession, Verdict } from '@helmarray/azeron';
-import { MAX_PROFILE_NAME, UnitError, lowestFree, unitRecords, verify } from '@helmarray/azeron';
+import {
+  MAX_PROFILE_NAME,
+  UnitError,
+  encodeRecord,
+  lowestFree,
+  unitRecords,
+  verify,
+} from '@helmarray/azeron';
 import type { UnitRecord } from '@helmarray/azeron';
 import type { Hand, Plan } from '@helmarray/core';
 import { CYBORG2_LEFT, CYBORG2_RIGHT } from '@helmarray/core';
@@ -128,6 +135,16 @@ function recordsFor(plan: Plan, hand: Hand): UnitRecord[] {
   return unitRecords(plan.units[hand], DEVICE[hand]);
 }
 
+/**
+ * The records a unit is written, every one encoded as a write would encode it (the slot is only
+ * its first byte), so a layout a record can't hold is refused here and not part way through.
+ */
+function writableRecordsFor(plan: Plan, hand: Hand): UnitRecord[] {
+  const records = recordsFor(plan, hand);
+  for (const record of records) encodeRecord(0, record);
+  return records;
+}
+
 function previewUnit(
   plan: Plan,
   hand: Hand,
@@ -148,7 +165,7 @@ function previewUnit(
   if (!held) return { ...base, problem: `The ${unit} unit is not connected.` };
   let records: UnitRecord[];
   try {
-    records = recordsFor(plan, hand);
+    records = writableRecordsFor(plan, hand);
   } catch (error) {
     return { ...base, problem: sentence(messageOf(error)) };
   }
@@ -327,14 +344,22 @@ async function applyUnit(
       return stop(`this is not the unit the ${unit} layout is for`);
     }
 
-    const runningSlot = slots.find((s) => s.slot === identity.runningSlot);
+    // The profile button moves the running slot unannounced, also while the slots are being
+    // read: what the unit runs is asked again now, after them, and that is what is decided on.
+    let running: number;
+    try {
+      running = await session.runningSlot();
+    } catch (error) {
+      return stop(messageOf(error));
+    }
+    const runningSlot = slots.find((s) => s.slot === running);
     const verdict = verify(records, runningSlot?.records ?? []);
-    let slot = identity.runningSlot;
+    let slot = running;
 
     if (isClean(verdict)) {
       trace(`already holds the layout in slot ${slot}`);
     } else {
-      const choice = chooseSlot(slots, identity.runningSlot, identity.slotLimit, name);
+      const choice = chooseSlot(slots, running, identity.slotLimit, name);
       if (!choice.ok) return stop(choice.reason);
       slot = choice.slot;
       const into = choice.overwrites ? slotLabel(choice.overwrites) : `slot ${slot}`;
@@ -359,8 +384,8 @@ async function applyUnit(
         }
       }
       left = choice.overwrites
-        ? `${into} may be part-written, and the unit still runs slot ${identity.runningSlot} with its other slots as they were`
-        : `a new slot ${slot} may be part-written, and the unit still runs slot ${identity.runningSlot} with its other slots as they were`;
+        ? `${into} may be part-written, and the unit still runs slot ${running} with its other slots as they were`
+        : `a new slot ${slot} may be part-written, and the unit still runs slot ${running} with its other slots as they were`;
       let result;
       try {
         result = await session.write(slot, name, records, deviceId);
@@ -380,12 +405,12 @@ async function applyUnit(
           ...result.differences.map((d) => d.id),
           ...result.unchecked.map((u) => u.id),
         ]).size;
-        left = `${overwritten(`slot ${slot} is not in use`)}, the unit still runs slot ${identity.runningSlot}, and nothing was deleted`;
+        left = `${overwritten(`slot ${slot} is not in use`)}, the unit still runs slot ${running}, and nothing was deleted`;
         return stop(
           `slot ${slot} read back differently from the layout (${count} input${count === 1 ? '' : 's'}${first ? `, first: input ${first.id} ${first.what}` : ''})`,
         );
       }
-      left = `${overwritten(`slot ${slot} holds the layout`)}, the unit still runs slot ${identity.runningSlot}, and nothing was deleted`;
+      left = `${overwritten(`slot ${slot} holds the layout`)}, the unit still runs slot ${running}, and nothing was deleted`;
       await guard();
       try {
         await session.switchTo(slot);
@@ -408,6 +433,17 @@ async function applyUnit(
       const remaining = others.slice(index).map(slotLabel);
       left = `the unit runs the layout in slot ${slot}, and ${remaining.join(' and ')} ${remaining.length === 1 ? 'is' : 'are'} still there`;
       await guard();
+      // Every deletion rests on the unit running the layout: asked again each time, because the
+      // button can move it, and a slot is then deleted on a false premise.
+      let now: number;
+      try {
+        now = await session.runningSlot();
+      } catch (error) {
+        return stop(messageOf(error));
+      }
+      if (now !== slot) {
+        return stop(`it now runs slot ${now}, not slot ${slot} where the layout is`);
+      }
       try {
         await session.deleteSlot(other.slot);
       } catch (error) {
@@ -462,7 +498,7 @@ export async function applyUnits(plan: Plan, deps: UnitsDeps): Promise<ApplyUnit
   const records = {} as Record<Hand, UnitRecord[]>;
   for (const hand of HANDS) {
     try {
-      records[hand] = recordsFor(plan, hand);
+      records[hand] = writableRecordsFor(plan, hand);
     } catch (error) {
       const message = `The ${handName(hand)} unit failed: ${withoutPeriod(messageOf(error))}; nothing on it was changed.`;
       return refused(hand, message);

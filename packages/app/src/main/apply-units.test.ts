@@ -99,6 +99,22 @@ class CorruptingUnit extends FakeUnit {
   }
 }
 
+/** The profile button is pressed at a chosen moment: the running slot moves with no command. */
+class MovingUnit extends FakeUnit {
+  /** Moves to this slot when the next stream of the slots is asked for. */
+  moveOnRead: number | undefined;
+  override async send(report: Uint8Array): Promise<void> {
+    if (
+      parseHostReport(report).command === Command.PROFILE_PAYLOAD_V2 &&
+      this.moveOnRead !== undefined
+    ) {
+      this.running = this.moveOnRead;
+      this.moveOnRead = undefined;
+    }
+    return super.send(report);
+  }
+}
+
 /** Says it runs a slot it does not have once a slot has been deleted. */
 class DriftingUnit extends FakeUnit {
   override async send(report: Uint8Array): Promise<void> {
@@ -395,6 +411,100 @@ describe('applying to the units', () => {
     expect(result.message).toBe(
       'The left unit failed: it is not running slot 1, where the layout is; the unit runs slot 7 and the other slots are deleted.',
     );
+  });
+
+  it('refuses a layout no record can hold before either unit is touched', async () => {
+    // A turbo interval is one byte: 256 resolves, but encodes nowhere.
+    const unwritable = resolve(
+      {
+        ...scheme,
+        behaviour: { ...scheme.behaviour, 'R.middle_1': { turbo: { interval: 256 } } },
+      },
+      game,
+      BUILT_IN_DEVICES,
+    );
+    const [left, right] = twoUnits({ slots: { 0: { name: 'Default' } } });
+    const state = await rig(left, right);
+    const before = [left.received.length, right.received.length];
+    const result = await applyUnits(unwritable, state.deps);
+    expect(result.ok).toBe(false);
+    expect(result.units.map((u) => u.status)).toEqual(['not-attempted', 'failed']);
+    expect(result.message).toMatch(/^The right unit failed: .*; nothing on it was changed\.$/);
+    expect([left.received.length, right.received.length]).toEqual(before);
+    expect(state.azeronCalls).toBe(0);
+    expect(slotsOf(left)).toEqual([0]);
+    // The drawer is told too.
+    const preview = previewUnits(unwritable, await state.held(), { name: NAME });
+    expect(preview.right.problem).toMatch(/turbo interval/i);
+  });
+
+  describe('a profile button pressed during Apply', () => {
+    it('is not trusted from before the slots were read: the unit is asked what it runs after them', async () => {
+      const left = new MovingUnit({
+        deviceId: LEFT_ID,
+        slots: { 0: { name: 'Old' }, 1: { name: NAME, records: holding(1, 'left') } },
+        running: 1,
+      });
+      const state = await rig(left, new FakeUnit({ deviceId: RIGHT_ID }));
+      // identify says it runs slot 1, which holds the layout; while the slots are read it moves to 0.
+      left.moveOnRead = 0;
+      const result = await applyUnits(plan, state.deps);
+      expect(result.ok).toBe(true);
+      // Slot 0 ran and does not hold the layout: it was written (into the free slot 2), not skipped.
+      expect(result.units[0]).toMatchObject({ status: 'applied', slot: 2, wrote: true });
+      expect(slotsOf(left)).toEqual([2]);
+      expect(left.running).toBe(2);
+    });
+
+    it('stops the deletions when it moves after the decision, before any slot goes', async () => {
+      const left = new FakeUnit({
+        deviceId: LEFT_ID,
+        slots: {
+          0: { name: 'Old' },
+          1: { name: NAME, records: holding(1, 'left') },
+          2: { name: 'Extra' },
+        },
+        running: 1,
+      });
+      const state = await rig(left, new FakeUnit({ deviceId: RIGHT_ID }));
+      let calls = 0;
+      state.deps.azeronAppRunning = () => {
+        // The first look is at the start; the second is before the first deletion.
+        if (++calls === 2) left.running = 2;
+        return Promise.resolve(false);
+      };
+      const result = await applyUnits(plan, state.deps);
+      expect(result.ok).toBe(false);
+      expect(result.message).toBe(
+        'The left unit failed: it now runs slot 2, not slot 1 where the layout is; the unit runs the layout in slot 1, and slot 0 ("Old") and slot 2 ("Extra") are still there.',
+      );
+      expect(sent(left)).not.toContain(Command.DELETE_PROFILE);
+      expect(slotsOf(left)).toEqual([0, 1, 2]);
+    });
+
+    it('stops the deletions when it moves between two of them', async () => {
+      const left = new FakeUnit({
+        deviceId: LEFT_ID,
+        slots: {
+          0: { name: 'Old' },
+          1: { name: NAME, records: holding(1, 'left') },
+          2: { name: 'Extra' },
+        },
+        running: 1,
+      });
+      const state = await rig(left, new FakeUnit({ deviceId: RIGHT_ID }));
+      let calls = 0;
+      state.deps.azeronAppRunning = () => {
+        // Start, then the look before deleting slot 0, then the one before deleting slot 2.
+        if (++calls === 3) left.running = 2;
+        return Promise.resolve(false);
+      };
+      const result = await applyUnits(plan, state.deps);
+      expect(result.ok).toBe(false);
+      expect(result.units[0]?.deleted).toEqual([{ slot: 0, name: 'Old' }]);
+      expect(result.message).toContain('it now runs slot 2, not slot 1 where the layout is');
+      expect(slotsOf(left)).toEqual([1, 2]);
+    });
   });
 
   it('says what is left when the unit stops answering part way through the write', async () => {
