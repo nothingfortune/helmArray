@@ -60,6 +60,7 @@ describe('the merged library', () => {
         nativeKeys: true,
         hasCover: true,
         hasHeader: true,
+        actionCount: helldivers2.actions.length,
       },
     ]);
   });
@@ -81,6 +82,7 @@ describe('the merged library', () => {
       nativeKeys: false,
       hasCover: true,
       hasHeader: false,
+      actionCount: 0,
     });
   });
 
@@ -263,5 +265,22 @@ describe('the library service', () => {
     await expect(library.list()).rejects.toThrow('disk');
     expect((await library.list()).map((e) => e.name)).toEqual(['Helldivers 2']);
     expect(readSteam).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('the action count', () => {
+  it('counts the actions of a game helmArray knows, and is 0 for a game added with none yet', () => {
+    const empty = { ...HD2, game: { ...HD2.game, id: 'empty', steamAppId: 7, actions: [] } };
+    const entries = mergeLibrary({
+      steam: [steam('553850', 'HELLDIVERS™ 2'), steam('7', 'Empty'), steam('8', 'Unknown')],
+      games: [HD2, empty],
+      schemes: none,
+      activeSchemeOf: () => null,
+    });
+    expect(entries.map((e) => [e.name, e.actionCount])).toEqual([
+      ['Empty', 0],
+      ['HELLDIVERS™ 2', helldivers2.actions.length],
+      ['Unknown', 0],
+    ]);
   });
 });

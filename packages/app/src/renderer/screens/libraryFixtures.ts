@@ -12,5 +12,6 @@ export const entry = (over: Partial<LibraryEntry> = {}): LibraryEntry => ({
   nativeKeys: true,
   hasCover: true,
   hasHeader: true,
+  actionCount: 30,
   ...over,
 });

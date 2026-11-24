@@ -316,14 +316,18 @@ describe('the games', () => {
     expect(problems).toEqual([]);
   });
 
-  it('keeps a game added by hand from taking a built-in one’s id', async () => {
+  // A file under a built-in game's id was refused as an imposter until games could be edited in
+  // the app (docs/plans/02-architecture.md, *Storage*): it is now your copy of that game, and wins.
+  it('reads a file under a built-in game’s id as your copy of it, in its place', async () => {
     const { data, problems } = await openStore([SKIFF]);
     await writeRaw(
       ['games', 'skiff.json'],
-      JSON.stringify({ schemaVersion: 1, ...SKIFF, name: 'Imposter' }),
+      JSON.stringify({ schemaVersion: 1, ...SKIFF, name: 'My Skiff' }),
     );
-    expect(await data.listGames()).toEqual([{ game: SKIFF, builtIn: true }]);
-    expect(problems.map((p) => p.file)).toEqual(['games/skiff.json']);
+    expect(await data.listGames()).toEqual([
+      { game: { ...SKIFF, name: 'My Skiff' }, builtIn: true, edited: true },
+    ]);
+    expect(problems).toEqual([]);
   });
 
   it('reports a damaged game file and goes on without it', async () => {

@@ -1,4 +1,5 @@
 import { gameKeysPreset } from '@helmarray/core';
+import type { Game } from '@helmarray/core';
 import { describe, expect, it } from 'vitest';
 import type { AppState } from '../shared/api';
 import { CHANNELS } from '../shared/api';
@@ -109,12 +110,13 @@ describe('window.helm', () => {
   });
 
   describe('the games and schemes', () => {
-    const scheme = gameKeysPreset({
+    const game: Game = {
       id: 'skiff',
       name: 'Skiff',
       modes: [{ id: 'ship', name: 'Ship' }],
       actions: [],
-    });
+    };
+    const scheme = gameKeysPreset(game);
 
     it('asks each question over its own channel, with its arguments', async () => {
       const b = bridge();
@@ -128,6 +130,8 @@ describe('window.helm', () => {
       await api.setActive('skiff', null);
       await api.previewApply('skiff-own-keys');
       await api.apply('skiff-own-keys', 'abc');
+      await api.saveGame(game);
+      await api.deleteGame('skiff');
       expect(b.invoked).toEqual([
         [CHANNELS.listGames, []],
         [CHANNELS.getScheme, ['skiff-own-keys']],
@@ -138,6 +142,8 @@ describe('window.helm', () => {
         [CHANNELS.setActive, ['skiff', null]],
         [CHANNELS.previewApply, ['skiff-own-keys']],
         [CHANNELS.apply, ['skiff-own-keys', 'abc']],
+        [CHANNELS.saveGame, [game]],
+        [CHANNELS.deleteGame, ['skiff']],
       ]);
     });
 
@@ -158,6 +164,10 @@ describe('window.helm', () => {
       expect(await api.createScheme('skiff', 'keys')).toBe(scheme);
       expect(await api.saveScheme(scheme)).toBeUndefined();
       expect(await api.setActive('skiff', null)).toBeUndefined();
+      expect([await api.saveGame(game), await api.deleteGame('skiff')]).toEqual([
+        undefined,
+        undefined,
+      ]);
     });
   });
 });

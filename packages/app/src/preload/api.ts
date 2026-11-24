@@ -54,5 +54,11 @@ export function createHelmApi(bridge: IpcBridge): HelmApi {
       bridge.invoke(CHANNELS.previewApply, schemeId) as Promise<ApplyPreview>,
     apply: (schemeId, fingerprint) =>
       bridge.invoke(CHANNELS.apply, schemeId, fingerprint) as Promise<ApplyResult>,
+    saveGame: async (game) => {
+      await bridge.invoke(CHANNELS.saveGame, game);
+    },
+    deleteGame: async (gameId) => {
+      await bridge.invoke(CHANNELS.deleteGame, gameId);
+    },
   };
 }

@@ -208,6 +208,15 @@ export async function composeServices(options: ComposeOptions): Promise<Services
       },
       previewApply: (schemeId) => apply.preview(schemeId),
       apply: (schemeId, fingerprint) => apply.apply(schemeId, fingerprint),
+      saveGame: async (game) => {
+        data.saveGame(game);
+        // A setup of this game may resolve differently now: the pill looks again at once.
+        void helm.plansChanged();
+      },
+      deleteGame: async (gameId) => {
+        await data.deleteGame(gameId);
+        await helm.plansChanged();
+      },
     }),
     start: () => {
       helm.start();

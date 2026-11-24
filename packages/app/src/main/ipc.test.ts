@@ -68,6 +68,8 @@ function setup() {
     apply: vi.fn<HelmHandlers['apply']>(() =>
       Promise.resolve({ ok: true, message: 'Done.', units: [] }),
     ),
+    saveGame: vi.fn<HelmHandlers['saveGame']>(() => Promise.resolve()),
+    deleteGame: vi.fn<HelmHandlers['deleteGame']>(() => Promise.resolve()),
   };
   const off = registerHelmIpc(registry, { state: () => STATE, ...calls });
   const call = (channel: string, ...args: unknown[]) =>
@@ -93,6 +95,8 @@ describe('the IPC channels', () => {
         CHANNELS.setActive,
         CHANNELS.previewApply,
         CHANNELS.apply,
+        CHANNELS.saveGame,
+        CHANNELS.deleteGame,
       ].sort(),
     );
   });
@@ -227,5 +231,60 @@ describe('the IPC channels', () => {
     const { handlers, off } = setup();
     off();
     expect(handlers.size).toBe(0);
+  });
+});
+
+describe('the game channels', () => {
+  const ROVER: Game = {
+    id: 'rover',
+    name: 'Rover',
+    modes: [{ id: 'default', name: 'Default' }],
+    actions: [
+      {
+        id: 'jump',
+        name: 'Jump',
+        mode: 'default',
+        role: 'movement',
+        required: false,
+        native: { key: { kind: 'key', code: 'Space' }, pad: 'A' },
+      },
+    ],
+  };
+
+  it('passes a game to be saved through', async () => {
+    const { call, calls } = setup();
+    await call(CHANNELS.saveGame, ROVER);
+    expect(calls.saveGame).toHaveBeenCalledWith(ROVER);
+  });
+
+  it('passes a game id to be deleted through', async () => {
+    const { call, calls } = setup();
+    await call(CHANNELS.deleteGame, 'rover');
+    expect(calls.deleteGame).toHaveBeenCalledWith('rover');
+  });
+
+  it.each([
+    ['saveGame', [null], "saveGame: this isn't a game helmArray can read."],
+    [
+      'saveGame',
+      [{ ...ROVER, id: '../settings' }],
+      "saveGame: this game's id can't be used as a file name.",
+    ],
+    [
+      'saveGame',
+      [{ ...ROVER, modes: [{ id: '__proto__', name: 'Ship' }] }],
+      "saveGame: the mode Ship has an id helmArray can't use.",
+    ],
+    [
+      'saveGame',
+      [{ ...ROVER, actions: [{ ...ROVER.actions[0], native: { pad: 'Z' } }] }],
+      "saveGame: Jump's default controller button isn't one an Xbox controller has.",
+    ],
+    ['deleteGame', ['con'], "deleteGame: that isn't an id."],
+    ['deleteGame', [7], "deleteGame: that isn't an id."],
+  ] as const)('refuses %s with %j, saying why', async (name, args, message) => {
+    const { call, calls } = setup();
+    await expect(call(CHANNELS[name], ...args)).rejects.toThrow(message);
+    for (const fn of Object.values(calls)) expect(fn).not.toHaveBeenCalled();
   });
 });
