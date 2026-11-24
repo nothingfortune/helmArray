@@ -638,10 +638,31 @@ describe('the title bar', () => {
 });
 
 describe('the modes', () => {
+  const tabs = (g: Game, mode: string, shown = true, onMode = vi.fn(), onAddMode = vi.fn()) => (
+    <ModeTabs game={g} mode={mode} shown={shown} onMode={onMode} onAddMode={onAddMode} />
+  );
+  const head = (g: Game, mode: string, over: { shown?: boolean; edit?: Edit } = {}) => {
+    const onDeleteMode = vi.fn();
+    const onNameDone = vi.fn();
+    return {
+      node: (
+        <ModeHead
+          game={g}
+          mode={mode}
+          shown={over.shown ?? true}
+          edit={over.edit ?? vi.fn()}
+          onDeleteMode={onDeleteMode}
+          onNameDone={onNameDone}
+        />
+      ),
+      onDeleteMode,
+      onNameDone,
+    };
+  };
+  const one = { ...game, modes: [{ id: 'foot', name: 'On foot' }] };
+
   it('draws a tab per mode with its count of actions, the one shown selected', () => {
-    const html = renderToStaticMarkup(
-      <ModeTabs game={game} mode="drive" onMode={vi.fn()} onAddMode={vi.fn()} />,
-    );
+    const html = renderToStaticMarkup(tabs(game, 'drive'));
     expect([
       html.includes('aria-selected="true" class="gm-tab">Driving<span class="gm-count">1</span>'),
       html.includes('aria-selected="false" class="gm-tab">On foot<span class="gm-count">2</span>'),
@@ -651,7 +672,7 @@ describe('the modes', () => {
   it('picks a mode and adds one', () => {
     const onMode = vi.fn();
     const onAddMode = vi.fn();
-    const node = <ModeTabs game={game} mode="foot" onMode={onMode} onAddMode={onAddMode} />;
+    const node = tabs(game, 'foot', true, onMode, onAddMode);
     // A tab's text is its name and its count of actions.
     const driving = elements(node).find(
       (e) => e.props['role'] === 'tab' && textOf(e) === 'Driving1',
@@ -661,9 +682,8 @@ describe('the modes', () => {
     expect([onMode.mock.calls, onAddMode.mock.calls.length]).toEqual([[['drive']], 1]);
   });
 
-  it('shows no tab for a game with one mode, only Add mode', () => {
-    const one = { ...game, modes: [{ id: 'foot', name: 'On foot' }] };
-    const node = <ModeTabs game={one} mode="foot" onMode={vi.fn()} onAddMode={vi.fn()} />;
+  it('shows no tab while the modes are not shown, only Add mode', () => {
+    const node = tabs(one, 'foot', false);
     expect([names(node), renderToStaticMarkup(node).includes('role="tablist"')]).toEqual([
       ['Add mode'],
       false,
@@ -671,34 +691,23 @@ describe('the modes', () => {
   });
 
   it('calls a mode with no name "Unnamed" on its tab', () => {
-    const unnamed = {
-      ...game,
-      modes: [
-        { id: 'foot', name: '' },
-        { id: 'drive', name: 'Driving' },
-      ],
-    };
-    expect(
-      renderToStaticMarkup(
-        <ModeTabs game={unnamed} mode="foot" onMode={vi.fn()} onAddMode={vi.fn()} />,
-      ),
-    ).toContain('Unnamed');
+    const unnamed = { ...game, modes: [{ id: 'foot', name: '' }] };
+    expect(renderToStaticMarkup(tabs(unnamed, 'foot'))).toContain('Unnamed');
   });
 
   it('renames, moves and deletes the mode shown', () => {
     const spy = editSpy();
-    const onDeleteMode = vi.fn();
-    const node = <ModeHead game={game} mode="drive" edit={spy.edit} onDeleteMode={onDeleteMode} />;
-    fire(named(node, 'Mode name'), 'onChange', { target: { value: 'In the rover' } });
-    fire(named(node, 'Move left'), 'onClick');
-    fire(named(node, 'Move right'), 'onClick');
-    fire(named(node, 'Delete mode'), 'onClick');
+    const h = head(game, 'drive', { edit: spy.edit });
+    fire(named(h.node, 'Mode name'), 'onChange', { target: { value: 'In the rover' } });
+    fire(named(h.node, 'Move left'), 'onClick');
+    fire(named(h.node, 'Move right'), 'onClick');
+    fire(named(h.node, 'Delete mode'), 'onClick');
     expect([
       spy.calls[0]?.field,
       spy.calls[0]?.result.modes[1]?.name,
       spy.calls[1]?.result.modes.map((m) => m.id),
       spy.calls[2]?.result.modes.map((m) => m.id),
-      onDeleteMode.mock.calls,
+      h.onDeleteMode.mock.calls,
     ]).toEqual([
       'mode-name:drive',
       'In the rover',
@@ -708,13 +717,20 @@ describe('the modes', () => {
     ]);
   });
 
-  it('shows nothing of the mode for a game with one: no name to type, no moving or deleting', () => {
-    const one = { ...game, modes: [{ id: 'foot', name: 'On foot' }] };
-    expect(
-      renderToStaticMarkup(
-        <ModeHead game={one} mode="foot" edit={vi.fn()} onDeleteMode={vi.fn()} />,
-      ),
-    ).toBe('');
+  it('says the name is typed when its field is left', () => {
+    const h = head(game, 'drive');
+    fire(named(h.node, 'Mode name'), 'onBlur');
+    expect(h.onNameDone.mock.calls.length).toBe(1);
+  });
+
+  it('shows nothing of the mode while the modes are not shown', () => {
+    expect(renderToStaticMarkup(head(one, 'foot', { shown: false }).node)).toBe('');
+  });
+
+  it('offers a lone mode shown (for its name) no moving or deleting: a game keeps one', () => {
+    expect(names(head({ ...one, modes: [{ id: 'foot', name: '' }] }, 'foot').node)).toEqual([
+      'Mode name',
+    ]);
   });
 });
 

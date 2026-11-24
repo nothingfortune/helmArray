@@ -16,7 +16,7 @@ import { snapshotsOf } from './capture';
 import { isTextEntry } from './editor-model';
 import { GameEditor } from './game-editor';
 import type { Loaded } from './game-editor';
-import { loadedOf, showsModes } from './game-model';
+import { loadedOf } from './game-model';
 import type { GameTarget } from './game-model';
 import {
   ActionTable,
@@ -254,19 +254,27 @@ function GameBody({
           state.notice,
         ]}
       />
-      <ModeTabs game={game} mode={editor.mode} onMode={editor.setMode} onAddMode={addMode} />
+      <ModeTabs
+        game={game}
+        mode={editor.mode}
+        shown={state.modesShown}
+        onMode={editor.setMode}
+        onAddMode={addMode}
+      />
       {/* A tab panel only under tabs: a game with one mode shows none. */}
       <section
         className="gm-panel"
-        role={showsModes(game) ? 'tabpanel' : undefined}
+        role={state.modesShown ? 'tabpanel' : undefined}
         aria-label="Actions"
       >
         <ModeHead
           game={game}
           mode={editor.mode}
+          shown={state.modesShown}
           inputRef={modeNameRef}
           edit={editor.edit}
           onDeleteMode={editor.deleteMode}
+          onNameDone={editor.modeNameDone}
         />
         {/* The rows scroll here, and only here: the bar above stays where it is. */}
         <div className="gm-rows">

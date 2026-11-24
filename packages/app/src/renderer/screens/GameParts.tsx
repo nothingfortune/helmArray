@@ -9,7 +9,7 @@ import { PAD_CONTROLS, ROLES } from '@helmarray/core';
 import type { Preset } from '../../shared/api';
 import { CANT_PRESS, mouseSignalOf } from './capture';
 import { padWord, signalText } from './editor-view';
-import { NAME_FIELD } from './game-editor';
+import { NAME_FIELD, modeNameField } from './game-editor';
 import type { Waiting } from './game-editor';
 import {
   actionsIn,
@@ -20,7 +20,6 @@ import {
   renameMode,
   setDefaultKey,
   setDefaultPad,
-  showsModes,
   updateAction,
 } from './game-model';
 
@@ -219,17 +218,20 @@ export function Notices({ lines }: { lines: readonly (string | null)[] }) {
 export function ModeTabs({
   game,
   mode,
+  shown,
   onMode,
   onAddMode,
 }: {
   game: Game;
   mode: ModeId;
+  /** Whether the modes are shown at all (`GameEditorState.modesShown`). */
+  shown: boolean;
   onMode(mode: ModeId): void;
   onAddMode(): void;
 }) {
   return (
     <div className="gm-modes">
-      {showsModes(game) && (
+      {shown && (
         <div className="gm-tabs" role="tablist" aria-label="Modes">
           {game.modes.map((m) => (
             <button
@@ -253,21 +255,29 @@ export function ModeTabs({
   );
 }
 
-/** The mode's name, moving and deleting it: nothing for a game with one mode. */
+/**
+ * The mode's name, and with more than one mode, moving and deleting it. Nothing while the modes
+ * aren't shown. Whether they are is never decided by the name typed here (`onNameDone`).
+ */
 export function ModeHead({
   game,
   mode,
+  shown,
   inputRef,
   edit,
   onDeleteMode,
+  onNameDone,
 }: {
   game: Game;
   mode: ModeId;
+  shown: boolean;
   inputRef?: RefObject<HTMLInputElement | null>;
   edit: Edit;
   onDeleteMode(mode: ModeId): void;
+  /** The name is done being typed: the field is left. */
+  onNameDone(): void;
 }) {
-  if (!showsModes(game)) return null;
+  if (!shown) return null;
   const current = game.modes.find((m) => m.id === mode);
   return (
     <div className="gm-mode-head">
@@ -279,35 +289,39 @@ export function ModeHead({
           value={current?.name ?? ''}
           onChange={(e) => {
             const name = e.target.value;
-            edit((g) => renameMode(g, mode, name), `mode-name:${mode}`);
+            edit((g) => renameMode(g, mode, name), modeNameField(mode));
           }}
+          onBlur={onNameDone}
         />
       </label>
-      <div className="gm-mode-tools">
-        <button
-          type="button"
-          className="btn ghost small"
-          disabled={game.modes[0]?.id === mode}
-          onClick={() => edit((g) => moveMode(g, mode, -1))}
-        >
-          Move left
-        </button>
-        <button
-          type="button"
-          className="btn ghost small"
-          disabled={game.modes.at(-1)?.id === mode}
-          onClick={() => edit((g) => moveMode(g, mode, 1))}
-        >
-          Move right
-        </button>
-        <button
-          type="button"
-          className="btn ghost small gm-danger"
-          onClick={() => onDeleteMode(mode)}
-        >
-          Delete mode
-        </button>
-      </div>
+      {/* A lone mode (shown while it has no name) can't be moved or deleted: a game has one. */}
+      {game.modes.length > 1 && (
+        <div className="gm-mode-tools">
+          <button
+            type="button"
+            className="btn ghost small"
+            disabled={game.modes[0]?.id === mode}
+            onClick={() => edit((g) => moveMode(g, mode, -1))}
+          >
+            Move left
+          </button>
+          <button
+            type="button"
+            className="btn ghost small"
+            disabled={game.modes.at(-1)?.id === mode}
+            onClick={() => edit((g) => moveMode(g, mode, 1))}
+          >
+            Move right
+          </button>
+          <button
+            type="button"
+            className="btn ghost small gm-danger"
+            onClick={() => onDeleteMode(mode)}
+          >
+            Delete mode
+          </button>
+        </div>
+      )}
     </div>
   );
 }

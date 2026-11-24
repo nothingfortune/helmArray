@@ -17,6 +17,7 @@ import {
   record,
   setDefaultKey,
   setDefaultPad,
+  showsModes,
 } from './game-model';
 import type { Reserved } from './game-model';
 import { plainReason, runMake } from './libraryFlow';
@@ -29,6 +30,10 @@ export interface Waiting {
 
 /** The text field of the game's own name. */
 export const NAME_FIELD = 'game-name';
+
+/** The text field of a mode's name. */
+export const modeNameField = (mode: ModeId): string => `mode-name:${mode}`;
+const isModeNameField = (field: string | null) => field?.startsWith('mode-name:') === true;
 
 export type EditorApi = Pick<HelmApi, 'saveGame' | 'deleteGame' | 'createScheme' | 'setActive'>;
 
@@ -52,6 +57,12 @@ export interface GameEditorState {
   edited: boolean;
   /** The mode shown, as picked; `GameEditor.mode` is the one that exists. */
   mode: ModeId;
+  /**
+   * Whether the mode tabs and the mode's name are shown (`showsModes`). Decided again after every
+   * edit, undo and redo, and when a mode's name is done being typed, but never by a keystroke in
+   * that name: a field must not vanish, or appear, because of what is typed into it.
+   */
+  modesShown: boolean;
   waiting: Waiting | null;
   /** Asking before *Delete game* or *Back to helmArray's*. */
   confirming: boolean;
@@ -87,6 +98,7 @@ export class GameEditor {
       saved: loaded.saved,
       edited: loaded.edited,
       mode: loaded.game.modes[0]?.id ?? 'default',
+      modesShown: showsModes(loaded.game),
       waiting: null,
       confirming: false,
       busy: false,
@@ -196,7 +208,9 @@ export class GameEditor {
     if (next === before.present) return;
     const history = record(before, next, field, this.lastField);
     this.lastField = field;
-    this.set({ history });
+    this.set(
+      isModeNameField(field) ? { history } : { history, modesShown: showsModes(history.present) },
+    );
     this.save(this.game, field);
   };
 
@@ -204,9 +218,15 @@ export class GameEditor {
     const history = step(this.current.history);
     if (history === this.current.history) return;
     this.lastField = null;
-    this.set({ history });
+    this.set({ history, modesShown: showsModes(history.present) });
     this.save(this.game, null);
   }
+
+  /** A mode's name is done being typed (its field is left): whether the modes show is decided again. */
+  readonly modeNameDone = (): void => {
+    const modesShown = showsModes(this.game);
+    if (modesShown !== this.current.modesShown) this.set({ modesShown });
+  };
 
   readonly undo = (): void => {
     this.travel(undo);

@@ -445,6 +445,29 @@ test.describe('the Game screen', () => {
     await expect(page.getByRole('tabpanel', { name: 'Actions' })).toBeVisible();
   });
 
+  test('a lone mode with no name keeps its field while a whole name is typed', async ({ helm }) => {
+    const { page } = helm;
+    await setUpUnknown(page);
+    await addAction(page, 'Jump', 'Space', 'Space');
+    // Codex's sequence: two modes, the first one's name cleared, the other deleted.
+    await page.getByRole('button', { name: 'Add mode' }).click();
+    await page.getByRole('tab', { name: /^Mode 1/ }).click();
+    const modeName = page.getByRole('textbox', { name: 'Mode name' });
+    await modeName.fill('');
+    await page.getByRole('tab', { name: /^Mode 2/ }).click();
+    await page.getByRole('button', { name: 'Delete mode' }).click();
+    await expect(page.getByRole('tab')).toHaveText(['Unnamed1']);
+
+    await modeName.click();
+    await page.keyboard.type('On foot');
+    await expect(modeName).toHaveValue('On foot');
+    await expect(modeName).toBeFocused();
+    // Once the typing is done the lone mode has a name: nothing to tell apart, so no tab.
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('tablist', { name: 'Modes' })).toHaveCount(0);
+    await expect.poll(() => savedGame(helm.dataDir)).toContain('"name": "On foot"');
+  });
+
   test('the window doesn’t scroll with 28 actions: the rows do, and the bar stays', async ({
     helm,
   }) => {

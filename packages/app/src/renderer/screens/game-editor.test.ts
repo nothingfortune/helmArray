@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { HelmApi } from '../../shared/api';
 import { GameEditor } from './game-editor';
 import type { EditorApi } from './game-editor';
-import { addAction, newGame, renameGame, updateAction } from './game-model';
+import { addAction, newGame, renameGame, renameMode, updateAction } from './game-model';
 
 const rover: Game = {
   id: 'rover',
@@ -227,6 +227,64 @@ describe('the mode shown', () => {
     editor.addMode();
     editor.setMode('default');
     expect(editor.mode).toBe('default');
+  });
+});
+
+describe('whether the modes are shown', () => {
+  /** Codex's sequence: two modes, the first one's name cleared, the other deleted. */
+  function loneBlank() {
+    const { editor } = open();
+    const second = editor.addMode();
+    editor.edit((g) => renameMode(g, 'default', ''), 'mode-name:default');
+    editor.modeNameDone();
+    editor.deleteMode(second);
+    return editor;
+  }
+
+  it('hides them for one named mode, and shows them once a second is added', () => {
+    const { editor } = open();
+    const before = editor.state.modesShown;
+    editor.addMode();
+    expect([before, editor.state.modesShown]).toEqual([false, true]);
+  });
+
+  it('shows a lone mode with no name, so the name it needs can be typed', () => {
+    const editor = loneBlank();
+    expect([editor.game.modes, editor.state.modesShown]).toEqual([
+      [{ id: 'default', name: '' }],
+      true,
+    ]);
+  });
+
+  it('never changes while the mode’s name is typed: the field being typed in stays', () => {
+    const editor = loneBlank();
+    const shown: boolean[] = [];
+    for (const name of ['O', 'On', 'On foot']) {
+      editor.edit((g) => renameMode(g, 'default', name), 'mode-name:default');
+      shown.push(editor.state.modesShown);
+    }
+    expect(shown).toEqual([true, true, true]);
+  });
+
+  it('is decided again once the typing is done', () => {
+    const editor = loneBlank();
+    editor.edit((g) => renameMode(g, 'default', 'On foot'), 'mode-name:default');
+    editor.modeNameDone();
+    expect(editor.state.modesShown).toBe(false);
+  });
+
+  it('is decided again by any other edit, and by undo', () => {
+    const editor = loneBlank();
+    editor.edit((g) => renameMode(g, 'default', 'On foot'), 'mode-name:default');
+    editor.edit((g) => renameGame(g, 'Rover 2'));
+    const afterEdit = editor.state.modesShown;
+    editor.undo();
+    editor.undo();
+    expect([afterEdit, editor.game.modes.length, editor.state.modesShown]).toEqual([
+      false,
+      1,
+      true,
+    ]);
   });
 });
 
