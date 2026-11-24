@@ -55,6 +55,7 @@ export default {
     'packages/core/src/presets/**/*.ts',
     'packages/core/src/checks.ts',
     'packages/core/src/games/**/*.ts',
+    'packages/core/src/game-data.ts', // a game's data checked before it is saved
     '!packages/core/src/**/*.test.ts',
     // Games: Steam folders and the VDF readers and writers.
     'packages/games/src/**/*.ts',
@@ -84,6 +85,12 @@ export default {
     'packages/app/src/renderer/screens/libraryView.ts',
     'packages/app/src/renderer/screens/libraryFlow.ts',
     'packages/app/src/renderer/apply/applyFlow.ts',
+    // The Game screen: its edits, its state, press-to-set and what it listens to while waiting.
+    'packages/app/src/renderer/screens/game-model.ts',
+    'packages/app/src/renderer/screens/game-editor.ts',
+    'packages/app/src/renderer/screens/capture.ts',
+    'packages/app/src/renderer/screens/press-listener.ts',
+    'packages/app/src/renderer/screens/gameTile.ts',
   ],
   reporters: ['clear-text', 'progress', 'html', 'json'],
   htmlReporter: { fileName: 'reports/mutation/mutation.html' },

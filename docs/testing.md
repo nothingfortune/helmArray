@@ -149,13 +149,15 @@ The pure logic that can do damage, listed in `stryker.config.mjs` (`mutate`):
 
 - `packages/azeron/src`: the report and command protocol, the record encoding, the profile, the
   session, what is read back and what a write is verified against. Not `index.ts` or `fake.ts`.
-- `packages/core/src`: `resolve.ts`, the presets, `checks.ts` (the findings) and the games.
+- `packages/core/src`: `resolve.ts`, the presets, `checks.ts` (the findings), the games and
+  `game-data.ts` (a game's data checked before it is saved).
 - `packages/games/src`.
 - `packages/app/src/main`: `apply-units`, `apply-service`, `gated-session`, `plan-fingerprint`,
   `scheme-plan`, `active-plans`, `sync-state`, `devices` and `devices-gate`, `hands`,
   `hand-finder`, `store`, `hid-transport`, `processes`, `exchange-log`, `e2e-seam` and `compose`.
 - `packages/app/src/renderer`: the pure models `editor-model`, `editor-view`, `libraryView`,
-  `libraryFlow` and `applyFlow`.
+  `libraryFlow` and `applyFlow`, and the Game screen's `game-model`, `game-editor`, `capture`
+  (press-to-set), `press-listener` and `gameTile`.
 
 Not React components, CSS, `index.ts` or the preload: the Playwright e2e suite covers those, and
 mutating them would measure the wrong suite.
