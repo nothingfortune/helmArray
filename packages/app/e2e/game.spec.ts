@@ -122,7 +122,7 @@ const connectFakePad = (page: Page, button?: number) =>
 
 /** Opens your copy of Helldivers 2: its 28 actions, more than the window holds. */
 async function editHelldivers(page: Page) {
-  await page.getByRole('button', { name: /^Edit game: HELLDIVERS/ }).click();
+  await page.getByRole('button', { name: 'Edit actions: Helldivers 2' }).click();
   await expect(gameName(page)).toHaveValue('Helldivers 2');
 }
 

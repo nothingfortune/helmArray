@@ -186,19 +186,22 @@ function Tile({
     );
   }
 
+  // The schemes list opens beside the cover (its anchor), so it never sits over its own tile.
   return (
     <li className="tile">
-      <button
-        type="button"
-        className="tile-button"
-        aria-label={label}
-        onClick={() => send({ type: 'tile', entry })}
-      >
-        {body}
-      </button>
-      {caption}
-      <EditGame entry={entry} onOpenGame={onOpenGame} />
       <Popover.Root>
+        <Popover.Anchor asChild>
+          <button
+            type="button"
+            className="tile-button"
+            aria-label={label}
+            onClick={() => send({ type: 'tile', entry })}
+          >
+            {body}
+          </button>
+        </Popover.Anchor>
+        {caption}
+        <EditGame entry={entry} onOpenGame={onOpenGame} />
         <Popover.Trigger asChild>
           <button type="button" className="btn ghost small" aria-label={`${entry.name} schemes`}>
             {entry.schemes.length > 1 ? `${entry.schemes.length} schemes` : 'Schemes'}
