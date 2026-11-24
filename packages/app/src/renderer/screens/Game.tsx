@@ -9,7 +9,7 @@
 // GameEditor (game-editor.ts): edits are saved as they are made once the game is whole, and undo
 // is in memory. The parts are drawn by GameParts.tsx.
 
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { Scheme } from '@helmarray/core';
 import type { GameEntry } from '../../shared/api';
 import { snapshotsOf } from './capture';
@@ -131,6 +131,8 @@ function GameBody({
 
   const game = state.history.present;
   const { waiting } = state;
+  /** While a controller button is waited for: none is connected, so a pick is asked for. */
+  const [noPad, setNoPad] = useState(false);
 
   // The first thing to do has the focus: the name of a game with none, else the new-action field
   // of a game with no actions yet.
@@ -150,10 +152,11 @@ function GameBody({
     [editor],
   );
 
-  // While a press is waited for: keys and mouse presses in the window, and the pads.
-  useEffect(() => {
+  // While a press is waited for: keys and mouse presses in the window, and the pads. Before the
+  // paint, so a wait with no controller never shows "Press" for a frame first.
+  useLayoutEffect(() => {
     if (waiting === null) return;
-    return listenForPress(
+    const stop = listenForPress(
       waiting.part,
       {
         target: window,
@@ -168,8 +171,13 @@ function GameBody({
           return list !== null;
         },
       },
-      { press: editor.press, cancel: editor.cancelWait },
+      { press: editor.press, cancel: editor.cancelWait, controller: (on) => setNoPad(!on) },
     );
+    return () => {
+      stop();
+      // Said anew by the next wait: never carried over from this one.
+      setNoPad(false);
+    };
   }, [waiting, editor]);
 
   // When a wait ends, the focus goes back to where it began: the field, or the new-action field.
@@ -185,6 +193,16 @@ function GameBody({
     if (wasWaiting.current) returnTo.current?.focus();
     wasWaiting.current = false;
   }, [waiting]);
+
+  // After the focus to go back to is noted: the row waiting is in view, inside the table's own
+  // scroll, and with no controller to press, the list to pick from has the focus.
+  const asking = waiting?.part === 'pad' && noPad;
+  useEffect(() => {
+    if (waiting === null) return;
+    const strip = document.querySelector<HTMLElement>('[data-wait-strip]');
+    strip?.scrollIntoView({ block: 'nearest' });
+    if (asking) strip?.querySelector('select')?.focus();
+  }, [waiting, asking]);
 
   const addMode = () => {
     editor.addMode();
@@ -202,6 +220,7 @@ function GameBody({
         edited={state.edited}
         saved={state.saved}
         canUndo={editor.canUndo}
+        canRedo={editor.canRedo}
         confirming={state.confirming}
         busy={state.busy}
         starts={editor.starts}
@@ -210,6 +229,7 @@ function GameBody({
         onBack={onBack}
         onNameDone={editor.nameDone}
         onUndo={editor.undo}
+        onRedo={editor.redo}
         onConfirm={editor.confirm}
         onDrop={() => {
           void editor.drop().then((done) => {
@@ -234,23 +254,40 @@ function GameBody({
           state.notice,
         ]}
       />
-      <ModeTabs game={game} mode={editor.mode} onMode={editor.setMode} onAddMode={addMode} />
-      <section className="gm-panel" role="tabpanel" aria-label="Actions">
+      <ModeTabs
+        game={game}
+        mode={editor.mode}
+        shown={state.modesShown}
+        onMode={editor.setMode}
+        onAddMode={addMode}
+      />
+      {/* A tab panel only under tabs: a game with one mode shows none. */}
+      <section
+        className="gm-panel"
+        role={state.modesShown ? 'tabpanel' : undefined}
+        aria-label="Actions"
+      >
         <ModeHead
           game={game}
           mode={editor.mode}
+          shown={state.modesShown}
           inputRef={modeNameRef}
           edit={editor.edit}
           onDeleteMode={editor.deleteMode}
+          onNameDone={editor.modeNameDone}
         />
-        <ActionTable
-          rows={editor.rows}
-          waiting={waiting}
-          edit={editor.edit}
-          onWait={editor.wait}
-          onPress={editor.press}
-          onCancel={editor.cancelWait}
-        />
+        {/* The rows scroll here, and only here: the bar above stays where it is. */}
+        <div className="gm-rows">
+          <ActionTable
+            rows={editor.rows}
+            waiting={waiting}
+            noPad={asking}
+            edit={editor.edit}
+            onWait={editor.wait}
+            onPress={editor.press}
+            onCancel={editor.cancelWait}
+          />
+        </div>
         <AddAction
           draft={state.draft}
           inputRef={addRef}

@@ -279,7 +279,11 @@ const PRESS_WORD: Record<Press, string> = { tap: 'Tap', long: 'Long', double: 'D
 
 function actionRef(game: Game, id: ActionId): ActionRef {
   const action = game.actions.find((a) => a.id === id);
-  return action === undefined ? { id, name: id } : { id, name: action.name, role: action.role };
+  if (action === undefined) return { id, name: id };
+  // An action with no role yet is drawn neutral: no role, no colour.
+  return action.role === undefined
+    ? { id, name: action.name }
+    : { id, name: action.name, role: action.role };
 }
 
 /**
@@ -447,7 +451,7 @@ function stickLabels(
     );
     // keyed-write-ok: the key is a stick direction, one of four names
     labels[direction] = action?.name ?? signalText(signal);
-    if (action !== undefined && labels.role === undefined) labels.role = action.role;
+    if (action?.role !== undefined && labels.role === undefined) labels.role = action.role;
   }
   return Object.keys(labels).length === 0 ? undefined : labels;
 }
