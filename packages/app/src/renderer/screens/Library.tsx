@@ -71,7 +71,7 @@ function EditGame({ entry, onOpenGame }: { entry: LibraryEntry; onOpenGame: Open
     <button
       type="button"
       className="btn ghost small"
-      aria-label={`Edit ${entry.name}`}
+      aria-label={`Edit game: ${entry.name}`}
       onClick={() => onOpenGame(gameTarget(entry))}
     >
       Edit game

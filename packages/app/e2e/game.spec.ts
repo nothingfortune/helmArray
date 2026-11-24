@@ -205,14 +205,14 @@ test.describe('the Game screen', () => {
     await page.getByRole('textbox', { name: 'New action' }).click();
     await addAction(page, 'Fire', 'Space', 'Space');
     await page.getByRole('button', { name: 'Library' }).click();
-    await expect(page.getByRole('button', { name: 'Edit Ace Combat 7' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Edit game: Ace Combat 7' })).toBeVisible();
   });
 
   test('Edit game on Helldivers 2 keeps your copy, and Back to helmArray’s drops it', async ({
     helm,
   }) => {
     const { page } = helm;
-    await page.getByRole('button', { name: /^Edit HELLDIVERS/ }).click();
+    await page.getByRole('button', { name: /^Edit game: HELLDIVERS/ }).click();
     await expect(gameName(page)).toHaveValue('Helldivers 2');
     await page.getByRole('textbox', { name: 'Reload, name' }).fill('Reload weapon');
     await expect(page.getByText("Your copy of helmArray's game")).toBeVisible();
