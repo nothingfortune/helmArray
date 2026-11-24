@@ -92,6 +92,24 @@ test.describe('setups', () => {
     ]).toEqual([true, before[1]?.writesReceived, before[1]?.slots]);
   });
 
+  test('an action on a long press only is dragged to another button, and moves', async ({
+    helm,
+  }) => {
+    const { page } = helm;
+    await startFrom(page, "Game's own keys");
+    const left = leftUnit(page);
+    // Throw grenade on the left index 2's long press, nothing on its tap.
+    await left.getByRole('button', { name: 'Empty, index 2' }).click();
+    await page.locator('.ed-panel').getByRole('button', { name: /^Long/ }).click();
+    await page.locator('.ed-actions').getByRole('button', { name: 'Throw grenade' }).click();
+    const from = left.getByRole('button', { name: 'Long: Throw grenade, index 2' });
+    await expect(from).toBeVisible();
+
+    await from.dragTo(left.getByRole('button', { name: 'Empty, index 3' }));
+    await expect(left.getByRole('button', { name: 'Throw grenade, index 3' })).toBeVisible();
+    await expect(left.getByRole('button', { name: 'Empty, index 2' })).toBeVisible();
+  });
+
   test('a left Azeron + mouse setup writes the left unit only', async ({ helm }) => {
     const { page } = helm;
     await startFrom(page, 'Xbox controller');

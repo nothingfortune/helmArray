@@ -18,7 +18,7 @@ import {
   historyAction,
   isStick,
   isTextEntry,
-  move,
+  drop,
   redo,
   renameScheme,
   setDevices,
@@ -33,6 +33,7 @@ import {
 import type { History } from './editor-model';
 import { assignable, editorView } from './editor-view';
 import type { DeviceTabId } from './editor-view';
+import type { DragSource } from '../devices/drag';
 import { runMake, runPick } from './libraryFlow';
 import { runCopy, runDelete } from './schemeFlow';
 import {
@@ -254,13 +255,9 @@ function EditorBody({
     edit((s) => assign(s, { mode, control, press: which }, actionId, game));
   };
   /** A drop: from the list it puts the action on; dragged off another control it moves it. */
-  const dropOn = (control: ControlId, actionId: string, from?: ControlId) => {
+  const dropOn = (control: ControlId, actionId: string, from?: DragSource) => {
     if (isStick(control) || !assignable(game, mode, actionId)) return;
-    if (from === undefined) place(control, actionId, 'tap');
-    else
-      edit((s) =>
-        move(s, { mode, control: from, press: 'tap' }, { mode, control, press: 'tap' }, game),
-      );
+    edit((s) => drop(s, mode, control, actionId, from, game));
     setSelected(control);
     setPress('tap');
   };

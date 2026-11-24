@@ -2,11 +2,14 @@
 // control yet, or from a control that has one (which moves it). Pure: the handlers take the parts of
 // a drag event they read, so they are tested without a window.
 
-import type { ControlId } from '@helmarray/core';
+import type { ControlId, Press } from '@helmarray/core';
+import { PRESSES } from '@helmarray/core';
 import { ACTION_DRAG_TYPE, dragCarriesAction } from '../unit/layout';
 
 /** The drag type a control sets when its own action is dragged off it: where it came from. */
 export const FROM_DRAG_TYPE = 'application/x-helm-from';
+/** And which of its presses the action was on: the one its label shows (a long press, say). */
+export const PRESS_DRAG_TYPE = 'application/x-helm-press';
 
 /** What these handlers read of a drag event. */
 export interface DragLike {
@@ -22,17 +25,28 @@ export interface DragLike {
   relatedTarget: unknown;
 }
 
-/** An action dropped on a control; `from` when it was dragged off another control. */
-export type DropAction = (control: ControlId, actionId: string, from?: ControlId) => void;
+/** Where a dragged action came from: a control, and the press it was on there. */
+export interface DragSource {
+  control: ControlId;
+  press: Press;
+}
 
-/** Starts dragging a control's own action: it moves to wherever it is dropped. */
-export function dragFrom(control: ControlId, actionId: string) {
+/** An action dropped on a control; `from` when it was dragged off another control. */
+export type DropAction = (control: ControlId, actionId: string, from?: DragSource) => void;
+
+/** Starts dragging a control's own action, off the press it is on: it moves where it is dropped. */
+export function dragFrom(control: ControlId, actionId: string, press: Press) {
   return (e: Pick<DragLike, 'dataTransfer'>) => {
     e.dataTransfer.setData(ACTION_DRAG_TYPE, actionId);
     e.dataTransfer.setData(FROM_DRAG_TYPE, control);
+    e.dataTransfer.setData(PRESS_DRAG_TYPE, press);
     e.dataTransfer.effectAllowed = 'copyMove';
   };
 }
+
+/** A press read back from a drag: one of the three, else the tap. */
+const pressOf = (value: string): Press =>
+  (PRESSES as readonly string[]).includes(value) ? (value as Press) : 'tap';
 
 /** Starts dragging an action from the list. */
 export function dragAction(actionId: string) {
@@ -69,7 +83,11 @@ export function dropHandlers(
       const from = e.dataTransfer.getData(FROM_DRAG_TYPE);
       if (actionId === '' || from === control) return;
       if (from === '') onDrop(control, actionId);
-      else onDrop(control, actionId, from);
+      else
+        onDrop(control, actionId, {
+          control: from,
+          press: pressOf(e.dataTransfer.getData(PRESS_DRAG_TYPE)),
+        });
     },
   };
 }

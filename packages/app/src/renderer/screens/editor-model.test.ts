@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import type { Finding, Game, Scheme } from '@helmarray/core';
+import type { Finding, Game, Scheme, SetupDevices } from '@helmarray/core';
 import {
   AZERONS_ONLY,
   BUILT_IN_DEVICES,
@@ -8,7 +8,9 @@ import {
   DEFAULT_TURBO_INTERVAL,
   PAD_CONTROLS,
   helldivers2,
+  inSetup,
   padSignalOf,
+  setupOf,
   resolve,
   xboxControllerPreset,
 } from '@helmarray/core';
@@ -26,6 +28,7 @@ import {
   chooseKeyboard,
   clear,
   commit,
+  drop,
   fixFor,
   historyAction,
   hasDevices,
@@ -42,6 +45,7 @@ import {
   setPadControl,
   setTurbo,
   shownAction,
+  shownPresses,
   startHistory,
   unacceptFinding,
   undo,
@@ -115,6 +119,54 @@ describe('assign', () => {
       slot('ship', 'L.index_2'),
     );
     expect(next.ledger).toBe(scheme.ledger);
+  });
+});
+
+describe('drop: an action dropped on a button', () => {
+  it('from the list goes on the tap', () => {
+    const next = drop(frozen(), 'ship', 'L.index_2', 'gear', undefined, game);
+    expect(next.map['ship']?.['L.index_2']).toEqual({ tap: 'gear' });
+  });
+
+  it('dragged off a long press, moves from that long press to the tap', () => {
+    const scheme = deepFreeze(
+      assign(keysScheme(), slot('ship', 'L.index_2', 'long'), 'gear', game),
+    );
+    const next = drop(
+      scheme,
+      'ship',
+      'L.index_3',
+      'gear',
+      { control: 'L.index_2', press: 'long' },
+      game,
+    );
+    expect([next.map['ship']?.['L.index_2'], next.map['ship']?.['L.index_3']]).toEqual([
+      undefined,
+      { tap: 'gear' },
+    ]);
+  });
+
+  it('dragged off a double tap the same way', () => {
+    const scheme = deepFreeze(
+      assign(keysScheme(), slot('ship', 'L.index_2', 'double'), 'gear', game),
+    );
+    const next = drop(
+      scheme,
+      'ship',
+      'L.index_3',
+      'gear',
+      { control: 'L.index_2', press: 'double' },
+      game,
+    );
+    expect(next.map['ship']?.['L.index_3']).toEqual({ tap: 'gear' });
+  });
+
+  it('refuses the stick and an action of another mode', () => {
+    const scheme = frozen();
+    expect([
+      drop(scheme, 'ship', 'L.stick', 'gear', undefined, game) === scheme,
+      drop(scheme, 'ship', 'L.index_2', 'jump', undefined, game) === scheme,
+    ]).toEqual([true, true]);
   });
 });
 
@@ -1219,6 +1271,156 @@ describe('a control or mode named like an Object property', () => {
     expect(actionAt(clear(placed, slot('ship', 'constructor')), slot('ship', 'constructor'))).toBe(
       undefined,
     );
+  });
+});
+
+describe('a switch of output or devices keeps what every control shows', () => {
+  const hdBoth = () =>
+    deepFreeze(
+      setDevices(
+        xboxControllerPreset(helldivers2),
+        { ...AZERONS_ONLY, controller: true },
+        helldivers2,
+      ),
+    );
+  const at = (control: string) => ({ mode: 'default', control, press: 'tap' as const });
+
+  it('controller to keys: an Azeron button showing the controller’s action keeps it', () => {
+    // Codex's case: Reload put on the controller's X, which Left middle 1 also sends.
+    const scheme = assign(hdBoth(), at('pad.X'), 'reload', helldivers2);
+    expect(shownPresses(scheme, 'default', 'L.middle_1')).toEqual({ tap: 'reload' });
+    const keys = setOutput(scheme, 'keys', helldivers2);
+    expect([
+      shownPresses(keys, 'default', 'L.middle_1'),
+      shownPresses(keys, 'default', 'pad.X'),
+    ]).toEqual([{ tap: 'reload' }, { tap: 'reload' }]);
+  });
+
+  it('controller to keys: a long press or a double tap stays, since keys have them', () => {
+    const scheme = deepFreeze({
+      ...padScheme(),
+      map: { ship: { 'L.index_1': { tap: 'boost', long: 'gear', double: 'galaxy' } } },
+    });
+    expect(setOutput(scheme, 'keys', padGame).map['ship']?.['L.index_1']).toEqual({
+      tap: 'boost',
+      long: 'gear',
+      double: 'galaxy',
+    });
+  });
+
+  it('taking the controller away: an Azeron button showing its action keeps it', () => {
+    const scheme = assign(hdBoth(), at('pad.X'), 'reload', helldivers2);
+    const gone = setDevices(scheme, AZERONS_ONLY, helldivers2);
+    expect(shownPresses(gone, 'default', 'L.middle_1')).toEqual({ tap: 'reload' });
+  });
+
+  it('taking the Azerons away: a controller button showing an Azeron’s action keeps it', () => {
+    const scheme = hdBoth();
+    expect(shownPresses(scheme, 'default', 'pad.X')).toEqual({ tap: 'reload' });
+    const gone = setDevices(
+      scheme,
+      { azerons: 'none', keyboard: false, mouse: false, controller: true },
+      helldivers2,
+    );
+    expect(shownPresses(gone, 'default', 'pad.X')).toEqual({ tap: 'reload' });
+  });
+
+  it('taking the right unit away: a controller button showing its action keeps it', () => {
+    // Melee is on the right stick press, which sends RS.
+    const scheme = hdBoth();
+    const left = setDevices(
+      scheme,
+      { azerons: 'left', keyboard: false, mouse: true, controller: true },
+      helldivers2,
+    );
+    expect([
+      shownPresses(scheme, 'default', 'pad.RS'),
+      shownPresses(left, 'default', 'pad.RS'),
+    ]).toEqual([{ tap: 'melee' }, { tap: 'melee' }]);
+  });
+
+  it('shownPresses: a control’s own presses, and on the tap what its Xbox control does', () => {
+    const scheme = assign(hdBoth(), at('pad.X'), 'reload', helldivers2);
+    expect([
+      shownPresses(scheme, 'default', 'L.middle_1'),
+      shownPresses(scheme, 'default', 'L.pinky_5'),
+      shownPresses(
+        { ...padScheme(), map: { ship: { 'L.index_1': { long: 'gear' } } } },
+        'ship',
+        'L.index_1',
+      ),
+    ]).toEqual([{ tap: 'reload' }, {}, { long: 'gear' }]);
+  });
+
+  // A long run of edits, with switches of output and of devices among them. After each switch,
+  // every control the setup keeps shows what it showed: no action is lost or changed, on any
+  // press. Two things a switch may do: a control that showed nothing may come to show an action
+  // (it now sends the same Xbox control as a button that has one), and an Azeron button switched
+  // to a controller drops its long press and double tap, which a controller button hasn't got.
+  const g = helldivers2;
+  const DEVICES: SetupDevices[] = [
+    { azerons: 'both', keyboard: false, mouse: false, controller: false },
+    { azerons: 'both', keyboard: false, mouse: false, controller: true },
+    { azerons: 'both', keyboard: true, mouse: true, controller: true },
+    { azerons: 'left', keyboard: false, mouse: true, controller: true },
+    { azerons: 'left', keyboard: true, mouse: true, controller: false },
+    { azerons: 'none', keyboard: true, mouse: true, controller: true },
+    { azerons: 'none', keyboard: false, mouse: false, controller: true },
+  ];
+  const everyControl = [
+    ...CYBORG2_LEFT.positions.filter((p) => p.name !== 'stick').map((p) => `L.${p.name}`),
+    ...CYBORG2_RIGHT.positions.filter((p) => p.name !== 'stick').map((p) => `R.${p.name}`),
+    ...BUILT_IN_DEVICES.flatMap((d) => d.controls)
+      .filter((c) => c.sends !== undefined && !c.id.startsWith('pedal.'))
+      .map((c) => c.id),
+  ];
+
+  function lost(before: Scheme, after: Scheme): string[] {
+    const was = setupOf(before.devices);
+    const now = setupOf(after.devices);
+    const out: string[] = [];
+    for (const control of everyControl) {
+      if (!inSetup(was, control) || !inSetup(now, control)) continue;
+      const a = shownPresses(before, 'default', control);
+      const b = shownPresses(after, 'default', control);
+      for (const press of ['tap', 'long', 'double'] as const) {
+        const dropped =
+          press !== 'tap' &&
+          after.output === 'pad' &&
+          (control.startsWith('L.') || control.startsWith('R.'));
+        if (a[press] !== undefined && a[press] !== b[press] && !dropped)
+          out.push(`${control} ${press}: ${a[press]} became ${b[press] ?? 'nothing'}`);
+      }
+    }
+    return out;
+  }
+
+  it.each([11, 23, 37])('holds through 200 edits with switches among them (seed %i)', (seed) => {
+    let x = seed;
+    const next = (n: number) => {
+      x = (x * 1103515245 + 12345) % 2147483648;
+      return x % n;
+    };
+    const actions = g.actions.map((a) => a.id);
+    let scheme: Scheme = xboxControllerPreset(g);
+    const found: string[] = [];
+    for (let i = 1; i <= 200; i++) {
+      const kind = next(10);
+      const control = everyControl[next(everyControl.length)] ?? '';
+      const press = (['tap', 'tap', 'long', 'double'] as const)[next(4)] ?? 'tap';
+      const action = actions[next(actions.length)] ?? '';
+      if (kind < 5) scheme = assign(scheme, { mode: 'default', control, press }, action, g);
+      else if (kind < 7) scheme = clear(scheme, { mode: 'default', control, press });
+      else {
+        const before = scheme;
+        scheme =
+          kind === 7
+            ? setOutput(scheme, scheme.output === 'pad' ? 'keys' : 'pad', g)
+            : setDevices(scheme, DEVICES[next(DEVICES.length)] ?? AZERONS_ONLY, g);
+        for (const fault of lost(before, scheme)) found.push(`after edit ${i}: ${fault}`);
+      }
+    }
+    expect(found).toEqual([]);
   });
 });
 

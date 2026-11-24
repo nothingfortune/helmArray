@@ -3,7 +3,7 @@ import { ACTION_DRAG_TYPE } from '../unit/layout';
 import { roleVars } from '../unit/role';
 import { controlFor, litParts, sideOf } from './controls';
 import type { ControlState } from './controls';
-import { FROM_DRAG_TYPE } from './drag';
+import { FROM_DRAG_TYPE, PRESS_DRAG_TYPE } from './drag';
 import { MOUSE_ROWS } from './layouts';
 
 const state = (over: Partial<ControlState> = {}): ControlState => ({
@@ -74,7 +74,11 @@ describe('a control of the keyboard, the mouse or the controller', () => {
     (attrs as unknown as { onDragStart(e: { dataTransfer: unknown }): void }).onDragStart({
       dataTransfer,
     });
-    expect(data).toEqual({ [ACTION_DRAG_TYPE]: 'reload', [FROM_DRAG_TYPE]: 'key.R' });
+    expect(data).toEqual({
+      [ACTION_DRAG_TYPE]: 'reload',
+      [FROM_DRAG_TYPE]: 'key.R',
+      [PRESS_DRAG_TYPE]: 'tap',
+    });
   });
 });
 

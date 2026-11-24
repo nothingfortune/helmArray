@@ -47,15 +47,15 @@ describe('unit keys', () => {
   it('labels each key with its action in the current mode, with its role, per hand', () => {
     const ship = view(keysScheme());
     expect(ship.left.keys).toEqual({
-      'L.index_1': { label: 'Boost', role: 'movement', action: 'boost' },
-      'L.middle_1': { label: 'Frame shift drive', role: 'travel', action: 'fsd' },
+      'L.index_1': { label: 'Boost', role: 'movement', action: 'boost', press: 'tap' },
+      'L.middle_1': { label: 'Frame shift drive', role: 'travel', action: 'fsd', press: 'tap' },
     });
     expect(ship.right.keys).toEqual({
-      'R.index_1': { label: 'Fire', role: 'combat', action: 'fire' },
+      'R.index_1': { label: 'Fire', role: 'combat', action: 'fire', press: 'tap' },
     });
     const srv = view(keysScheme(), 'srv');
     expect(srv.left.keys).toEqual({
-      'L.index_1': { label: 'Jump', role: 'movement', action: 'jump' },
+      'L.index_1': { label: 'Jump', role: 'movement', action: 'jump', press: 'tap' },
     });
     expect(srv.right.keys).toEqual({});
   });
@@ -71,12 +71,17 @@ describe('unit keys', () => {
       label: 'Long: Landing gear',
       role: 'travel',
       action: 'gear',
+      press: 'long',
     });
   });
 
   it('draws an action the game no longer has as its id, with no role', () => {
     const scheme = { ...keysScheme(), map: { ship: { 'L.index_1': { tap: 'gone' } } } };
-    expect(view(scheme).left.keys['L.index_1']).toEqual({ label: 'gone', action: 'gone' });
+    expect(view(scheme).left.keys['L.index_1']).toEqual({
+      label: 'gone',
+      action: 'gone',
+      press: 'tap',
+    });
   });
 
   it('labels a key-mode stick by the actions its keys reach, else by the key', () => {
@@ -313,8 +318,8 @@ describe('the keyboard, the mouse and the controller', () => {
 
   it('label their keys and buttons with their actions, like the units', () => {
     expect(tabView(kbm, 'keyboard').fixed).toEqual({
-      'key.J': { label: 'Frame shift drive', role: 'travel', action: 'fsd' },
-      'mouse.left': { label: 'Fire', role: 'combat', action: 'fire' },
+      'key.J': { label: 'Frame shift drive', role: 'travel', action: 'fsd', press: 'tap' },
+      'mouse.left': { label: 'Fire', role: 'combat', action: 'fire', press: 'tap' },
     });
   });
 
@@ -327,6 +332,7 @@ describe('the keyboard, the mouse and the controller', () => {
       label: 'Fire',
       role: 'combat',
       action: 'fire',
+      press: 'tap',
     });
   });
 

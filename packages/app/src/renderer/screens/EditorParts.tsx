@@ -8,6 +8,7 @@ import type { AzeronUse, ControlId, Game, PadControl, Press, Role, Scheme } from
 import type { Preset } from '../../shared/api';
 import { Controller, Keyboard, Mouse } from '../devices/Devices';
 import { dragAction } from '../devices/drag';
+import type { DropAction } from '../devices/drag';
 import { Unit } from '../unit/Unit';
 import type { UnitProps } from '../unit/Unit';
 import {
@@ -535,7 +536,7 @@ export function DeviceArea({
   view: EditorView;
   selected: ControlId | undefined;
   onSelect(id: ControlId): void;
-  onDropAction(control: ControlId, actionId: string, from?: ControlId): void;
+  onDropAction: DropAction;
 }) {
   const fixed = {
     keys: view.fixed,

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ACTION_DRAG_TYPE } from '../unit/layout';
-import { FROM_DRAG_TYPE, dragAction, dragFrom, dropHandlers } from './drag';
+import { FROM_DRAG_TYPE, PRESS_DRAG_TYPE, dragAction, dragFrom, dropHandlers } from './drag';
 import type { DragLike } from './drag';
 
 function drag(data: Record<string, string> = {}, inside = false) {
@@ -30,10 +30,14 @@ describe('dragging an action', () => {
     ]);
   });
 
-  it('off a control carries the action and where it came from', () => {
+  it('off a control carries the action and where it came from: the control, and the press shown', () => {
     const { event, store } = drag();
-    dragFrom('L.middle_1', 'reload')(event);
-    expect(store).toEqual({ [ACTION_DRAG_TYPE]: 'reload', [FROM_DRAG_TYPE]: 'L.middle_1' });
+    dragFrom('L.middle_1', 'reload', 'long')(event);
+    expect(store).toEqual({
+      [ACTION_DRAG_TYPE]: 'reload',
+      [FROM_DRAG_TYPE]: 'L.middle_1',
+      [PRESS_DRAG_TYPE]: 'long',
+    });
   });
 });
 
@@ -75,11 +79,21 @@ describe('dropping it on a control', () => {
     expect([onDrop.mock.calls, mark.mock.calls]).toEqual([[['L.middle_2', 'reload']], [[null]]]);
   });
 
-  it('moves an action dragged off another control, and does nothing back on its own', () => {
+  it('moves an action dragged off another control, from the press it showed, and does nothing back on its own', () => {
     const { onDrop, handlers } = setup();
-    handlers.onDrop(drag({ [ACTION_DRAG_TYPE]: 'reload', [FROM_DRAG_TYPE]: 'L.middle_1' }).event);
-    handlers.onDrop(drag({ [ACTION_DRAG_TYPE]: 'jump', [FROM_DRAG_TYPE]: 'L.middle_2' }).event);
+    const from = (control: string, press?: string) => ({
+      [FROM_DRAG_TYPE]: control,
+      ...(press === undefined ? {} : { [PRESS_DRAG_TYPE]: press }),
+    });
+    handlers.onDrop(drag({ [ACTION_DRAG_TYPE]: 'reload', ...from('L.middle_1', 'double') }).event);
+    handlers.onDrop(drag({ [ACTION_DRAG_TYPE]: 'aim', ...from('L.middle_3') }).event);
+    handlers.onDrop(drag({ [ACTION_DRAG_TYPE]: 'jump', ...from('L.middle_2', 'tap') }).event);
+    handlers.onDrop(drag({ [ACTION_DRAG_TYPE]: 'fire', ...from('L.middle_4', 'sideways') }).event);
     handlers.onDrop(drag({}).event);
-    expect(onDrop.mock.calls).toEqual([['L.middle_2', 'reload', 'L.middle_1']]);
+    expect(onDrop.mock.calls).toEqual([
+      ['L.middle_2', 'reload', { control: 'L.middle_1', press: 'double' }],
+      ['L.middle_2', 'aim', { control: 'L.middle_3', press: 'tap' }],
+      ['L.middle_2', 'fire', { control: 'L.middle_4', press: 'tap' }],
+    ]);
   });
 });

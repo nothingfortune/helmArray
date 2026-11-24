@@ -51,7 +51,7 @@ export function controlFor(state: ControlState, id: ControlId, canTake: boolean,
         ? dropHandlers(id, onDropAction, setDropTarget)
         : {}),
       ...(onDropAction !== undefined && action?.action !== undefined
-        ? { draggable: true, onDragStart: dragFrom(id, action.action) }
+        ? { draggable: true, onDragStart: dragFrom(id, action.action, action.press ?? 'tap') }
         : {}),
     },
   };

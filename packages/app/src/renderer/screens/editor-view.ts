@@ -289,6 +289,7 @@ function keysOf(
     keys[control] = {
       label,
       action: lead.id,
+      press: lead.press,
       ...(ref.role === undefined ? {} : { role: ref.role }),
     };
   }

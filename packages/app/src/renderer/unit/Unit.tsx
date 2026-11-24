@@ -5,7 +5,7 @@
 // their units with this one component.
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
-import type { ControlId, Hand, Role } from '@helmarray/core';
+import type { ControlId, Hand, Press, Role } from '@helmarray/core';
 import { fitLabel } from './label';
 import { roleVars } from './role';
 import { dragFrom, dropHandlers } from '../devices/drag';
@@ -20,6 +20,8 @@ export interface UnitKey {
   role?: Role;
   /** The action's id: a key with one can be dragged to another control. */
   action?: string;
+  /** The press that action is on (a button with only a long press shows that). Defaults to tap. */
+  press?: Press;
 }
 
 /** What the stick's four directions send, shown as chips around it. */
@@ -99,7 +101,7 @@ export function Unit({
   const drags = (id: ControlId, action: UnitKey | undefined) =>
     onDropAction === undefined || action?.action === undefined
       ? {}
-      : { draggable: true, onDragStart: dragFrom(id, action.action) };
+      : { draggable: true, onDragStart: dragFrom(id, action.action, action.press ?? 'tap') };
 
   const stateClasses = (id: ControlId): string[] => [
     ...(selected === id ? ['is-selected'] : []),
