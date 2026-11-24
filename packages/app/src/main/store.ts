@@ -9,8 +9,8 @@
 //   schemes/<id>.json   one scheme
 //   settings.json       the active game, and the active scheme of each game
 //   units.json          what each unit was last written with: which scheme, of which game, when
-//   sheets.json         what is still to be set by hand in each game's own controls, after the
-//                       applies that said so, until the person says it is done
+//   sheets.json         the bindings each game holds as far as helmArray knows (its baseline),
+//                       where they differ from what it ships; moved only by *Done*
 //   applied/<id>.json   the plan last applied for scheme <id>; `<game>.held.json`, what a game
 //                       holds after the scheme applied to it last was deleted
 //
@@ -31,9 +31,8 @@ import type {
   ApplyWho,
   Game,
   Hand,
-  KeptSheet,
-  KeptSheets,
-  SheetRow,
+  Baselines,
+  GameBinding,
   Plan,
   Scheme,
   StoredKind,
@@ -43,9 +42,9 @@ import type {
 import {
   AZERON_USES,
   NOTHING_HELD,
-  NO_SHEETS,
-  dismissSheet,
-  keepSheet,
+  NO_BASELINES,
+  heldBy,
+  settleBaseline,
   recordApply,
 } from '@helmarray/core';
 import {
@@ -90,6 +89,8 @@ export interface DataStoreOptions {
   schedule?(job: () => Promise<void>, ms: number): () => void;
   /** Told of every file that couldn't be read or written. Must not throw. */
   onProblem?(problem: StoreProblem): void;
+  /** Told of something done to a file the person needs no word of, for the log. Must not throw. */
+  onNote?(file: string, message: string): void;
   /** A short unique text, for new scheme ids and for names of quarantined files. */
   newId?(): string;
 }
@@ -178,23 +179,23 @@ const isUnitsHeld = (value: unknown): value is UnitsHeld =>
 
 const isSignalOrNone = (value: unknown) =>
   value === null || (isRecord(value) && typeof value['kind'] === 'string');
-const isSheetRow = (value: unknown): value is SheetRow =>
+const isGameBinding = (value: unknown): value is GameBinding =>
   isRecord(value) &&
   (value['set'] === 'keyboard' || value['set'] === 'controller') &&
   typeof value['mode'] === 'string' &&
-  typeof value['modeName'] === 'string' &&
   typeof value['action'] === 'string' &&
-  typeof value['actionName'] === 'string' &&
-  isSignalOrNone(value['to']) &&
-  isSignalOrNone(value['from']);
-const isKeptSheet = (value: unknown): value is KeptSheet =>
+  isSignalOrNone(value['signal']) &&
+  isSignalOrNone(value['native']);
+const isBaselines = (value: unknown): value is Baselines =>
   isRecord(value) &&
-  typeof value['gameId'] === 'string' &&
-  typeof value['gameName'] === 'string' &&
-  Array.isArray(value['rows']) &&
-  value['rows'].every(isSheetRow);
-const isKeptSheets = (value: unknown): value is KeptSheets =>
-  isRecord(value) && Array.isArray(value['games']) && value['games'].every(isKeptSheet);
+  Array.isArray(value['games']) &&
+  value['games'].every(
+    (g: unknown) =>
+      isRecord(g) &&
+      typeof g['gameId'] === 'string' &&
+      Array.isArray(g['held']) &&
+      g['held'].every(isGameBinding),
+  );
 
 const CHECKS: { [K in StoredKind]: (value: unknown) => value is StoredKinds[K] } = {
   scheme: isScheme,
@@ -202,7 +203,7 @@ const CHECKS: { [K in StoredKind]: (value: unknown) => value is StoredKinds[K] }
   settings: isSettings,
   applied: isPlan,
   units: isUnitsHeld,
-  sheets: isKeptSheets,
+  sheets: isBaselines,
 };
 
 const THING: Record<StoredKind, string> = {
@@ -310,6 +311,7 @@ export class DataStore {
   private readonly debounceMs: number;
   private readonly schedule: (job: () => Promise<void>, ms: number) => () => void;
   private readonly onProblem: (problem: StoreProblem) => void;
+  private readonly onNote: (file: string, message: string) => void;
   private readonly newId: () => string;
 
   private settings: AppSettings = { ...DEFAULT_SETTINGS, activeScheme: {} };
@@ -337,6 +339,7 @@ export class DataStore {
     this.debounceMs = options.debounceMs ?? AUTOSAVE_MS;
     this.schedule = options.schedule ?? timerSchedule;
     this.onProblem = options.onProblem ?? (() => undefined);
+    this.onNote = options.onNote ?? (() => undefined);
     this.newId = options.newId ?? (() => randomUUID().slice(0, 8));
   }
 
@@ -896,35 +899,58 @@ export class DataStore {
     return this.track(run);
   }
 
-  // What is still to set by hand in a game ------------------------------------------------------
+  // What each game holds -----------------------------------------------------------------------
 
-  /** Each game's rows still to set, the game applied last first. None when the file can't be read. */
-  async sheets(): Promise<KeptSheet[]> {
-    return (await this.readSheets()).games;
+  /**
+   * Every game's baseline: the bindings it holds as far as helmArray knows. None (what each game
+   * ships) when the file can't be read. A version-1 file's reminders were dropped by its migration:
+   * the log says how many, and the file is written again without them.
+   */
+  async baselines(): Promise<Baselines> {
+    const found = await this.read('sheets', 'sheets.json');
+    if (found.status !== 'ok') return NO_BASELINES;
+    const { droppedReminders } = found.value;
+    const baselines: Baselines = { games: found.value.games };
+    if (droppedReminders !== undefined) {
+      this.note(
+        'sheets.json',
+        `an earlier helmArray kept ${droppedReminders} game${droppedReminders === 1 ? "'s" : "s'"} reminders, not what the games hold; they were dropped, and each game is taken to hold what it ships`,
+      );
+      await this.changeBaselines(() => baselines).catch(() => undefined);
+    }
+    return baselines;
   }
 
-  private async readSheets(): Promise<KeptSheets> {
-    const found = await this.read('sheets', 'sheets.json');
-    return found.status === 'ok' ? found.value : NO_SHEETS;
+  /** The bindings one game holds as far as helmArray knows, or null: what it ships. */
+  async heldBindings(gameId: string): Promise<GameBinding[] | null> {
+    return heldBy(await this.baselines(), gameId);
+  }
+
+  private note(file: string, message: string): void {
+    try {
+      this.onNote(file, message);
+    } catch {
+      // A listener must never take the store down.
+    }
   }
 
   /** One change to sheets.json at a time, in the order asked. */
-  private changeSheets(change: (kept: KeptSheets) => KeptSheets): Promise<void> {
+  private changeBaselines(change: (baselines: Baselines) => Baselines): Promise<void> {
     const run = this.sheetsTurn.then(async () => {
-      await this.put('sheets', 'sheets.json', change(await this.readSheets()));
+      const found = await this.read('sheets', 'sheets.json');
+      const now = found.status === 'ok' ? found.value : NO_BASELINES;
+      // A version-1 file's count of dropped reminders is said once (`baselines`), never kept.
+      await this.put('sheets', 'sheets.json', change({ games: now.games }));
     });
     this.sheetsTurn = run.catch(() => undefined);
     return this.track(run);
   }
 
-  /** After an apply that left rows to set by hand in the game (`keepSheet`). */
-  keepSheet(gameId: string, gameName: string, rows: readonly SheetRow[]): Promise<void> {
-    if (rows.length === 0) return Promise.resolve();
-    return this.changeSheets((kept) => keepSheet(kept, gameId, gameName, rows));
-  }
-
-  /** *Done*: the person has set the game's rows. */
-  dismissSheet(gameId: string): Promise<void> {
-    return this.changeSheets((kept) => dismissSheet(kept, gameId));
+  /**
+   * The game now holds these bindings: *Done* on what was left to set by hand, or (M5) its file
+   * written. The only thing that moves a game's baseline.
+   */
+  settleBaseline(gameId: string, bindings: readonly GameBinding[]): Promise<void> {
+    return this.changeBaselines((baselines) => settleBaseline(baselines, gameId, bindings));
   }
 }

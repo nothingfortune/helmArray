@@ -22,8 +22,8 @@
 // Nothing here throws at a caller: every refusal and failure comes back as a sentence.
 // Pure: the store, the units and the running programs are handed in.
 
-import type { ApplyWho, Game, GameBinding, Hand, Plan, Scheme } from '@helmarray/core';
-import { gameRowsChanged, handsOf } from '@helmarray/core';
+import type { ApplyWho, Game, Hand, Plan, Scheme } from '@helmarray/core';
+import { handsOf, pendingRows } from '@helmarray/core';
 import type {
   ApplyGame,
   ApplyGameRow,
@@ -73,10 +73,10 @@ export interface ApplyServiceDeps {
   /** Makes the scheme the game's active one, and the game the active one. */
   setActive(gameId: string, schemeId: string): Promise<void>;
   /**
-   * The plan applied to this game last, of any of its schemes: the game holds its bindings. Null
-   * when none was; without it, the game is taken to hold what it ships.
+   * The bindings the game holds as far as helmArray knows: its baseline, moved only when the
+   * person says they set what was left to set (*Done*). Null: what it ships, as without it.
    */
-  gameHolds?(gameId: string): Promise<Plan | null>;
+  gameHolds?(gameId: string): Promise<Pick<Plan, 'gameBindings'> | null>;
   /**
    * Notes what each unit now holds, after the units are written: every unit that came out holding
    * the plan holds this scheme (`recordApply`). Called whatever came of the others.
@@ -86,11 +86,6 @@ export interface ApplyServiceDeps {
     outcomes: readonly { hand: Hand; status: string }[],
     who: ApplyWho,
   ): Promise<void>;
-  /**
-   * Keeps what a good apply left to set by hand in the game's own controls (the bind sheet), until
-   * the person says it is done: the rows the drawer showed, worked out before anything was written.
-   */
-  keepSheet?(gameId: string, gameName: string, rows: readonly ApplyGameRow[]): Promise<void>;
   /** The clock, for when an apply was. Defaults to `Date.now`. */
   now?(): number;
   /** An apply ended, however it ended: the state is to be worked out again. */
@@ -218,11 +213,11 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
 
   /** The game's bindings that change: the plan's against what the game holds now. */
   const gameHalf = async (plan: Plan, game: Game): Promise<ApplyGame> => {
-    let holds: Plan | null = null;
+    let holds: Pick<Plan, 'gameBindings'> | null = null;
     try {
       holds = (await deps.gameHolds?.(game.id)) ?? null;
     } catch (error) {
-      trace(`couldn't read what was applied to ${game.id} last: ${messageOf(error)}`);
+      trace(`couldn't read what ${game.id} holds: ${messageOf(error)}`);
     }
     return { via: plan.gameFile ? 'file' : 'sheet', rows: changedRows(plan, game, holds) };
   };
@@ -378,18 +373,9 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
       if (planFingerprint(plan) !== fingerprint) {
         return { ok: false, changed: true, message: CHANGED_SENTENCE, units: [] };
       }
-      // What the game is to be told, against what it holds before this apply: the drawer's rows.
-      const half = await gameHalf(plan, game);
-      /** A good apply's rows to set by hand are kept; a failure to keep them never undoes it. */
-      const keep = async (result: ApplyResult): Promise<ApplyResult> => {
-        if (!result.ok || half.via !== 'sheet' || half.rows.length === 0) return result;
-        try {
-          await deps.keepSheet?.(game.id, game.name, half.rows);
-        } catch (error) {
-          trace(`couldn't keep what is left to set in ${game.id}: ${messageOf(error)}`);
-        }
-        return result;
-      };
+      // What is left to set by hand in the game is worked out afresh from what is applied and
+      // what the game holds (sheets.json), never kept from here. M5: once helmArray writes the
+      // game's file, the writer moves the game's baseline (`DataStore.settleBaseline`) after it.
 
       // A setup with no Azeron writes no unit: it is remembered, and the game's half is the
       // player's, from the drawer.
@@ -397,12 +383,7 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
         const blocked = findingChecks(plan).find((c) => !c.ok);
         if (blocked) return refused(blocked.text);
         const problem = await remember(schemeId, game.id, plan, fingerprint);
-        // Awaited here, inside the try: the state is worked out (finally) only once it is kept.
-        return await keep({
-          ok: problem === null,
-          message: problem ?? NO_UNIT_SENTENCE,
-          units: [],
-        });
+        return { ok: problem === null, message: problem ?? NO_UNIT_SENTENCE, units: [] };
       }
 
       const open = await azeronOpen();
@@ -455,7 +436,7 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
         slot: u.slot,
       }));
       if (outcome.problem !== null) return { ok: false, message: outcome.problem, units };
-      return await keep({ ok: outcome.result.ok, message: outcome.result.message, units });
+      return { ok: outcome.result.ok, message: outcome.result.message, units };
     } catch (error) {
       trace(`apply failed unexpectedly: ${messageOf(error)}`);
       return refused(`helmArray couldn't apply: ${sentence(messageOf(error))}`);
@@ -500,22 +481,18 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
 /** The game's half when there is nothing to say: no binding changes. */
 const NO_GAME_CHANGE: ApplyGame = { via: 'sheet', rows: [] };
 
-export function changedRows(plan: Plan, game: Game, holds: Plan | null): ApplyGameRow[] {
-  // What the game holds of each action: the first of its rows in the plan applied last.
-  const held = new Map<string, GameBinding>();
-  for (const b of holds?.gameBindings ?? []) {
-    const k = `${b.set}|${b.mode}|${b.action}`;
-    if (!held.has(k)) held.set(k, b);
-  }
-  return gameRowsChanged(plan, holds).map((b) => ({
-    set: b.set,
-    mode: b.mode,
-    modeName: game.modes.find((m) => m.id === b.mode)?.name ?? b.mode,
-    action: b.action,
-    actionName: game.actions.find((a) => a.id === b.action)?.name ?? b.action,
-    to: b.signal,
-    from: held.has(`${b.set}|${b.mode}|${b.action}`)
-      ? (held.get(`${b.set}|${b.mode}|${b.action}`)?.signal ?? null)
-      : b.native,
+/**
+ * The game's bindings the plan changes, in the drawer's words: against what the game holds as far
+ * as helmArray knows (its baseline; null: what it ships). Also what the Library's reminder shows.
+ */
+export function changedRows(
+  plan: Pick<Plan, 'gameBindings'>,
+  game: Game,
+  holds: Pick<Plan, 'gameBindings'> | null,
+): ApplyGameRow[] {
+  return pendingRows(plan.gameBindings, holds === null ? null : holds.gameBindings).map((row) => ({
+    ...row,
+    modeName: game.modes.find((m) => m.id === row.mode)?.name ?? row.mode,
+    actionName: game.actions.find((a) => a.id === row.action)?.name ?? row.action,
   }));
 }

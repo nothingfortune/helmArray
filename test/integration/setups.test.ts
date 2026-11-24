@@ -108,6 +108,8 @@ describe('deleting the setup a game holds', () => {
     );
     await world.helm.setActive(HELLDIVERS2, held.id);
     expect((await world.previewAndApply(held.id)).result.ok).toBe(true);
+    // The person set the game's controls as the drawer said: the game holds the held setup's.
+    await world.helm.dismissSheet(HELLDIVERS2);
     await world.helm.deleteScheme(held.id);
     await world.idle();
     entry = await entryOf(world);

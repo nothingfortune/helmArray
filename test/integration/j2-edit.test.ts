@@ -8,7 +8,7 @@ import type { Plan, Scheme } from '@helmarray/core';
 import type { ApplyPreview, ApplyResult } from '../../packages/app/src/shared/api';
 import { assign, move } from '../../packages/app/src/renderer/screens/editor-model';
 import { isWrite } from './support/fake-hid';
-import { World, expectedSlot, heldSlot, holding } from './support/world';
+import { HELLDIVERS2, World, expectedSlot, heldSlot, holding } from './support/world';
 
 describe('J2: moving Fire to another button of the right unit', () => {
   let world: World;
@@ -137,6 +137,7 @@ describe('J2: moving Reload onto another button of the left unit, Azerons as a c
   let preview: ApplyPreview;
   let result: ApplyResult;
   let afterApply: ApplyPreview;
+  let afterDone: ApplyPreview;
   let rightSentBefore: number;
 
   beforeAll(async () => {
@@ -164,6 +165,10 @@ describe('J2: moving Reload onto another button of the left unit, Azerons as a c
     ({ preview, result } = await world.previewAndApply(created.id));
     await world.idle();
     afterApply = await world.helm.previewApply(created.id);
+    // The person sets the game's controls as the reminder says, and says Done.
+    await world.helm.dismissSheet(HELLDIVERS2);
+    await world.idle();
+    afterDone = await world.helm.previewApply(created.id);
   });
 
   afterAll(async () => {
@@ -211,7 +216,11 @@ describe('J2: moving Reload onto another button of the left unit, Azerons as a c
     expect(world.state.sync).toEqual({ label: 'In sync', tone: 'ok' });
   });
 
-  it('a second look lists no game binding: the game holds what was applied', () => {
-    expect(afterApply.game.rows).toEqual([]);
+  it('a second look still lists the game bindings: the game holds them only once Done is said', () => {
+    expect(afterApply.game.rows).toEqual(preview.game.rows);
+  });
+
+  it('after Done a look lists no game binding: the game holds what was applied', () => {
+    expect(afterDone.game.rows).toEqual([]);
   });
 });

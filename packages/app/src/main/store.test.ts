@@ -1055,46 +1055,69 @@ describe('what the units hold', () => {
   });
 });
 
-describe('what is still to set by hand in a game', () => {
-  const row = (action: string, code: string) => ({
+describe('what each game holds (its baseline)', () => {
+  const held = (action: string, code: string) => ({
     set: 'keyboard' as const,
     mode: 'ship',
-    modeName: 'Ship',
     action,
-    actionName: action,
-    to: { kind: 'key' as const, code: code as 'J' },
-    from: null,
+    signal: { kind: 'key' as const, code: code as 'J' },
+    native: null,
   });
 
-  it('is nothing before any apply left something to set', async () => {
+  it('is what the game ships (none) until a baseline is settled', async () => {
     const { data } = await openStore();
-    expect(await data.sheets()).toEqual([]);
-  });
-
-  it("keeps each game's rows across a restart, until Done drops that game's", async () => {
-    const { data } = await openStore();
-    await data.keepSheet('skiff', 'Skiff', [row('boost', 'J')]);
-    await data.keepSheet('rover', 'Rover', [row('drive', 'K')]);
-    const again = await openStore();
-    const kept = await again.data.sheets();
-    await again.data.dismissSheet('rover');
-    const after = await (await openStore()).data.sheets();
-    expect([kept.map((s) => s.gameId), after]).toEqual([
-      ['rover', 'skiff'],
-      [{ gameId: 'skiff', gameName: 'Skiff', rows: [row('boost', 'J')] }],
+    expect([await data.heldBindings('skiff'), await data.baselines()]).toEqual([
+      null,
+      { games: [] },
     ]);
   });
 
-  it('is nothing, reported, when its file is damaged', async () => {
-    await writeRaw(['sheets.json'], '{');
-    const { data, problems } = await openStore();
-    expect([await data.sheets(), problems.map((p) => p.file)]).toEqual([[], ['sheets.json']]);
+  it("keeps each game's baseline across a restart, and a later Done moves only what it covers", async () => {
+    const { data } = await openStore();
+    await data.settleBaseline('skiff', [held('boost', 'J'), held('fire', 'K')]);
+    await data.settleBaseline('rover', [held('drive', 'L')]);
+    const again = await openStore();
+    await again.data.settleBaseline('skiff', [held('boost', 'M')]);
+    const after = (await openStore()).data;
+    expect([await after.heldBindings('skiff'), await after.heldBindings('rover')]).toEqual([
+      [held('fire', 'K'), held('boost', 'M')],
+      [held('drive', 'L')],
+    ]);
   });
 
-  it('is nothing, reported, when its file is not a list of games', async () => {
-    await writeRaw(['sheets.json'], JSON.stringify({ schemaVersion: 1, games: [{ gameId: 3 }] }));
+  it('drops the reminders of a version-1 file, says so in the log once, and writes it again', async () => {
+    await writeRaw(
+      ['sheets.json'],
+      JSON.stringify({
+        schemaVersion: 1,
+        games: [{ gameId: 'skiff', gameName: 'Skiff', rows: [] }],
+      }),
+    );
+    const notes: string[] = [];
+    const data = await DataStore.open({
+      root,
+      builtInGames: [SKIFF],
+      onNote: (file, message) => notes.push(`${file}: ${message}`),
+    });
+    const first = await data.baselines();
+    await data.flush();
+    const second = await data.baselines();
+    const onDisk = JSON.parse(await readFile(path('sheets.json'), 'utf8')) as unknown;
+    expect([first, second, notes.length, onDisk]).toEqual([
+      { games: [] },
+      { games: [] },
+      1,
+      { schemaVersion: 2, games: [] },
+    ]);
+  });
+
+  it('is what each game ships, reported, when its file is damaged', async () => {
+    await writeRaw(['sheets.json'], '{');
     const { data, problems } = await openStore();
-    expect([await data.sheets(), problems.map((p) => p.file)]).toEqual([[], ['sheets.json']]);
+    expect([await data.baselines(), problems.map((p) => p.file)]).toEqual([
+      { games: [] },
+      ['sheets.json'],
+    ]);
   });
 });
 

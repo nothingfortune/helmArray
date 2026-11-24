@@ -9,6 +9,7 @@
 
 import { join } from 'node:path';
 import type { Game } from '@helmarray/core';
+import { heldPlan } from '@helmarray/core';
 import type { AppState } from '../shared/api';
 import { createActivePlans } from './active-plans';
 import { createApplyService } from './apply-service';
@@ -35,6 +36,7 @@ import type { SteamReaders } from './steam-library';
 import { planFor } from './scheme-plan';
 import { DataStore } from './store';
 import { pendingChanges } from './sync-state';
+import { reminders, settleReminder } from './reminders';
 
 /** The things a test sets to make time deterministic; the app leaves them all alone. */
 export interface ComposeTuning {
@@ -114,6 +116,7 @@ export async function composeServices(options: ComposeOptions): Promise<Services
     root: options.dataDir,
     builtInGames: options.builtInGames,
     onProblem: (problem) => log.write('(app)', `${problem.file}: ${problem.message}`),
+    onNote: (file, message) => log.write('(app)', `${file}: ${message}`),
   });
 
   // Apply, and what the pill compares the units with. Both read the store as it is now, edits
@@ -157,7 +160,7 @@ export async function composeServices(options: ComposeOptions): Promise<Services
     readLog: (lines) => log.recent(lines),
     active: () => data.active(),
     unitsHeld: () => data.unitsHeld(),
-    sheets: () => data.sheets(),
+    sheets: () => reminders(data),
     plans: createActivePlans({
       ...plans,
       active: () => data.active(),
@@ -178,12 +181,9 @@ export async function composeServices(options: ComposeOptions): Promise<Services
     recordUnits: (plan, outcomes, who) => data.recordApply(plan, outcomes, who),
     saveScheme: (scheme) => data.saveScheme(scheme),
     setActive: (gameId, schemeId) => data.setActive(gameId, schemeId),
-    // The game holds the bindings of the setup applied to it last, of any of its schemes.
-    keepSheet: (gameId, gameName, rows) => data.keepSheet(gameId, gameName, rows),
-    gameHolds: async (gameId) => {
-      const last = await data.lastApplied(gameId);
-      return last === null ? null : data.getApplied(last.schemeId);
-    },
+    // The game holds its baseline: what it ships, moved only by Done (never by an apply alone,
+    // since the person may not have set the game's controls yet).
+    gameHolds: async (gameId) => heldPlan(await data.heldBindings(gameId)),
     settled: () => helm.plansChanged(),
     trace: (line) => log.write('(apply)', line),
   });
@@ -234,7 +234,7 @@ export async function composeServices(options: ComposeOptions): Promise<Services
         await helm.plansChanged();
       },
       dismissSheet: async (gameId) => {
-        await data.dismissSheet(gameId);
+        await settleReminder(data, gameId);
         await helm.plansChanged();
       },
     }),

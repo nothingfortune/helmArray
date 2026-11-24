@@ -443,7 +443,10 @@ export function bindingChanged(binding: GameBinding): boolean {
  * plan) what the game ships. Each changed action's rows, in `current`'s order. Apply's drawer lists
  * these, and the sync pill counts them as not applied.
  */
-export function gameRowsChanged(current: Plan, before: Plan | null): GameBinding[] {
+export function gameRowsChanged(
+  current: Pick<Plan, 'gameBindings'>,
+  before: Pick<Plan, 'gameBindings'> | null,
+): GameBinding[] {
   const key = (b: GameBinding) => `${b.set}|${b.mode}|${b.action}`;
   const ids = (signals: readonly (Signal | null)[]) =>
     signals.map((sig) => (sig === null ? 'none' : signalId(sig))).join(',');

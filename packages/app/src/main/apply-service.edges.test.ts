@@ -477,7 +477,7 @@ describe('the game half of a preview, when what the game holds cannot be read', 
       },
     );
     const preview = await service.preview(scheme.id);
-    expect(lines).toContain("couldn't read what was applied to skiff last: no record");
+    expect(lines).toContain("couldn't read what skiff holds: no record");
     expect(preview.game.rows.length).toBeGreaterThan(0);
   });
 });
