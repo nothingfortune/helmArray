@@ -153,6 +153,21 @@ test.describe('setups', () => {
     await expect(card).toContainText('Applied · Controller');
   });
 
+  test('an action cleared off the mouse beside the left unit goes back on it in two clicks', async ({
+    helm,
+  }) => {
+    const { page } = helm;
+    await startFrom(page, 'Xbox controller');
+    await chooseDevice(page, 'Left + mouse');
+    const mouse = page.getByRole('group', { name: 'Mouse' });
+    await mouse.getByRole('button', { name: 'Left, Fire' }).click();
+    await page.locator('.ed-panel').getByRole('button', { name: 'Clear tap' }).click();
+    await expect(mouse.getByRole('button', { name: 'Left, Not used' })).toBeVisible();
+    // The mouse is still selected (click 1); Fire is offered for it, among the mouse's actions.
+    await page.locator('.ed-actions').getByRole('button', { name: 'Fire', exact: true }).click();
+    await expect(mouse.getByRole('button', { name: 'Left, Fire' })).toBeVisible();
+  });
+
   test('a left Azeron + mouse setup writes the left unit only', async ({ helm }) => {
     const { page } = helm;
     await startFrom(page, 'Xbox controller');

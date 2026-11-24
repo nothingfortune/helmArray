@@ -259,41 +259,50 @@ export function Unplaced({
   prompt: string | null;
   onPlace(id: string): void;
 }) {
+  const act = (a: { id: string; name: string; role?: Role | undefined }, note?: string) => (
+    <li key={a.id}>
+      <button
+        type="button"
+        className="ed-act"
+        draggable
+        aria-disabled={prompt === null}
+        onDragStart={dragAction(a.id)}
+        onClick={() => prompt !== null && onPlace(a.id)}
+      >
+        <span className="dot" style={{ background: roleColour(a.role) }} aria-hidden="true" />
+        <span className="ed-act-name">{a.name}</span>
+        {note !== undefined && <span className="ed-act-where">{note}</span>}
+      </button>
+    </li>
+  );
   return (
     <div className="ed-group ed-unplaced">
-      <div className="ed-unplaced-head">
-        <span className="ed-lbl">
-          Not on a {view.controlWord} · {modeName}
-        </span>
-        <span className="ed-count">{view.unplaced.length}</span>
-      </div>
       {prompt !== null && <p className="ed-hint">{prompt}</p>}
-      {view.unplaced.length === 0 ? (
-        <p className="ed-hint">
-          Every {modeName} action is on a {view.controlWord}.
-        </p>
-      ) : (
-        <ul className="ed-actions">
-          {view.unplaced.map((a) => (
-            <li key={a.id}>
-              <button
-                type="button"
-                className="ed-act"
-                draggable
-                aria-disabled={prompt === null}
-                onDragStart={dragAction(a.id)}
-                onClick={() => prompt !== null && onPlace(a.id)}
-              >
-                <span
-                  className="dot"
-                  style={{ background: roleColour(a.role) }}
-                  aria-hidden="true"
-                />
-                <span>{a.name}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
+      {view.lists.map((list) => (
+        <div key={list.set} className="ed-group">
+          <div className="ed-unplaced-head">
+            <span className="ed-lbl">
+              Not on a {list.word} · {modeName}
+            </span>
+            <span className="ed-count">{list.actions.length}</span>
+          </div>
+          {list.actions.length === 0 ? (
+            <p className="ed-hint">
+              Every {modeName} action is on a {list.word}.
+            </p>
+          ) : (
+            <ul className="ed-actions">{list.actions.map((a) => act(a))}</ul>
+          )}
+        </div>
+      ))}
+      {view.moves.length > 0 && (
+        <div className="ed-group ed-moves">
+          <div className="ed-unplaced-head">
+            <span className="ed-lbl">Already on a {view.controlWord} · picking moves it here</span>
+            <span className="ed-count">{view.moves.length}</span>
+          </div>
+          <ul className="ed-actions">{view.moves.map((a) => act(a, a.where))}</ul>
+        </div>
       )}
     </div>
   );

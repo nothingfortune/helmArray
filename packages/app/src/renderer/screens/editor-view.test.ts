@@ -109,13 +109,16 @@ describe('unit keys', () => {
 
 describe('unplaced actions', () => {
   it("lists the mode's actions that are on no press, in the game's order", () => {
-    expect(view(keysScheme()).unplaced.map((a) => a.id)).toEqual([
+    expect(view(keysScheme()).lists[0]?.actions.map((a) => a.id)).toEqual([
       'galaxy',
       'hardpoints',
       'gear',
       'silent',
     ]);
-    expect(view(keysScheme(), 'srv').unplaced.map((a) => a.id)).toEqual(['lights', 'srv_fire']);
+    expect(view(keysScheme(), 'srv').lists[0]?.actions.map((a) => a.id)).toEqual([
+      'lights',
+      'srv_fire',
+    ]);
   });
 
   it('counts an action on a long press as placed', () => {
@@ -125,11 +128,11 @@ describe('unplaced actions', () => {
       'gear',
       game,
     );
-    expect(view(scheme).unplaced.map((a) => a.id)).not.toContain('gear');
+    expect(view(scheme).lists[0]?.actions.map((a) => a.id)).not.toContain('gear');
   });
 
   it('gives each with its name and role', () => {
-    expect(view(keysScheme()).unplaced[0]).toEqual({
+    expect(view(keysScheme()).lists[0]?.actions[0]).toEqual({
       id: 'galaxy',
       name: 'Galaxy map',
       role: 'menu',
@@ -292,7 +295,7 @@ describe('the setup’s devices', () => {
     ]).toEqual(['keyboard', 'azerons', 'azerons', null]);
   });
 
-  it('call the keyboard’s controls keys, and every other device’s buttons', () => {
+  it('call a tab’s controls by what they are: buttons, keys or mouse buttons', () => {
     const scheme = withDevices({ keyboard: true, mouse: true, controller: true });
     const word = (tab: 'azerons' | 'keyboard' | 'controller') =>
       editorView({ scheme, game, plan: plan(scheme), mode: 'ship', tab }).controlWord;
@@ -306,7 +309,7 @@ describe('the setup’s devices', () => {
         plan: plan(withDevices({ azerons: 'none', mouse: true })),
         mode: 'ship',
       }).controlWord,
-    ]).toEqual(['button', 'key', 'button', 'button']);
+    ]).toEqual(['button', 'key or mouse button', 'button', 'mouse button']);
   });
 
   it('offer “Azerons send” only to a setup with Azerons', () => {
@@ -347,14 +350,75 @@ describe('the keyboard, the mouse and the controller', () => {
     });
   });
 
+  it('list for the selected control’s own set: the mouse beside the left unit is the keyboard’s', () => {
+    // Codex's case: the left Azeron sends Xbox controls, the mouse beside it keys, no keyboard.
+    const scheme: Scheme = {
+      ...padScheme(),
+      devices: { azerons: 'left', keyboard: false, mouse: true, controller: false },
+      map: { ship: { 'L.index_1': { tap: 'fire' } }, srv: {} },
+    };
+    const none = tabView(scheme, 'azerons');
+    const mouse = tabView(scheme, 'azerons', 'mouse.left');
+    const unit = tabView(scheme, 'azerons', 'L.index_2');
+    expect([
+      none.lists.map((l) => [l.set, l.word, l.actions.some((a) => a.id === 'fire')]),
+      mouse.lists.map((l) => [l.set, l.word, l.actions.some((a) => a.id === 'fire')]),
+      unit.lists.map((l) => [l.set, l.word, l.actions.some((a) => a.id === 'fire')]),
+      [mouse.controlWord, unit.controlWord],
+    ]).toEqual([
+      [
+        ['controller', 'button', false],
+        ['keyboard', 'mouse button', true],
+      ],
+      [['keyboard', 'mouse button', true]],
+      [['controller', 'button', false]],
+      ['mouse button', 'button'],
+    ]);
+  });
+
+  it('offer, with a control selected, the actions of its set on other controls, to move here', () => {
+    const scheme: Scheme = {
+      ...keysScheme(),
+      map: { ship: { 'L.index_1': { tap: 'boost' }, 'R.index_1': { tap: 'fire' } }, srv: {} },
+    };
+    const v = tabView(scheme, 'azerons', 'L.index_1');
+    expect([v.moves, tabView(scheme, 'azerons').moves]).toEqual([
+      [{ id: 'fire', name: 'Fire', role: 'combat', where: 'Right · Index 1' }],
+      [],
+    ]);
+  });
+
+  it('call a mouse tab’s controls mouse buttons, with nothing selected', () => {
+    const scheme: Scheme = {
+      ...keysScheme(),
+      devices: { azerons: 'none', keyboard: false, mouse: true, controller: false },
+      map: { ship: {}, srv: {} },
+    };
+    expect(tabView(scheme, 'keyboard').controlWord).toBe('mouse button');
+  });
+
+  it('call the keyboard and the mouse on one tab keys or mouse buttons', () => {
+    const scheme: Scheme = {
+      ...keysScheme(),
+      devices: { azerons: 'none', keyboard: true, mouse: true, controller: false },
+      map: { ship: {}, srv: {} },
+    };
+    expect(tabView(scheme, 'keyboard').lists.map((l) => l.word)).toEqual(['key or mouse button']);
+  });
+
+  it('keep the tab’s lists while the stick is selected: it has no set', () => {
+    const v = tabView(padScheme(), 'azerons', 'L.stick');
+    expect([v.lists.map((l) => l.set), v.moves]).toEqual([['controller'], []]);
+  });
+
   it('list as not placed the actions on no control of the set the tab is bound through', () => {
     const both: Scheme = {
       ...padScheme(),
       devices: { azerons: 'both', keyboard: true, mouse: true, controller: false },
       map: { ship: { 'L.index_1': { tap: 'boost' }, 'key.J': { tap: 'fsd' } }, srv: {} },
     };
-    const azerons = tabView(both, 'azerons').unplaced.map((a) => a.id);
-    const keyboard = tabView(both, 'keyboard').unplaced.map((a) => a.id);
+    const azerons = tabView(both, 'azerons').lists[0]?.actions.map((a) => a.id) ?? [];
+    const keyboard = tabView(both, 'keyboard').lists[0]?.actions.map((a) => a.id) ?? [];
     expect([
       azerons.includes('fsd'),
       azerons.includes('boost'),

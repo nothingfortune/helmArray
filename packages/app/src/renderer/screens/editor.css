@@ -541,3 +541,12 @@
   outline: 2px solid var(--color-text);
   outline-offset: 2px;
 }
+
+/* Actions already on another control of the set: picking one moves it to the selected one. */
+.ed-act-name {
+  flex: 1;
+}
+.ed-act-where {
+  color: var(--color-muted);
+  font-size: var(--size-caption);
+}

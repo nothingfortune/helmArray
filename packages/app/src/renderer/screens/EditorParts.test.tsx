@@ -87,7 +87,7 @@ describe('the device area', () => {
       html.includes('aria-label="Mouse"'),
       html.includes('Frame shift drive'),
       count(html, 'is-selected'),
-      unplaced.includes('Not on a key · Ship'),
+      unplaced.includes('Not on a key or mouse button · Ship'),
     ]).toEqual([true, true, true, 1, true]);
   });
 
