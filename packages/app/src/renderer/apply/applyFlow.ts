@@ -206,8 +206,10 @@ export function unitSection(unit: ApplyUnitChange, azeronOpen: boolean): UnitSec
   }
   if (!unit.connected) return { ...base, summary: 'Not connected', lines: [] };
   const lines: UnitLine[] = unit.buttons.map((b) => ({ kind: 'button', text: buttonLine(b) }));
-  // What happens to the unit's slots is the unit's business: one muted line says what is lost.
-  if (unit.write?.overwrites || unit.deletes.length > 0) {
+  // What happens to the unit's slots is the unit's business: one muted line says what is lost,
+  // unless all that goes is this scheme's own earlier copy (it has the name being written).
+  const gone = [...unit.deletes, ...(unit.write?.overwrites ? [unit.write.overwrites] : [])];
+  if (gone.some((slot) => slot.name !== unit.write?.name)) {
     lines.push({ kind: 'housekeeping', text: HOUSEKEEPING });
   }
   if (unit.problem !== null) lines.push({ kind: 'problem', text: unit.problem });

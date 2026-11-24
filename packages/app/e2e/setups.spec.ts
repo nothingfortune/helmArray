@@ -10,6 +10,7 @@ import {
   chooseDevice,
   deviceTab,
   drawer,
+  editorApply,
   gameHalf,
   helldivers,
   leftUnit,
@@ -20,7 +21,7 @@ import {
 
 /** Apply, from the editor's button to the result; the drawer is left open. */
 async function applyAndWait(page: Page, result: string | RegExp) {
-  await page.getByRole('button', { name: 'Apply', exact: true }).click();
+  await editorApply(page).click();
   await expect(applyInDrawer(page)).toBeEnabled();
   await applyInDrawer(page).click();
   await expect(drawer(page).getByLabel('Result')).toContainText(result);
@@ -67,9 +68,12 @@ test.describe('setups', () => {
     await expect(page.locator('.ed-panel-title')).toHaveText('Reload');
     await expect(page.getByRole('combobox')).toHaveValue('Y');
 
-    await page.getByRole('button', { name: 'Apply', exact: true }).click();
+    await editorApply(page).click();
     await expect(applyInDrawer(page)).toBeEnabled();
-    await expect(drawer(page).getByLabel('Left Azeron')).toContainText('is written');
+    // In pad output middle 2 already sent Xbox Y: on the unit only middle 1 changes, and the
+    // game is told Reload is on Y.
+    await expect(drawer(page).getByLabel('Left Azeron')).toContainText('1 button');
+    await expect(drawer(page).getByLabel('Left Azeron')).toContainText('Middle 1 · cleared');
     await expect(drawer(page).getByLabel('Right Azeron')).toContainText(
       'It already holds this layout.',
     );
@@ -149,7 +153,7 @@ test.describe('setups', () => {
 
     await page.getByRole('button', { name: 'Library' }).click();
     const card = page.getByLabel('On your Azerons now');
-    await expect(card).toContainText('HELLDIVERS™ 2 · Xbox controller');
+    await expect(card).toContainText('Helldivers 2 · Xbox controller');
     await expect(card).toContainText('Applied · Controller');
   });
 
@@ -177,7 +181,7 @@ test.describe('setups', () => {
     await expect(page.getByRole('group', { name: 'Mouse' })).toBeVisible();
     const right = (await helm.units())[1];
 
-    await page.getByRole('button', { name: 'Apply', exact: true }).click();
+    await editorApply(page).click();
     await expect(applyInDrawer(page)).toBeEnabled();
     await expect(drawer(page).getByLabel('Right Azeron')).toHaveCount(0);
     await applyInDrawer(page).click();
@@ -217,12 +221,15 @@ test.describe('setups', () => {
       .dragTo(keyboard.getByRole('button', { name: 'T, not used', exact: true }));
     await expect(keyboard.getByRole('button', { name: 'T, Reload', exact: true })).toBeVisible();
 
-    await page.getByRole('button', { name: 'Apply', exact: true }).click();
+    await editorApply(page).click();
     await expect(applyInDrawer(page)).toBeEnabled();
     await expect(gameHalf(page)).toContainText('Set Reload to T');
     await expect(drawer(page).getByLabel('Left Azeron')).toHaveCount(0);
     await expect(drawer(page).getByLabel('Right Azeron')).toHaveCount(0);
-    await expect(drawer(page).getByLabel('What is ready')).not.toContainText('Azeron app');
+    // Nothing about the Azeron app anywhere: the ready list has nothing that can fail, so it is
+    // not drawn at all.
+    await expect(drawer(page).getByText(/Azeron app/)).toHaveCount(0);
+    await expect(drawer(page).getByLabel('What is ready')).toHaveCount(0);
     await applyInDrawer(page).click();
     await expect(drawer(page).getByLabel('Result')).toContainText('uses no Azeron');
     await expect(drawer(page).getByLabel("Now, in Helldivers 2's controls")).toContainText(
@@ -276,12 +283,12 @@ test.describe('setups', () => {
 
     // The Library says which setup the game holds, and lists both to pick from.
     await page.getByRole('button', { name: 'Library' }).click();
-    await expect(page.locator('.tile', { hasText: 'HELLDIVERS' }).locator('.status')).toHaveText(
+    await expect(page.locator('.tile', { hasText: 'Helldivers 2' }).locator('.status')).toHaveText(
       'On the units · Xbox controller',
     );
 
     // From the Library, the other setup is two clicks: the game's list, then the setup.
-    await page.getByRole('button', { name: /^HELLDIVERS.* schemes$/ }).click();
+    await page.getByRole('button', { name: 'Helldivers 2 schemes' }).click();
     await page
       .getByRole('dialog', { name: /schemes$/ })
       .getByRole('button', { name: /^Xbox controller copy/ })

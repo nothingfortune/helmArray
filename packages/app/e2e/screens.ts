@@ -13,7 +13,13 @@ export const drawer = (page: Page): Locator => page.getByRole('dialog', { name: 
 export const applyInDrawer = (page: Page): Locator =>
   drawer(page).getByRole('button', { name: 'Apply' });
 export const helldivers = (page: Page): Locator =>
-  page.getByRole('button', { name: /^HELLDIVERS/ });
+  page.getByRole('button', { name: /^Helldivers 2\. / });
+/**
+ * The Editor's Apply button: "Apply", "Apply 3" with changes not applied, or "Applied" (muted)
+ * once in sync. It opens the drawer in every case.
+ */
+export const editorApply = (page: Page): Locator =>
+  page.locator('.ed-bar').getByRole('button', { name: /^(Apply( \d+)?|Applied)$/ });
 
 /** Opens Helldivers 2 from the Library: the game, then what to start from. */
 export async function startFrom(page: Page, preset: 'Xbox controller' | "Game's own keys") {

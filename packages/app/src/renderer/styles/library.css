@@ -223,6 +223,9 @@
   font-weight: 600;
   color: var(--color-muted);
 }
+.art-none[data-placeholder]::after {
+  content: attr(data-placeholder);
+}
 /* Dim the art only: the "No cover" text keeps its contrast. */
 .unsupported .cover .art {
   opacity: 0.6;

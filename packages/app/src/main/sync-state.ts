@@ -187,7 +187,8 @@ const carried = (plan: Plan | null, control: string): string[] =>
  * A drag is one change. A button whose only change is that its action left for another edited
  * button is the far end of that move, not an edit of its own (whatever it then stops sending
  * comes with the move), and an action the game is told about because it came or went with an
- * edited button is that edit, not another.
+ * edited button is that edit, not another. A button with no action before or after counts only
+ * when nothing else changed (it changed as part of an edit elsewhere otherwise).
  *
  * Only what Apply would change counts. A unit the setup no longer uses is not written, so nothing
  * on it is an edit (the actions it carried still count, through the game). A key, a mouse button
@@ -213,13 +214,15 @@ export function pendingChanges(applied: Plan | null, current: Plan | null): numb
   }
   // Where each action is now, among the edited buttons.
   const landed = new Set(changed.flatMap((control) => carried(current, control)));
+  const bare = (control: string) =>
+    carried(applied, control).length === 0 && carried(current, control).length === 0;
   const edits = changed.filter((control) => {
     const was = carried(applied, control);
     const moveSource =
       carried(current, control).length === 0 &&
       was.length > 0 &&
       was.every((action) => landed.has(action));
-    return !moveSource;
+    return !moveSource && !bare(control);
   });
   const explained = new Set(
     changed.flatMap((control) => [...carried(applied, control), ...carried(current, control)]),
@@ -229,5 +232,9 @@ export function pendingChanges(applied: Plan | null, current: Plan | null): numb
       .map((b) => `${b.mode}|${b.action}`)
       .filter((action) => !explained.has(action)),
   );
-  return edits.length + rows.size;
+  // A button with no action on it, before or after, that changed anyway (it gave its Xbox control
+  // to a button an action was put on) is part of that edit. Alone (turbo on an empty button), it
+  // is a change of its own: never 0 while Apply would write something.
+  const count = edits.length + rows.size;
+  return count > 0 ? count : changed.filter(bare).length;
 }

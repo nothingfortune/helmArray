@@ -9,6 +9,7 @@ import { expect, test } from './helm';
 import {
   applyInDrawer,
   drawer,
+  editorApply,
   keepEveryCheck,
   leftUnit,
   pill,
@@ -128,7 +129,7 @@ test.describe('the Game screen', () => {
     await expect(leftUnit(page).getByRole('button', { name: 'Jump, index 1' })).toBeVisible();
     // Game's own keys leaves both sticks sending no keys: two checks to keep, as on Helldivers 2.
     expect(await keepEveryCheck(page)).toBe(KEYS_ROUTE_KEEPS);
-    await page.getByRole('button', { name: 'Apply', exact: true }).click();
+    await editorApply(page).click();
     await expect(applyInDrawer(page)).toBeEnabled();
     await applyInDrawer(page).click();
     await expect(drawer(page).getByLabel('Result')).toContainText('Both units now run the layout.');
@@ -162,7 +163,7 @@ test.describe('the Game screen', () => {
     await expect(page.getByRole('heading', { name: UNKNOWN })).toBeVisible();
     // The preset puts Jump where the game ships it: nothing to keep.
     await expect(page.getByRole('button', { name: 'Keep, I know' })).toHaveCount(0);
-    await page.getByRole('button', { name: 'Apply', exact: true }).click(); // click 4
+    await editorApply(page).click(); // click 4
     await expect(applyInDrawer(page)).toBeEnabled();
     await applyInDrawer(page).click(); // click 5
     await expect(drawer(page).getByLabel('Result')).toContainText('Both units now run the layout.');
@@ -259,14 +260,14 @@ test.describe('the Game screen', () => {
       )
       .toContain('"name": "Ace Combat 7"');
     await page.getByRole('button', { name: 'Library' }).click();
-    await expect(page.getByRole('button', { name: 'Edit game: Ace Combat 7' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Edit actions: Ace Combat 7' })).toBeVisible();
   });
 
   test('Edit game on Helldivers 2 keeps your copy, and Back to helmArray’s drops it', async ({
     helm,
   }) => {
     const { page } = helm;
-    await page.getByRole('button', { name: /^Edit game: HELLDIVERS/ }).click();
+    await page.getByRole('button', { name: 'Edit actions: Helldivers 2' }).click();
     await expect(gameName(page)).toHaveValue('Helldivers 2');
     await page.getByRole('textbox', { name: 'Reload, name' }).fill('Reload weapon');
     await expect(page.getByText("Your copy of helmArray's game")).toBeVisible();
@@ -293,11 +294,11 @@ test('Back to helmArray’s on a copy saved earlier shows helmArray’s game, an
   const file = join(helm.dataDir, 'games', 'helldivers2.json');
   const saved = () => readFile(file, 'utf8').catch(() => '');
   // A copy saved in an earlier visit: the screen then opens on the copy.
-  await page.getByRole('button', { name: /^Edit game: HELLDIVERS/ }).click();
+  await page.getByRole('button', { name: 'Edit actions: Helldivers 2' }).click();
   await page.getByRole('textbox', { name: 'Reload, name' }).fill('Reload weapon');
   await expect.poll(saved).toContain('Reload weapon');
   await page.getByRole('button', { name: 'Library' }).click();
-  await page.getByRole('button', { name: /^Edit game: HELLDIVERS/ }).click();
+  await page.getByRole('button', { name: 'Edit actions: Helldivers 2' }).click();
   await expect(page.getByRole('textbox', { name: 'Reload weapon, name' })).toBeVisible();
 
   await page.getByRole('button', { name: "Back to helmArray's" }).click();
@@ -333,18 +334,18 @@ test('a game whose last action is deleted keeps its scheme: opened, applied and 
   await page.getByRole('button', { name: 'Library' }).click();
 
   // The game's last action goes.
-  await page.getByRole('button', { name: `Edit game: ${UNKNOWN}` }).click();
+  await page.getByRole('button', { name: `Edit actions: ${UNKNOWN}` }).click();
   await page.getByRole('button', { name: 'More for Jump' }).click();
   await page.getByRole('button', { name: 'Delete Jump' }).click();
   await expect(page.getByText('No actions yet.')).toBeVisible();
   await page.getByRole('button', { name: 'Library' }).click();
 
-  // Its scheme is still there to open, beside Edit game.
-  await expect(page.getByRole('button', { name: `Edit game: ${UNKNOWN}` })).toBeVisible();
+  // Its scheme is still there to open, beside Edit actions.
+  await expect(page.getByRole('button', { name: `Edit actions: ${UNKNOWN}` })).toBeVisible();
   await page.locator('.tile', { hasText: UNKNOWN }).locator('.tile-button').click();
   await expect(page.getByRole('heading', { name: UNKNOWN })).toBeVisible();
   await keepEveryCheck(page);
-  await page.getByRole('button', { name: 'Apply', exact: true }).click();
+  await editorApply(page).click();
   await expect(applyInDrawer(page)).toBeEnabled();
   await applyInDrawer(page).click();
   await expect(drawer(page).getByLabel('Result')).toContainText('Both units now run the layout.');
@@ -353,7 +354,7 @@ test('a game whose last action is deleted keeps its scheme: opened, applied and 
   await schemePicker(page).click();
   await page.getByRole('button', { name: 'Delete this scheme' }).click();
   await page
-    .getByRole('group', { name: "Delete Game's own keys?" })
+    .getByRole('group', { name: "Delete the scheme “Game's own keys”?" })
     .getByRole('button', { name: 'Delete' })
     .click();
   // With no scheme and no action left, the game is set up again from its tile.

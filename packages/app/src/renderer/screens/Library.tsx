@@ -44,8 +44,15 @@ function SearchIcon() {
 function Art({ entry, kind }: { entry: LibraryEntry; kind: 'portrait' | 'header' }) {
   const [failed, setFailed] = useState(false);
   const there = kind === 'portrait' ? entry.hasCover : entry.hasHeader;
-  if (entry.appId === null || !there || failed)
-    return <span className="art-none">{kind === 'portrait' ? 'No cover' : entry.name}</span>;
+  if (entry.appId === null || !there || failed) {
+    // A portrait's "No cover" is drawn (CSS), not text: inside the tile's button it would be words
+    // the button's name doesn't hold, and the name already says which game it is.
+    return kind === 'portrait' ? (
+      <span className="art-none" data-placeholder="No cover" aria-hidden="true" />
+    ) : (
+      <span className="art-none">{entry.name}</span>
+    );
+  }
   return (
     <img className="art" src={coverUrl(entry.appId, kind)} alt="" onError={() => setFailed(true)} />
   );

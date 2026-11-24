@@ -313,6 +313,14 @@ describe('pendingChanges, counting edits', () => {
       }
     });
 
+  it('counts a drag that takes the Xbox control of a button with no action once', () => {
+    // Jump onto the empty ring 1, which takes Y from middle 2: middle 2 sent it for nothing.
+    const padMap: Scheme['padMap'] = { ...preset.padMap, 'L.ring_1': 'Y' };
+    delete padMap['L.middle_2'];
+    const next = withMap({ ...preset, padMap }, (map) => (map['L.ring_1'] = { tap: 'jump' }));
+    expect(pendingChanges(applied, planOf(next))).toBe(1);
+  });
+
   it("counts nothing for the keyboard added with the game's own keys on it", () => {
     expect(pendingChanges(applied, planOf(withKeyboard(preset)))).toBe(0);
   });

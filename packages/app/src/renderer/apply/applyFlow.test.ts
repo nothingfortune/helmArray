@@ -461,6 +461,15 @@ describe('what changes on a unit', () => {
     ]);
   });
 
+  it("says nothing of a layout it replaces when that is this scheme's own earlier copy", () => {
+    const again = unit({
+      buttons: [button()],
+      write: { slot: 2, name: 'Main', overwrites: null },
+      deletes: [{ slot: 1, name: 'Main' }],
+    });
+    expect(unitSection(again, false).lines.map((l) => l.kind)).toEqual(['button']);
+  });
+
   it('says a unit already holding the layout has no change, or no button change', () => {
     const same = unit({ differs: false, inputsChanged: 0, buttons: [], write: null, deletes: [] });
     expect(unitSection(same, false)).toMatchObject({
