@@ -1,15 +1,12 @@
 /* The Game screen: a game's modes and actions, and each action's defaults. Not drawn on the canvas:
    built in its language (the Editor's bar, the Library's panels) from the tokens. */
 
-/* The window never scrolls on this screen: it fills what the header and its lines leave, and the
-   rows scroll inside the panel, so the bar (with *New scheme from*) stays in view. */
-#root:has(> .gm) {
+/* The window never scrolls (base.css): this screen fills what the header and its lines leave, and
+   the rows scroll inside the panel, so the bar (with *New scheme from*) stays in view. */
+.app-screen:has(> .gm) {
   display: flex;
   flex-direction: column;
-  height: 100vh;
-}
-#root:has(> .gm) > :not(.gm) {
-  flex-shrink: 0;
+  overflow: hidden;
 }
 .gm {
   display: flex;
