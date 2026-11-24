@@ -24,7 +24,7 @@ import {
   verify,
 } from '@helmarray/azeron';
 import type { UnitRecord } from '@helmarray/azeron';
-import type { Hand, Plan } from '@helmarray/core';
+import type { Hand, Plan, UnitProfile } from '@helmarray/core';
 import type { UnitOps } from './gated-session';
 import { CYBORG2_LEFT, CYBORG2_RIGHT, handsOf, unitOf } from '@helmarray/core';
 
@@ -254,6 +254,23 @@ export function verifyUnits(plan: Plan, held: HeldUnits): Record<Hand, Verdict |
     }
   };
   return { left: one('left'), right: one('right') };
+}
+
+/**
+ * One unit's running slot against the profile it was last written with (`units.json`): what the
+ * unit reports, never what the app last did. Null when the unit isn't read, or the profile can't
+ * be turned into records.
+ */
+export function verifyProfile(profile: UnitProfile, held: HeldUnit | undefined): Verdict | null {
+  if (!held) return null;
+  try {
+    return verify(
+      unitRecords(profile, DEVICE[profile.hand]),
+      held.slots.find((s) => s.slot === held.running)?.records ?? [],
+    );
+  } catch {
+    return null;
+  }
 }
 
 // ------------------------------------------------------------------------------------ apply
@@ -521,6 +538,7 @@ export async function applyUnits(plan: Plan, deps: UnitsDeps): Promise<ApplyUnit
   const records = {} as Record<Hand, UnitRecord[]>;
   for (const hand of hands) {
     try {
+      // keyed-write-ok: the key is a hand, left or right, never data
       records[hand] = writableRecordsFor(plan, hand);
     } catch (error) {
       const message = `The ${handName(hand)} unit failed: ${withoutPeriod(messageOf(error))}; nothing on it was changed.`;
@@ -552,7 +570,7 @@ export async function applyUnits(plan: Plan, deps: UnitsDeps): Promise<ApplyUnit
 }
 
 /** What Apply says of the units for a setup that uses none. */
-export const NO_UNIT_SENTENCE = 'This setup uses no Azeron.';
+export const NO_UNIT_SENTENCE = 'Applied. This scheme uses no Azeron, so none was written.';
 
 function refused(hands: readonly Hand[], hand: Hand, message: string): ApplyUnitsResult {
   return {

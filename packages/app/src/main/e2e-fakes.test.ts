@@ -103,6 +103,14 @@ describe('what the control says the units hold', () => {
   };
   const plan: Plan = resolve(scheme, game, BUILT_IN_DEVICES);
 
+  it('counts no write while a unit is only read', async () => {
+    const session = await sessionOn(0);
+    await session.identify();
+    await session.readSlots();
+    const unit = control.units()[0];
+    expect([(unit?.reportsReceived ?? 0) > 0, unit?.writesReceived]).toEqual([true, 0]);
+  });
+
   it('shows a key written to a button as the unit stores it, in the slot it runs', async () => {
     const session = await sessionOn(0);
     const identity = await session.identify();
@@ -115,7 +123,11 @@ describe('what the control says the units hold', () => {
     );
     await session.switchTo(1);
     const unit = control.units()[0];
-    expect([unit?.running, unit?.slots.find((s) => s.slot === 1)?.taps.length]).toEqual([1, 1]);
+    expect([
+      unit?.running,
+      unit?.slots.find((s) => s.slot === 1)?.taps.length,
+      (unit?.writesReceived ?? 0) > 0,
+    ]).toEqual([1, 1, true]);
   });
 });
 

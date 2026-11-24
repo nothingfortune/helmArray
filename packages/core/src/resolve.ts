@@ -228,6 +228,7 @@ function unitProfile(
       const presses: PinPlan['presses'] = {};
       for (const press of PRESSES) {
         const signal = signals.get(slot(control, press));
+        // keyed-write-ok: the key is a press: tap, long or double
         if (signal) presses[press] = signal;
       }
       const pin: PinPlan = {
@@ -469,6 +470,7 @@ export function resolve(scheme: Scheme, game: Game, devices: readonly Device[]):
       ? dealPad(scheme, controls)
       : dealKeys(scheme, game, controls, fixedTaken(scheme, game, fixed));
   const profiles: Partial<Record<Hand, UnitProfile>> = {};
+  // keyed-write-ok: the key is a hand, left or right, never data
   for (const unit of units) profiles[unit.hand] = unitProfile(scheme, unit, dealt.signals);
   const bound = bindings(scheme, game, controls, dealt.signals, fixed);
   const rebound = gameBindings(scheme, game, bound, stickSends(scheme), fixed, [

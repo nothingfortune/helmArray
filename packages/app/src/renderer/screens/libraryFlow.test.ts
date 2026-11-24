@@ -1,10 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { HelmApi, LibraryEntry } from '../../shared/api';
-import { START, plainReason, runMake, step } from './libraryFlow';
+import { START, plainReason, runMake, runPick, step } from './libraryFlow';
 import type { Command, FlowEvent, FlowState } from './libraryFlow';
 import { entry } from './libraryFixtures';
 
-const XBOX = { id: 'hd2-xbox', name: 'Xbox controller', output: 'pad' as const };
+const XBOX = {
+  id: 'hd2-xbox',
+  name: 'Xbox controller',
+  output: 'pad' as const,
+  devices: { azerons: 'both' as const, keyboard: false, mouse: false, controller: false },
+};
+const COUCH = { ...XBOX, id: 'hd2-couch', name: 'Couch' };
+const TWO = entry({ schemes: [COUCH, XBOX], activeSchemeId: XBOX.id });
 const NEW = { ...entry(), schemes: [] as LibraryEntry['schemes'] };
 const UNKNOWN = entry({ gameId: null, nativeKeys: false });
 const SET_UP = entry({ schemes: [XBOX], activeSchemeId: XBOX.id });
@@ -52,6 +59,14 @@ describe('J1: pick a game, pick a default, play', () => {
       { type: 'open-editor', schemeId: 'hd2-xbox' },
     ]);
     expect(play([{ type: 'open', entry: SET_UP, schemeId: 'someone-elses' }]).commands).toEqual([]);
+  });
+
+  it('picks another setup of a game in two clicks: the list, then the setup, which opens as the active one', () => {
+    // The first click opens the list (the Library's own popover); this is the second.
+    expect(play([{ type: 'pick', entry: TWO, schemeId: 'hd2-couch' }]).commands).toEqual([
+      { type: 'pick-and-open', gameId: 'helldivers2', schemeId: 'hd2-couch' },
+    ]);
+    expect(play([{ type: 'pick', entry: TWO, schemeId: 'not-its-own' }]).commands).toEqual([]);
   });
 
   it('does nothing at all for a game helmArray does not know: no command, no picker', () => {
@@ -161,6 +176,22 @@ describe('making the scheme', () => {
 });
 
 describe('plainReason', () => {
+  it('picking makes the setup the active one, then gives its id', async () => {
+    const setActive = vi.fn<HelmApi['setActive']>(() => Promise.resolve());
+    expect([
+      await runPick({ setActive }, 'helldivers2', 'hd2-couch'),
+      setActive.mock.calls,
+    ]).toEqual([{ ok: true, schemeId: 'hd2-couch' }, [['helldivers2', 'hd2-couch']]]);
+  });
+
+  it('picking says so in one sentence when the setup could not be made the active one', async () => {
+    const setActive = vi.fn<HelmApi['setActive']>(() => Promise.reject(new Error('Disk full.')));
+    expect(await runPick({ setActive }, 'helldivers2', 'hd2-couch')).toEqual({
+      ok: false,
+      message: "Couldn't switch to that scheme. Disk full.",
+    });
+  });
+
   it('drops the wrapping Electron adds and the error name', () => {
     expect(plainReason(new Error("Error invoking remote method 'x': StoreError: No."))).toBe('No.');
     expect(plainReason(new Error('Plain.'))).toBe('Plain.');

@@ -41,10 +41,6 @@
 .ed-spacer {
   flex: 1;
 }
-.ed-tip {
-  display: inline-flex;
-  border-radius: var(--radius-key);
-}
 
 .ed-seg {
   display: inline-flex;
@@ -72,13 +68,6 @@
   background: var(--color-line);
   color: var(--color-text);
   box-shadow: inset 0 -2px 0 var(--color-accent);
-}
-/* Read-only: the current one stays readable, the other recedes. */
-.ed-seg-btn:disabled {
-  cursor: default;
-}
-.ed-seg-btn:disabled[aria-pressed='false'] {
-  color: var(--color-muted);
 }
 
 .btn.icon:disabled {
@@ -402,4 +391,162 @@
 }
 .ed-act[aria-disabled='true']:not(:hover) {
   color: var(--color-secondary);
+}
+
+/* The header's own pieces: the Scheme picker, the device tabs' chooser, "Azerons send". */
+.ed-rule {
+  width: 1px;
+  height: 36px;
+  background: var(--color-line);
+}
+.ed-scheme-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-chip);
+  background: none;
+  font-family: var(--font-read);
+  cursor: pointer;
+}
+.ed-scheme-btn:hover {
+  color: var(--color-secondary);
+}
+.ed-scheme-btn:focus-visible,
+.ed-devices-btn:focus-visible {
+  outline: 2px solid var(--color-text);
+  outline-offset: 2px;
+}
+.ed-devices-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+}
+.ed-send {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+.ed-send-label {
+  color: var(--color-muted);
+  font-size: var(--size-label);
+  font-weight: 600;
+}
+.ed-picker,
+.ed-devices {
+  width: 260px;
+}
+.choices .btn[aria-current='true'] {
+  background: var(--color-line);
+  box-shadow: inset 2px 0 0 var(--color-accent);
+  cursor: default;
+}
+.ed-rename {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ed-field {
+  display: flex;
+  align-items: center;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 9px;
+  background: var(--color-panel);
+  border: 1px solid var(--color-edge);
+}
+.ed-field:focus-within {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px rgb(255 178 36 / 35%);
+}
+.ed-field input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--color-text);
+  font: 500 13.5px var(--font-read);
+}
+.ed-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8);
+  font-size: var(--size-label);
+}
+.ed-danger {
+  background: var(--color-error-bg);
+  color: var(--color-error-text);
+  border-color: #4a2328;
+}
+.ed-danger:hover {
+  background: #3a1d20;
+}
+.btn.ghost.ed-danger-ghost {
+  align-self: flex-start;
+  color: var(--color-error-text);
+}
+.ed-fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.ed-fieldset legend {
+  padding: 0 0 var(--space-4);
+}
+.ed-chk input:focus-visible {
+  outline: 2px solid var(--color-text);
+  outline-offset: 2px;
+}
+
+/* The keyboard with the mouse beside it; the mouse beside the left unit. */
+.ed-kbm {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: var(--space-24);
+}
+.ed-kb {
+  flex: 1 1 600px;
+  max-width: 956px;
+  min-width: 0;
+}
+.ed-unit.ed-mouse-beside {
+  flex: 0 0 220px;
+  display: flex;
+  align-items: center;
+}
+
+/* "Sends" with a choice of Xbox control. */
+.ed-sends-pick {
+  flex-wrap: wrap;
+}
+.ed-select {
+  height: 30px;
+  border-radius: 8px;
+  background: var(--color-panel);
+  border: 1px solid var(--color-edge);
+  color: var(--color-text);
+  font: 500 12.5px var(--font-signal);
+  padding: 0 6px;
+}
+.ed-select:focus-visible {
+  outline: 2px solid var(--color-text);
+  outline-offset: 2px;
+}
+
+/* Actions already on another control of the set: picking one moves it to the selected one. */
+.ed-act-name {
+  flex: 1;
+}
+.ed-act-where {
+  color: var(--color-muted);
+  font-size: var(--size-caption);
 }

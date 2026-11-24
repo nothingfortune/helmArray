@@ -129,3 +129,15 @@
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+/* The game's half: one group per binding set and mode, labelled only when there are several. */
+.apply-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.apply-group-label {
+  color: var(--color-muted);
+  font-size: var(--size-caption);
+  font-weight: 600;
+}

@@ -4,6 +4,7 @@
 
 import type {
   ActionId,
+  BindingSet,
   ControlId,
   Finding,
   Game,
@@ -14,13 +15,28 @@ import type {
   Press,
   Role,
   Scheme,
+  SetupDevices,
   Signal,
   StickDirection,
 } from '@helmarray/core';
-import { PRESSES, STICK_DIRECTIONS, own, padSignalOf, signalId } from '@helmarray/core';
+import {
+  KEYBOARD_MOUSE,
+  PAD_CONTROLS,
+  PRESSES,
+  STICK_DIRECTIONS,
+  XBOX_PAD,
+  controlSet,
+  inSetup,
+  own,
+  padSignalOf,
+  setupOf,
+  signalId,
+  stickPadsOf,
+} from '@helmarray/core';
+import { fixedWhere } from '../devices/layouts';
 import type { StickLabels, UnitKey } from '../unit/Unit';
 import { handPrefix, positionName, positionOf } from '../unit/layout';
-import { fixFor, isAcceptable, isStick, shownAction } from './editor-model';
+import { fixFor, isAcceptable, isStick, pressesOf, shownAction } from './editor-model';
 import type { Fix } from './editor-model';
 
 // ---- Signals, as words for a caption ----
@@ -129,17 +145,32 @@ export interface PressRow {
   target: boolean;
 }
 
+/** Which Xbox control an Azeron button sends, and what it may send instead (controller output). */
+export interface PadChoice {
+  current: PadControl | null;
+  /** Every Xbox control a button may send: never a direction a stick of the setup sends. */
+  options: { pad: PadControl; label: string }[];
+  /** It carries a stick's action, so it sends that stick's direction and nothing else. */
+  locked: boolean;
+}
+
 export interface PanelView {
   control: ControlId;
-  /** `Left · Index 1`. */
+  /** `Left · Index 1`, `Keyboard · J`, `Controller · LT`. */
   where: string;
   /** The tap's action, or "Empty"; "Stick" for the stick. */
   title: string;
   stick: boolean;
   across: AcrossRow[];
   presses: PressRow[];
+  /** Turbo and latch are the unit's own: only an Azeron button has them. */
+  behaviour: boolean;
   turbo: boolean;
   latch: boolean;
+  /** What an empty press that isn't there says instead of "Add". */
+  unavailable: string;
+  /** An Azeron button sending Xbox controls: which one, and the choice of another. */
+  padChoice: PadChoice | null;
   /** What it sends for the press that is the target, in mono; null when nothing. */
   sends: string | null;
   /** Where that signal came from, in a few plain words. */
@@ -163,14 +194,63 @@ export interface UnitSide {
   conflicts: ReadonlySet<ControlId>;
 }
 
+/** What a control is called in the panel's words. */
+export type ControlWord = 'key' | 'mouse button' | 'key or mouse button' | 'button';
+
+/** The actions not on a control of one binding set. */
+export interface ActionList {
+  set: BindingSet;
+  /** "Not on a {word}". */
+  word: ControlWord;
+  actions: ActionRef[];
+}
+
+/** A device tab of the editor: what is drawn in the middle. */
+export type DeviceTabId = 'azerons' | 'keyboard' | 'controller';
+
+export interface DeviceTab {
+  id: DeviceTabId;
+  label: string;
+}
+
 export interface EditorView {
   showModeTabs: boolean;
   modes: ModeRow[];
+  /** The setup's devices as tabs, and the one shown (null for a setup with none). */
+  tabs: DeviceTab[];
+  tab: DeviceTabId | null;
+  /** The units drawn on the Azerons tab: the setup's own. */
+  hands: Hand[];
+  /** A left Azeron + mouse setup draws the mouse beside the left unit, where the right one was. */
+  mouseBeside: boolean;
+  /** The keyboard and the mouse are drawn on their tab: which of the two the setup has. */
+  keyboard: boolean;
+  mouse: boolean;
+  /**
+   * What the controls the panel speaks of are called: the selected control's kind, else the tab's
+   * (keys on the keyboard, buttons elsewhere).
+   */
+  controlWord: ControlWord;
+  /** "Azerons send: Keys | Controller", for a setup with Azerons; null without. */
+  output: Scheme['output'] | null;
   left: UnitSide;
   right: UnitSide;
+  /** The keyboard's keys, the mouse's buttons and the controller's buttons, each by control id. */
+  fixed: Record<ControlId, UnitKey>;
+  /** Every control in a conflict in this mode, on any device. */
+  conflicts: ReadonlySet<ControlId>;
   panel: PanelView | null;
-  /** The mode's actions that are on no press at all, in the game's order. */
-  unplaced: ActionRef[];
+  /**
+   * The mode's actions on no control of a binding set, in the game's order: with a control
+   * selected, its own set's; with none, one list for each set the tab's controls are bound through
+   * (the left Azeron's buttons and the mouse beside it can be two).
+   */
+  lists: ActionList[];
+  /**
+   * With a control selected: the actions of its set on another control, each with where; picking
+   * one moves it to the selected control (the canvas's "Already on a button").
+   */
+  moves: (ActionRef & { where: string })[];
   /** Findings still asking for attention: errors first. */
   findings: FindingRow[];
   /** Findings the player kept. */
@@ -185,6 +265,8 @@ export interface EditorViewInput {
   selected?: ControlId | undefined;
   /** The press a click on an action fills. Defaults to tap. */
   press?: Press | undefined;
+  /** The device tab asked for; the first the setup has when it has not that one. */
+  tab?: DeviceTabId | undefined;
 }
 
 // ---- The pieces ----
@@ -202,18 +284,21 @@ function actionRef(game: Game, id: ActionId): ActionRef {
  */
 const leadingAction = shownAction;
 
-function unitKeys(
+/** Labels for the controls of one device (`L.`, `R.`, `key.`, `mouse.`, `pad.`) in a mode. */
+function keysOf(
   scheme: Scheme,
   game: Game,
   mode: ModeId,
-  hand: Hand,
+  prefix: string,
 ): Record<ControlId, UnitKey> {
-  const prefix = `${handPrefix(hand)}.`;
-  const keys: Record<ControlId, UnitKey> = {};
-  // Every control with an action of its own, and every one sending an Xbox control another does.
+  // Keyed by control id, which a scheme file may make `__proto__`: an entry list, then a record.
+  const keys: [ControlId, UnitKey][] = [];
+  // Every control with an action of its own, every one sending an Xbox control another does, and
+  // the controller's buttons, which show what an Azeron button sending them carries.
   const controls = new Set([
     ...Object.keys(own(scheme.map, mode) ?? {}),
     ...Object.keys(scheme.padMap).filter((c) => padSignalOf(scheme, c) !== undefined),
+    ...(prefix === 'pad.' ? XBOX_PAD.controls.map((c) => c.id) : []),
   ]);
   for (const control of controls) {
     if (!control.startsWith(prefix) || isStick(control)) continue;
@@ -222,9 +307,110 @@ function unitKeys(
     const ref = actionRef(game, lead.id);
     // A button with only a long press must not read as if its tap did that.
     const label = lead.press === 'tap' ? ref.name : `${PRESS_WORD[lead.press]}: ${ref.name}`;
-    keys[control] = ref.role === undefined ? { label } : { label, role: ref.role };
+    keys.push([
+      control,
+      {
+        label,
+        action: lead.id,
+        press: lead.press,
+        ...(ref.role === undefined ? {} : { role: ref.role }),
+      },
+    ]);
   }
-  return keys;
+  return Object.fromEntries(keys);
+}
+
+const unitKeys = (scheme: Scheme, game: Game, mode: ModeId, hand: Hand) =>
+  keysOf(scheme, game, mode, `${handPrefix(hand)}.`);
+
+// ---- The setup's devices ----
+
+/**
+ * The setup's devices as the editor's tabs: the Azerons, the keyboard (with the mouse), the
+ * controller. A left Azeron + mouse setup draws its mouse beside the left unit; it gets a tab of
+ * its own only when nothing else draws it.
+ */
+export function deviceTabs(devices: SetupDevices): DeviceTab[] {
+  const setup = setupOf(devices);
+  const tabs: DeviceTab[] = [];
+  if (setup.hands.length > 0) tabs.push({ id: 'azerons', label: 'Azerons' });
+  if (setup.keyboard) tabs.push({ id: 'keyboard', label: 'Keyboard' });
+  else if (setup.mouse && !mouseBesideLeft(devices)) tabs.push({ id: 'keyboard', label: 'Mouse' });
+  if (setup.controller) tabs.push({ id: 'controller', label: 'Controller' });
+  return tabs;
+}
+
+/** A left Azeron + mouse setup: the mouse is drawn where the right unit would be. */
+const mouseBesideLeft = (devices: SetupDevices): boolean => devices.azerons === 'left';
+
+/** The tab shown: the one asked for while the setup has it, else its first; null with none. */
+export function shownTab(
+  tabs: readonly DeviceTab[],
+  wanted: DeviceTabId | undefined,
+): DeviceTabId | null {
+  return tabs.some((t) => t.id === wanted) ? (wanted ?? null) : (tabs[0]?.id ?? null);
+}
+
+/** What a control is called: a key, a mouse button, or a button (a unit's, the controller's). */
+export function wordOf(control: ControlId): ControlWord {
+  if (control.startsWith('key.')) return 'key';
+  if (control.startsWith('mouse.')) return 'mouse button';
+  return 'button';
+}
+
+/** Where a control is, in the panel's words: `Left · Index 1`, `Keyboard · J`. */
+export function whereOf(control: ControlId): string {
+  if (control.startsWith('L.') || control.startsWith('R.'))
+    return `${control.startsWith('L.') ? 'Left' : 'Right'} · ${positionName(positionOf(control))}`;
+  return fixedWhere(control) ?? control;
+}
+
+/**
+ * The kinds of control a tab draws, as a representative id of each and what it is called: one
+ * device need not mean one tab (the mouse beside the left unit), nor one tab one binding set.
+ */
+function tabControls(scheme: Scheme, tab: DeviceTabId | null): ControlId[] {
+  const setup = setupOf(scheme.devices);
+  if (tab === 'controller') return ['pad.A'];
+  if (tab === 'keyboard')
+    return [...(setup.keyboard ? ['key.A'] : []), ...(setup.mouse ? ['mouse.left'] : [])];
+  if (tab === 'azerons')
+    return [
+      ...setup.hands.map((h) => (h === 'left' ? 'L.index_1' : 'R.index_1')),
+      ...(setup.mouse && mouseBesideLeft(scheme.devices) ? ['mouse.left'] : []),
+    ];
+  return [];
+}
+
+/** What a tab's controls are called, with nothing selected: one word for them all. */
+function tabWord(scheme: Scheme, tab: DeviceTabId | null): ControlWord {
+  const words = new Set(tabControls(scheme, tab).map(wordOf));
+  if (words.size === 1) return [...words][0] ?? 'button';
+  return words.size === 2 && words.has('key') && words.has('mouse button')
+    ? 'key or mouse button'
+    : 'button';
+}
+
+/** The binding sets a tab's controls are bound through, each with the word for its controls. */
+function setsOfTab(
+  scheme: Scheme,
+  tab: DeviceTabId | null,
+): { set: BindingSet; word: ControlWord }[] {
+  const out: { set: BindingSet; word: ControlWord }[] = [];
+  for (const control of tabControls(scheme, tab)) {
+    const set = controlSet(scheme, control);
+    if (set === undefined) continue;
+    const there = out.find((o) => o.set === set);
+    if (there === undefined) out.push({ set, word: wordOf(control) });
+    else if (there.word !== wordOf(control))
+      // The keyboard and the mouse on one tab are one set: keys or mouse buttons. A unit's buttons
+      // with the mouse beside them are buttons.
+      there.word =
+        [there.word, wordOf(control)].sort().join('|') === 'key|mouse button'
+          ? 'key or mouse button'
+          : 'button';
+  }
+  return out;
 }
 
 /** The stick's four chips: the action whose own key a direction sends, else the key itself. */
@@ -246,6 +432,7 @@ function stickLabels(
         a.native?.key !== undefined &&
         signalId(a.native.key) === signalId(signal),
     );
+    // keyed-write-ok: the key is a stick direction, one of four names
     labels[direction] = action?.name ?? signalText(signal);
     if (action !== undefined && labels.role === undefined) labels.role = action.role;
   }
@@ -257,14 +444,18 @@ const keyFor = (f: Finding): string =>
 
 /** The stick's words for the caption, when a stick is selected. */
 function stickSends(scheme: Scheme, control: ControlId): { text: string | null; note: string } {
+  if (control === 'pad.left_stick')
+    return { text: 'Xbox left stick', note: "the controller's own" };
+  if (control === 'pad.right_stick')
+    return { text: 'Xbox right stick', note: "the controller's own" };
   const stick = scheme.behaviour[control]?.stick;
   if (stick === undefined) return { text: null, note: 'not set up yet' };
   const side = control.startsWith('L.') ? 'left' : 'right';
   switch (stick.mode) {
     case 'pad-left':
-      return { text: 'Xbox left stick', note: 'your pad bindings' };
+      return { text: 'Xbox left stick', note: 'as a controller stick' };
     case 'pad-right':
-      return { text: 'Xbox right stick', note: 'your pad bindings' };
+      return { text: 'Xbox right stick', note: 'as a controller stick' };
     case 'mouse':
       return { text: 'Mouse movement', note: `the ${side} stick` };
     case 'keys': {
@@ -277,6 +468,34 @@ function stickSends(scheme: Scheme, control: ControlId): { text: string | null; 
   }
 }
 
+const FIXED_SIGNALS: ReadonlyMap<ControlId, Signal> = new Map(
+  [...KEYBOARD_MOUSE.controls, ...XBOX_PAD.controls].flatMap((c) =>
+    c.sends === undefined ? [] : [[c.id, c.sends] as const],
+  ),
+);
+
+/**
+ * Where the action on a control-press stands with the game, in a few words: nothing for an empty
+ * one; set by hand when it is on the bind sheet (the game rebound to the setup); as the game ships
+ * it otherwise; a key chosen for the game's written file with key output.
+ */
+function noteFor(
+  scheme: Scheme,
+  game: Game,
+  plan: Plan,
+  mode: ModeId,
+  control: ControlId,
+  action: ActionId | undefined,
+): string {
+  if (action === undefined) return 'does nothing in the game';
+  const set = controlSet(scheme, control);
+  if (plan.bindSheet.some((r) => r.mode === mode && r.action === action && r.set === set))
+    return "set it in the game's controls";
+  const written = scheme.writeGameFile && game.file !== undefined;
+  const pooled = written && scheme.output === 'keys' && !FIXED_SIGNALS.has(control);
+  return pooled ? 'chosen for you' : 'as the game ships it';
+}
+
 function sendsFor(
   scheme: Scheme,
   game: Game,
@@ -286,24 +505,55 @@ function sendsFor(
   press: Press,
 ): { text: string | null; note: string } {
   const pins = [...(plan.units.left?.pins ?? []), ...(plan.units.right?.pins ?? [])];
-  const signal = pins.find((p) => p.control === control)?.presses[press];
+  // A fixed control sends what it is, and only taps.
+  const fixed = FIXED_SIGNALS.get(control);
+  const signal =
+    fixed === undefined
+      ? pins.find((p) => p.control === control)?.presses[press]
+      : press === 'tap'
+        ? fixed
+        : undefined;
   if (signal === undefined) return { text: null, note: '' };
   const shown = shownAction(scheme, mode, control);
   const action =
     shown?.press === press ? shown.id : own(own(scheme.map, mode) ?? {}, control)?.[press];
-  const onSheet = plan.bindSheet.some((r) => r.mode === mode && r.action === action);
-  const written = scheme.writeGameFile && game.file !== undefined;
-  const note =
-    action === undefined
-      ? 'does nothing in the game'
-      : onSheet
-        ? "set it in the game's controls"
-        : written
-          ? 'chosen for you'
-          : scheme.output === 'pad'
-            ? "the game's own button"
-            : "the game's own key";
-  return { text: signalText(signal), note };
+  return { text: signalText(signal), note: noteFor(scheme, game, plan, mode, control, action) };
+}
+
+/** The Xbox control choice for an Azeron button with controller output; null for anything else. */
+function padChoiceFor(
+  scheme: Scheme,
+  game: Game,
+  mode: ModeId,
+  control: ControlId,
+): PadChoice | null {
+  const azeron = control.startsWith('L.') || control.startsWith('R.');
+  if (scheme.output !== 'pad' || !azeron || !inSetup(setupOf(scheme.devices), control)) return null;
+  const sticks = stickPadsOf(scheme);
+  const current = padSignalOf(scheme, control) ?? null;
+  const byControl = own(scheme.map, mode) ?? {};
+  const on = (pad: PadControl): string | undefined => {
+    for (const [c, presses] of Object.entries(byControl)) {
+      if (padSignalOf(scheme, c) === pad && presses.tap !== undefined)
+        return actionRef(game, presses.tap).name;
+    }
+    return undefined;
+  };
+  return {
+    current,
+    options: PAD_CONTROLS.filter((pad) => !sticks.has(pad)).map((pad) => {
+      const name = on(pad);
+      return { pad, label: name === undefined ? padWord(pad) : `${padWord(pad)} · ${name}` };
+    }),
+    locked: current !== null && sticks.has(current),
+  };
+}
+
+/** What a press that isn't there says: only an Azeron button sending keys has them all. */
+function unavailableWord(control: ControlId): string {
+  if (control.startsWith('key.')) return 'Not on a key';
+  if (control.startsWith('mouse.')) return 'Not on a mouse button';
+  return 'Not on a controller';
 }
 
 interface PanelInput {
@@ -317,8 +567,10 @@ interface PanelInput {
 
 function panelFor(input: PanelInput): PanelView {
   const { scheme, game, plan, mode, press, control } = input;
-  const hand = control.startsWith('L.') ? 'Left' : 'Right';
-  const where = `${hand} · ${positionName(positionOf(control))}`;
+  const azeron = control.startsWith('L.') || control.startsWith('R.');
+  const where = whereOf(control);
+  // Only an Azeron button sending keys has a long press and a double tap.
+  const allPresses = azeron && scheme.output !== 'pad';
   if (isStick(control)) {
     const sends = stickSends(scheme, control);
     return {
@@ -328,8 +580,11 @@ function panelFor(input: PanelInput): PanelView {
       stick: true,
       across: [],
       presses: [],
+      behaviour: false,
       turbo: false,
       latch: false,
+      unavailable: unavailableWord(control),
+      padChoice: null,
       sends: sends.text,
       sendsNote: sends.note,
     };
@@ -359,14 +614,17 @@ function panelFor(input: PanelInput): PanelView {
       const row: PressRow = {
         press: p,
         word: PRESS_WORD[p],
-        available: scheme.output !== 'pad' || p === 'tap',
+        available: allPresses || p === 'tap',
         target: p === press,
       };
       if (id !== undefined) row.action = actionRef(game, id);
       return row;
     }),
+    behaviour: azeron,
     turbo: scheme.behaviour[control]?.turbo !== undefined,
     latch: scheme.behaviour[control]?.latch === true,
+    unavailable: unavailableWord(control),
+    padChoice: padChoiceFor(scheme, game, mode, control),
     sends: sends.text,
     sendsNote: sends.note,
   };
@@ -380,15 +638,54 @@ const SEVERITY_ORDER = { error: 0, warning: 1 } as const;
 
 export function editorView(input: EditorViewInput): EditorView {
   const { scheme, game, plan, mode, selected } = input;
-  const press = input.press ?? 'tap';
+  // The press asked for, while the selected control can send it: a switch to a controller leaves
+  // no long press or double tap to target.
+  const asked = input.press ?? 'tap';
+  const press =
+    selected === undefined || pressesOf(scheme, selected).includes(asked) ? asked : 'tap';
+  const setup = setupOf(scheme.devices);
+  const tabs = deviceTabs(scheme.devices);
+  const tab = shownTab(tabs, input.tab);
 
-  const placed = new Set<ActionId>();
-  for (const presses of Object.values(own(scheme.map, mode) ?? {})) {
-    for (const p of PRESSES) {
-      const id = presses[p];
-      if (id !== undefined) placed.add(id);
+  // What is placed in each binding set: on a control of the setup bound through it, any press.
+  const placedIn = (set: BindingSet) => {
+    const on = new Map<ActionId, ControlId>();
+    for (const [control, presses] of Object.entries(own(scheme.map, mode) ?? {})) {
+      if (!inSetup(setup, control) || controlSet(scheme, control) !== set) continue;
+      for (const p of PRESSES) {
+        const id = presses[p];
+        if (id !== undefined && !on.has(id)) on.set(id, control);
+      }
     }
-  }
+    return on;
+  };
+  const inMode = game.actions.filter((a) => a.mode === mode);
+  const listOf = (set: BindingSet, word: ControlWord): ActionList => {
+    const placed = placedIn(set);
+    return {
+      set,
+      word,
+      actions: inMode.filter((a) => !placed.has(a.id)).map((a) => actionRef(game, a.id)),
+    };
+  };
+  // A selected control of the setup speaks for itself: its own set, its own word. A stick has no
+  // set: the tab's lists stand.
+  const chosen = selected !== undefined && inSetup(setup, selected) ? selected : undefined;
+  const chosenSet = chosen === undefined ? undefined : controlSet(scheme, chosen);
+  const lists =
+    chosen !== undefined && chosenSet !== undefined
+      ? [listOf(chosenSet, wordOf(chosen))]
+      : setsOfTab(scheme, tab).map(({ set, word }) => listOf(set, word));
+  const moves =
+    chosen !== undefined && chosenSet !== undefined
+      ? [...placedIn(chosenSet)]
+          .filter(([, control]) => control !== chosen)
+          .map(([id, control]) => ({ ...actionRef(game, id), where: whereOf(control) }))
+          .sort(
+            (a, b) =>
+              inMode.findIndex((x) => x.id === a.id) - inMode.findIndex((x) => x.id === b.id),
+          )
+      : [];
 
   // Core can report the same rule on the same control more than once (one per press, one per
   // stick direction), so a repeat gets a number to keep every key unique.
@@ -412,22 +709,36 @@ export function editorView(input: EditorViewInput): EditorView {
   const bySeverity = (a: FindingRow, b: FindingRow) =>
     SEVERITY_ORDER[a.finding.severity] - SEVERITY_ORDER[b.finding.severity];
 
+  const conflicting = new Set(
+    plan.findings
+      .filter(
+        (f) =>
+          f.rule === 'key-collision' &&
+          f.accepted === undefined &&
+          (f.mode === undefined || f.mode === mode),
+      )
+      .flatMap((f) => (f.control === undefined ? [] : [f.control])),
+  );
   const conflicts = (hand: Hand): ReadonlySet<ControlId> =>
-    new Set(
-      plan.findings
-        .filter(
-          (f) =>
-            f.rule === 'key-collision' &&
-            f.accepted === undefined &&
-            f.control?.startsWith(`${handPrefix(hand)}.`) === true &&
-            (f.mode === undefined || f.mode === mode),
-        )
-        .flatMap((f) => (f.control === undefined ? [] : [f.control])),
-    );
+    new Set([...conflicting].filter((c) => c.startsWith(`${handPrefix(hand)}.`)));
 
   return {
     showModeTabs: game.modes.length > 1,
     modes: game.modes.map((m) => ({ id: m.id, name: m.name, active: m.id === mode })),
+    tabs,
+    tab,
+    hands: [...setup.hands],
+    mouseBeside: setup.mouse && mouseBesideLeft(scheme.devices),
+    keyboard: setup.keyboard,
+    mouse: setup.mouse,
+    controlWord: chosen !== undefined ? wordOf(chosen) : tabWord(scheme, tab),
+    output: setup.hands.length > 0 ? scheme.output : null,
+    fixed: {
+      ...keysOf(scheme, game, mode, 'key.'),
+      ...keysOf(scheme, game, mode, 'mouse.'),
+      ...(setup.controller ? keysOf(scheme, game, mode, 'pad.') : {}),
+    },
+    conflicts: conflicting,
     left: {
       keys: unitKeys(scheme, game, mode, 'left'),
       stick: stickLabels(scheme, game, mode, 'left'),
@@ -438,13 +749,13 @@ export function editorView(input: EditorViewInput): EditorView {
       stick: stickLabels(scheme, game, mode, 'right'),
       conflicts: conflicts('right'),
     },
+    // A control of a device the setup no longer has (an undo took it away) shows no panel.
     panel:
-      selected === undefined
+      selected === undefined || !inSetup(setup, selected)
         ? null
         : panelFor({ scheme, game, plan, mode, press, control: selected }),
-    unplaced: game.actions
-      .filter((a) => a.mode === mode && !placed.has(a.id))
-      .map((a) => actionRef(game, a.id)),
+    lists,
+    moves,
     findings: rows.filter((r) => r.kept === undefined).sort(bySeverity),
     kept: rows.filter((r) => r.kept !== undefined),
   };
