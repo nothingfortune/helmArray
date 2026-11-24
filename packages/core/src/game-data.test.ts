@@ -59,6 +59,12 @@ describe('gameProblem: a game that can be saved', () => {
     const actions = ROLES.map((role) => action({ id: role, name: role, role }));
     expect(gameProblem(game({ actions }))).toBeNull();
   });
+
+  it('takes an action with no role yet: a role is chosen after the action is added', () => {
+    const unrolled = action({ id: 'fire', name: 'Fire' });
+    delete unrolled.role;
+    expect(gameProblem(game({ actions: [unrolled] }))).toBeNull();
+  });
 });
 
 describe('gameProblem: one plain sentence for what is wrong', () => {
@@ -138,7 +144,12 @@ describe('gameProblem: one plain sentence for what is wrong', () => {
     [
       'an action with a role helmArray does not have',
       raw({ actions: [{ ...action({ id: 'fire', name: 'Fire' }), role: 'stealth' }] }),
-      'Fire needs a role: combat, movement, ability, travel or menu.',
+      "Fire's role isn't one helmArray knows: combat, movement, ability, travel or menu.",
+    ],
+    [
+      'an action whose role is not text',
+      raw({ actions: [{ ...action({ id: 'fire', name: 'Fire' }), role: null }] }),
+      "Fire's role isn't one helmArray knows: combat, movement, ability, travel or menu.",
     ],
     [
       'an action whose required is not yes or no',

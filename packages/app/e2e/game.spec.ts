@@ -4,9 +4,11 @@
 // page by this test only. No OS-level input is ever sent.
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { Page } from '@playwright/test';
+import type { ElectronApplication, Page } from '@playwright/test';
 import { expect, test } from './helm';
 import {
+  AZERON_APP,
+  CLOSE_AZERON_FIRST,
   applyInDrawer,
   drawer,
   keepEveryCheck,
@@ -75,6 +77,69 @@ async function plugFakePad(page: Page) {
     .poll(() => page.evaluate(() => navigator.getGamepads()[0]?.id))
     .toBe('Fake Xbox controller');
 }
+
+/**
+ * The Gamepad API with no controller connected: four empty places, as Chromium gives them. Not the
+ * machine's own: a real controller plugged in never reaches the test. `window.connectFakePad()`
+ * plugs the fake one in mid-test, pressing `button` with it if given: Chromium shows a pad only
+ * once a button on it is pressed.
+ */
+async function noPadYet(page: Page) {
+  await page.addInitScript(() => {
+    const pad = {
+      id: 'Fake Xbox controller',
+      index: 0,
+      connected: true,
+      mapping: 'standard',
+      timestamp: 0,
+      buttons: Array.from({ length: 17 }, () => ({ pressed: false, touched: false, value: 0 })),
+      axes: [0, 0, 0, 0],
+    };
+    let plugged = false;
+    const w = window as unknown as { fakePad: typeof pad; connectFakePad(button?: number): void };
+    w.fakePad = pad;
+    w.connectFakePad = (button) => {
+      if (button !== undefined) pad.buttons[button] = { pressed: true, touched: true, value: 1 };
+      plugged = true;
+    };
+    Object.defineProperty(navigator, 'getGamepads', {
+      configurable: true,
+      value: () => (plugged ? [pad, null, null, null] : [null, null, null, null]),
+    });
+  });
+  await page.reload();
+  await expect
+    .poll(() => page.evaluate(() => navigator.getGamepads().filter((p) => p !== null).length))
+    .toBe(0);
+}
+
+const connectFakePad = (page: Page, button?: number) =>
+  page.evaluate(
+    (b) => (window as unknown as { connectFakePad(b?: number): void }).connectFakePad(b),
+    button,
+  );
+
+/** Opens your copy of Helldivers 2: its 28 actions, more than the window holds. */
+async function editHelldivers(page: Page) {
+  await page.getByRole('button', { name: /^Edit game: HELLDIVERS/ }).click();
+  await expect(gameName(page)).toHaveValue('Helldivers 2');
+}
+
+/** The window's content at the app's narrowest. */
+async function narrowest(helm: { app: ElectronApplication }) {
+  await helm.app.evaluate(({ BrowserWindow }) => {
+    BrowserWindow.getAllWindows()[0]?.setContentSize(1280, 900);
+  });
+}
+
+/** Where an element is, in the window. */
+const box = (page: Page, selector: string) =>
+  page.evaluate((sel) => {
+    const r = document.querySelector(sel)?.getBoundingClientRect();
+    return r === undefined
+      ? null
+      : { top: r.top, bottom: r.bottom, height: r.height, width: r.width };
+  }, selector);
 
 async function pressPad(page: Page, change: { button?: number; axis?: [number, number] }) {
   await page.evaluate((c) => {
@@ -238,9 +303,237 @@ test.describe('the Game screen', () => {
     await expect(page.getByRole('button', { name: 'Menu, key: M' })).toBeVisible();
     await page.getByRole('button', { name: 'Menu, key: M' }).click();
     await page.keyboard.press('Tab');
-    await expect(page.getByRole('combobox', { name: "Keys a press can't set" })).toBeFocused();
-    await page.getByRole('combobox', { name: "Keys a press can't set" }).selectOption('Esc');
+    const list = page.getByRole('combobox', { name: "Keys a press can't set" });
+    await expect(list).toBeFocused();
+    // The list starts on Esc: Enter takes it, no change of the list needed.
+    await expect(list).toHaveValue('Esc');
+    await expect(page.getByText('Or pick a key:')).toBeVisible();
+    await page.keyboard.press('Enter');
     await expect(page.getByRole('button', { name: 'Menu, key: Esc' })).toBeVisible();
+  });
+
+  test('with no controller connected, the list is offered and has the focus: picking sets the button', async ({
+    helm,
+  }) => {
+    const { page } = helm;
+    await noPadYet(page);
+    await setUpUnknown(page);
+    await addAction(page, 'Jump', 'Space', 'Space');
+    await addAction(page, 'Reload', 'KeyR', 'R');
+
+    await page.getByRole('button', { name: "Set Jump's controller button" }).click();
+    await expect(page.getByRole('status')).toHaveText(
+      "No controller connected. Pick Jump's button:",
+    );
+    const list = page.getByRole('combobox', { name: 'Controller buttons' });
+    await expect(list).toBeFocused();
+    await list.selectOption('B');
+    await expect(page.getByRole('button', { name: 'Jump, controller button: B' })).toBeVisible();
+    // The focus goes back to the field the wait began on.
+    await expect(page.getByRole('button', { name: 'Jump, controller button: B' })).toBeFocused();
+
+    // The list starts on A: Set takes it in one click.
+    await page.getByRole('button', { name: "Set Reload's controller button" }).click();
+    await expect(list).toHaveValue('A');
+    await page.getByRole('button', { name: 'Set', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Reload, controller button: A' })).toBeVisible();
+
+    // Esc still cancels.
+    await page.getByRole('button', { name: 'Reload, controller button: A' }).click();
+    await expect(list).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('status')).toHaveCount(0);
+  });
+
+  test('the arrows only move through the list: Enter sets what it shows', async ({ helm }) => {
+    const { page } = helm;
+    await noPadYet(page);
+    await setUpUnknown(page);
+    await addAction(page, 'Jump', 'Space', 'Space');
+    await page.getByRole('button', { name: "Set Jump's controller button" }).click();
+    const list = page.getByRole('combobox', { name: 'Controller buttons' });
+    await expect(list).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('ArrowDown');
+    // Still waiting: no arrow set a button.
+    await expect(page.getByRole('status')).toHaveText(
+      "No controller connected. Pick Jump's button:",
+    );
+    await expect(list).toHaveValue('X');
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('button', { name: 'Jump, controller button: X' })).toBeVisible();
+  });
+
+  test('a new action at the end of a long list is scrolled into view, waiting for its key', async ({
+    helm,
+  }) => {
+    const { page } = helm;
+    await editHelldivers(page);
+    const field = page.getByRole('textbox', { name: 'New action' });
+    await field.fill('Wave');
+    await field.press('Enter');
+    await expect(page.getByRole('status')).toHaveText(
+      "Press Wave's key or mouse button. Esc cancels.",
+    );
+    await expect(page.getByRole('status')).toBeInViewport({ ratio: 1 });
+    await expect(page.getByRole('button', { name: 'Press a key for Wave' })).toBeInViewport();
+  });
+
+  test('a controller plugged in during the wait is listened to, and its press is taken', async ({
+    helm,
+  }) => {
+    const { page } = helm;
+    await noPadYet(page);
+    await setUpUnknown(page);
+    await addAction(page, 'Jump', 'Space', 'Space');
+    await page.getByRole('button', { name: "Set Jump's controller button" }).click();
+    await expect(page.getByRole('status')).toHaveText(
+      "No controller connected. Pick Jump's button:",
+    );
+
+    await connectFakePad(page);
+    await expect(page.getByRole('status')).toHaveText(
+      "Press Jump's button on the controller. Esc cancels.",
+    );
+    await expect(page.getByText('Or pick a button:')).toBeVisible();
+    await pressPad(page, { button: 3 });
+    await expect(page.getByRole('button', { name: 'Jump, controller button: Y' })).toBeVisible();
+  });
+
+  test('the press a controller is found by sets the button', async ({ helm }) => {
+    const { page } = helm;
+    await noPadYet(page);
+    await setUpUnknown(page);
+    await addAction(page, 'Jump', 'Space', 'Space');
+    await page.getByRole('button', { name: "Set Jump's controller button" }).click();
+    await expect(page.getByRole('status')).toHaveText(
+      "No controller connected. Pick Jump's button:",
+    );
+    // As Chromium does: the pad shows up with the button that woke it already down.
+    await connectFakePad(page, 0);
+    await expect(page.getByRole('button', { name: 'Jump, controller button: A' })).toBeVisible();
+  });
+
+  test('a new action has no role until one is chosen, and is saved without one', async ({
+    helm,
+  }) => {
+    const { page } = helm;
+    await setUpUnknown(page);
+    await addAction(page, 'Jump', 'Space', 'Space');
+    const role = page.getByRole('combobox', { name: 'Jump, role' });
+    await expect(role).toHaveValue('');
+    await expect(role.locator('option:checked')).toHaveText('Role');
+    await expect.poll(() => savedGame(helm.dataDir)).toContain('"jump"');
+    const unrolled = JSON.parse(await savedGame(helm.dataDir)) as { actions: object[] };
+    expect(unrolled.actions.map((a) => 'role' in a)).toEqual([false]);
+
+    await role.selectOption('Movement');
+    await expect.poll(() => savedGame(helm.dataDir)).toContain('"role": "movement"');
+  });
+
+  test('a game with one mode shows no mode tab until Add mode, which names both', async ({
+    helm,
+  }) => {
+    const { page } = helm;
+    await setUpUnknown(page);
+    await expect(page.getByRole('tablist', { name: 'Modes' })).toHaveCount(0);
+    await expect(page.getByRole('textbox', { name: 'Mode name' })).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'Add mode' }).click();
+    await expect(page.getByRole('tab')).toHaveText(['Mode 10', 'Mode 20']);
+    await expect(page.getByRole('textbox', { name: 'Mode name' })).toBeFocused();
+    await expect(page.getByRole('tabpanel', { name: 'Actions' })).toBeVisible();
+  });
+
+  test('a lone mode with no name keeps its field while a whole name is typed', async ({ helm }) => {
+    const { page } = helm;
+    await setUpUnknown(page);
+    await addAction(page, 'Jump', 'Space', 'Space');
+    // Codex's sequence: two modes, the first one's name cleared, the other deleted.
+    await page.getByRole('button', { name: 'Add mode' }).click();
+    await page.getByRole('tab', { name: /^Mode 1/ }).click();
+    const modeName = page.getByRole('textbox', { name: 'Mode name' });
+    await modeName.fill('');
+    await page.getByRole('tab', { name: /^Mode 2/ }).click();
+    await page.getByRole('button', { name: 'Delete mode' }).click();
+    await expect(page.getByRole('tab')).toHaveText(['Unnamed1']);
+
+    await modeName.click();
+    await page.keyboard.type('On foot');
+    await expect(modeName).toHaveValue('On foot');
+    await expect(modeName).toBeFocused();
+    // Once the typing is done the lone mode has a name: nothing to tell apart, so no tab.
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('tablist', { name: 'Modes' })).toHaveCount(0);
+    await expect.poll(() => savedGame(helm.dataDir)).toContain('"name": "On foot"');
+  });
+
+  test('the window doesn’t scroll with 28 actions: the rows do, and the bar stays', async ({
+    helm,
+  }) => {
+    const { page } = helm;
+    await editHelldivers(page);
+    // The precondition: more rows than the panel holds.
+    const rows = page.locator('.gm-rows');
+    expect(await rows.evaluate((el) => el.scrollHeight > el.clientHeight + 100)).toBe(true);
+    const fits = () =>
+      page.evaluate(() => {
+        const doc = document.scrollingElement ?? document.documentElement;
+        return doc.scrollHeight <= window.innerHeight;
+      });
+    expect(await fits()).toBe(true);
+
+    await rows.evaluate((el) => el.scrollTo(0, el.scrollHeight));
+    await page.mouse.wheel(0, 2000);
+    const startFrom = page.getByRole('group', { name: 'New scheme from' });
+    await expect(startFrom).toBeInViewport();
+    expect([await fits(), await page.evaluate(() => window.scrollY)]).toEqual([true, 0]);
+    // The last action is reachable inside the rows' own scroll.
+    await expect(page.getByRole('textbox', { name: /, name$/ }).last()).toBeInViewport();
+    // At 1440 the table stops at about 1080 px.
+    expect((await box(page, '.gm-panel'))?.width).toBeLessThanOrEqual(1080);
+    // A line under the header (the Azeron app is open) takes its height from the panel, not the window.
+    await helm.setProcesses([AZERON_APP]);
+    await expect(page.getByText(CLOSE_AZERON_FIRST)).toBeVisible();
+    expect(await fits()).toBe(true);
+  });
+
+  test('asking before a delete takes the place of Delete game: the bar and the table stay put', async ({
+    helm,
+  }) => {
+    const { page } = helm;
+    await narrowest(helm);
+    await expect.poll(() => page.evaluate(() => window.innerWidth)).toBe(1280);
+    await setUpUnknown(page);
+    await addAction(page, 'Jump', 'Space', 'Space');
+    await expect(page.getByRole('button', { name: 'Delete game' })).toBeVisible();
+    const before = [await box(page, '.gm-bar'), await box(page, '.gm-table')];
+
+    await page.getByRole('button', { name: 'Delete game' }).click();
+    const asking = page.getByRole('group', { name: 'Are you sure?' });
+    await expect(asking).toHaveText(/Delete this game and its schemes\?/);
+    await expect(asking).toBeInViewport({ ratio: 1 });
+    await expect(page.getByRole('group', { name: 'New scheme from' })).toBeInViewport({ ratio: 1 });
+    expect([await box(page, '.gm-bar'), await box(page, '.gm-table')]).toEqual(before);
+  });
+
+  test('one amber button: the first way on, once there is an action', async ({ helm }) => {
+    const { page } = helm;
+    await setUpUnknown(page);
+    await expect(page.locator('.gm .btn.primary')).toHaveCount(0);
+    await addAction(page, 'Jump', 'Space', 'Space');
+    await expect(page.locator('.gm .btn.primary')).toHaveText(['Xbox controller']);
+  });
+
+  test('Redo puts back what Undo took', async ({ helm }) => {
+    const { page } = helm;
+    await setUpUnknown(page);
+    await addAction(page, 'Jump', 'Space', 'Space');
+    await page.getByRole('button', { name: 'Undo' }).click();
+    await expect(page.getByRole('button', { name: "Set Jump's key" })).toBeVisible();
+    await page.getByRole('button', { name: 'Redo' }).click();
+    await expect(page.getByRole('button', { name: 'Jump, key: Space' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Redo' })).toBeDisabled();
   });
 
   test('Add a game, by name only, leads to the same screen and then to the Library', async ({
@@ -367,8 +660,65 @@ test.describe('the Game screen: axe and the keyboard in each state', () => {
     await expect(page.getByText('No actions yet.')).toBeVisible();
     expect(await seriousViolations(page)).toEqual([]);
     const stops = await walkTabOrder(page);
+    const labels = stops.map((s) => s.label);
+    expect([labels.includes('Mode name'), labels]).toEqual([
+      false,
+      expect.arrayContaining(['Library', 'Game name', 'Add mode', 'New action']),
+    ]);
+    expect(unseen(stops)).toEqual([]);
+  });
+
+  test('two modes', async ({ helm }) => {
+    const { page } = helm;
+    await setUpUnknown(page);
+    await page.getByRole('button', { name: 'Add mode' }).click();
+    await expect(page.getByRole('tablist', { name: 'Modes' })).toBeVisible();
+    expect(await seriousViolations(page)).toEqual([]);
+    const stops = await walkTabOrder(page);
     expect(stops.map((s) => s.label)).toEqual(
-      expect.arrayContaining(['Library', 'Game name', 'Add mode', 'Mode name', 'New action']),
+      // A tab's text is its name and its count of actions.
+      expect.arrayContaining(['Mode 10', 'Mode 20', 'Add mode', 'Mode name', 'Delete mode']),
+    );
+    expect(unseen(stops)).toEqual([]);
+  });
+
+  test('asking before a delete', async ({ helm }) => {
+    const { page } = helm;
+    await setUpUnknown(page);
+    await addAction(page, 'Jump', 'Space', 'Space');
+    await page.getByRole('button', { name: 'Delete game' }).click();
+    await expect(page.getByRole('group', { name: 'Are you sure?' })).toBeVisible();
+    expect(await seriousViolations(page)).toEqual([]);
+    const stops = await walkTabOrder(page);
+    expect(stops.map((s) => s.label)).toEqual(
+      expect.arrayContaining(['Delete', 'Keep it', 'Xbox controller']),
+    );
+    expect(unseen(stops)).toEqual([]);
+  });
+
+  test('a long list, scrolled inside the panel', async ({ helm }) => {
+    const { page } = helm;
+    await editHelldivers(page);
+    expect(await seriousViolations(page)).toEqual([]);
+    const stops = await walkTabOrder(page);
+    // Every row is reached, and each stop shows where it is.
+    expect(stops.filter((s) => s.label.endsWith(', name')).length).toBe(28);
+    expect(unseen(stops)).toEqual([]);
+  });
+
+  test('while waiting for a controller with none connected', async ({ helm }) => {
+    const { page } = helm;
+    await noPadYet(page);
+    await setUpUnknown(page);
+    await addAction(page, 'Jump', 'Space', 'Space');
+    await page.getByRole('button', { name: "Set Jump's controller button" }).click();
+    await expect(page.getByRole('status')).toHaveText(
+      "No controller connected. Pick Jump's button:",
+    );
+    expect(await seriousViolations(page)).toEqual([]);
+    const stops = await walkTabOrder(page);
+    expect(stops.map((s) => s.label)).toEqual(
+      expect.arrayContaining(['Controller buttons', 'Set', 'Cancel']),
     );
     expect(unseen(stops)).toEqual([]);
   });
@@ -407,7 +757,7 @@ test.describe('the Game screen: axe and the keyboard in each state', () => {
     // Tab moves on while the controller is waited for: the wait stays, and every stop shows.
     const stops = await walkTabOrder(page);
     expect(stops.map((s) => s.label)).toEqual(
-      expect.arrayContaining(['Press a button for Jump', 'Controller buttons', 'Cancel']),
+      expect.arrayContaining(['Press a button for Jump', 'Controller buttons', 'Set', 'Cancel']),
     );
     expect(unseen(stops)).toEqual([]);
     await expect(page.getByRole('status')).toHaveText(

@@ -102,8 +102,9 @@ function actionProblem(value: unknown, modes: ReadonlySet<string>): string | nul
   if (!isDataId(value['id'])) return `${name} has an id helmArray can't use.`;
   if (typeof value['mode'] !== 'string' || !modes.has(value['mode']))
     return `${name} is in a mode the game doesn't have.`;
-  if (!oneOf(ROLES, value['role']))
-    return `${name} needs a role: combat, movement, ability, travel or menu.`;
+  // No role is fine: an action just added has none until one is chosen.
+  if (value['role'] !== undefined && !oneOf(ROLES, value['role']))
+    return `${name}'s role isn't one helmArray knows: combat, movement, ability, travel or menu.`;
   if (typeof value['required'] !== 'boolean') return `${name} must be required or not.`;
   const native = value['native'];
   if (native === undefined) return null;
