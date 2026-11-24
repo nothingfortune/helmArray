@@ -55,6 +55,29 @@ describe('the unit, drawn', () => {
     ]).toEqual([true, true]);
   });
 
+  it('keeps "Long:" before the key label of a button with only a long press', () => {
+    const html = renderToStaticMarkup(
+      <Unit
+        hand="left"
+        keys={{
+          'L.dpad_up': {
+            label: 'Long: Ping / comms wheel',
+            qualifier: 'Long:',
+            name: 'Ping / comms wheel',
+            short: 'Ping',
+            action: 'ping',
+            press: 'long',
+          },
+        }}
+        scale={1}
+      />,
+    );
+    expect([
+      html.includes('>Long: Ping</span>'),
+      html.includes('aria-label="Long: Ping / comms wheel, d-pad ↑"'),
+    ]).toEqual([true, true]);
+  });
+
   it('keeps the name on a key it fits, though it has a key label', () => {
     const html = renderToStaticMarkup(
       <Unit hand="left" keys={{ 'L.index_1': { label: 'Fire', action: 'fire', short: 'F' } }} />,

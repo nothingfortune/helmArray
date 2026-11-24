@@ -69,6 +69,8 @@ describe('unit keys', () => {
     );
     expect(view(scheme).left.keys['L.index_2']).toEqual({
       label: 'Long: Landing gear',
+      qualifier: 'Long:',
+      name: 'Landing gear',
       role: 'travel',
       action: 'gear',
       press: 'long',
@@ -766,5 +768,26 @@ describe('key labels', () => {
       view(labelled, 'ship', 'L.stick').panel?.keyLabel,
       view(labelled, 'ship', 'mouse.left').panel?.keyLabel,
     ]).toEqual([null, null, null]);
+  });
+});
+
+describe('a key label on a button with only a long press or a double tap', () => {
+  it('is the name part only: the press word stays apart, to be drawn with it', () => {
+    const scheme: Scheme = {
+      ...assign(
+        keysScheme(),
+        { mode: 'ship', control: 'L.index_2', press: 'double' },
+        'gear',
+        game,
+      ),
+      keyLabels: { ship: { 'L.index_2': 'Gear' } },
+    };
+    const key = view(scheme).left.keys['L.index_2'];
+    expect([key?.qualifier, key?.name, key?.short, key?.label]).toEqual([
+      'Double:',
+      'Landing gear',
+      'Gear',
+      'Double: Landing gear',
+    ]);
   });
 });

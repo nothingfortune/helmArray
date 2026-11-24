@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { helldivers2 } from '@helmarray/core';
+import { MIN_UNIT_SCALE, SIDE_NARROW, SIDE_WIDE, unitRow } from '../screens/editor-layout';
 import {
   KEY_FONT_SIZES,
   MIN_FONT_SIZE,
@@ -177,6 +178,64 @@ describe('fitLabel: the 10 px floor', () => {
       .map((a) => `Long: ${a.name}`)
       .filter((label) => !fitLabel(label, 54, 35).fits);
     expect(misses).toEqual([]);
+  });
+});
+
+describe('fitLabel: a press word is never fitted away', () => {
+  // The press words a label can carry (editor-view.ts), long names, and every key shape's text area
+  // (as in the table above), at the units' scale with the side panel open at 1440 and at 1280.
+  const QUALIFIERS = [undefined, 'Long:', 'Double:'] as const;
+  const NAMES = [
+    ['Ping / comms wheel', 'Ping'],
+    ['Stratagem (hold)', 'Strat'],
+    ['Secondary', 'Sec'],
+    ['Extraordinarily long action', 'Extra'],
+  ] as const;
+  const KEYS = [
+    ['finger', 54, 35],
+    ['side', 42, 51],
+    ['thumb', 38, 31],
+    ['d-pad', 40, 23],
+    ['keyboard', 48, 36],
+  ] as const;
+  // editor-layout.ts at 1440 and 1280: the main column less a scrollbar's gutter.
+  const SCALES = [
+    ['1440', unitRow(1440 - SIDE_WIDE - 48 - 17, 2).scale ?? 1],
+    ['1280', unitRow(1280 - SIDE_NARROW - 48 - 17, 2).scale ?? 1],
+  ] as const;
+
+  const faults: string[] = [];
+  for (const qualifier of QUALIFIERS)
+    for (const [name, short] of NAMES)
+      for (const keyLabel of [undefined, short])
+        for (const [shape, w, h] of KEYS)
+          for (const [width, scale] of SCALES) {
+            const fit = fitLabel(name, w, h, { qualifier, short: keyLabel });
+            const at = `${qualifier ?? 'tap'} "${name}"${keyLabel ? ` (${keyLabel})` : ''} on ${shape} at ${width}`;
+            if (qualifier !== undefined && !fit.text.startsWith(`${qualifier} `))
+              faults.push(`${at}: drawn "${fit.text}"`);
+            if (fit.fontSize < MIN_FONT_SIZE) faults.push(`${at}: ${fit.fontSize} px`);
+            if (fit.fontSize * scale < MIN_FONT_SIZE * MIN_UNIT_SCALE)
+              faults.push(`${at}: ${(fit.fontSize * scale).toFixed(1)} px on screen`);
+            if (!fit.fits && fit.squeeze > MIN_SQUEEZE) faults.push(`${at}: not fitted`);
+          }
+
+  it('keeps the press word on every key, with and without a key label, at 1440 and 1280', () => {
+    expect(faults).toEqual([]);
+  });
+
+  it('draws the key label after the press word, in place of the name only', () => {
+    const fit = fitLabel('Ping / comms wheel', 40, 23, { qualifier: 'Long:', short: 'Ping' });
+    expect([fit.text, fit.short]).toEqual(['Long: Ping', true]);
+  });
+
+  it('draws the press word and the whole name when they fit', () => {
+    expect(fitLabel('Jump', 54, 35, { qualifier: 'Long:', short: 'J' }).text).toBe('Long: Jump');
+  });
+
+  it('draws the press word and the shortest name narrower before it would leave the press word out', () => {
+    const fit = fitLabel('Ping / comms wheel', 30, 11, { qualifier: 'Double:', short: 'Ping' });
+    expect([fit.text, fit.fontSize, fit.squeeze < 1]).toEqual(['Double: Ping', 10, true]);
   });
 });
 

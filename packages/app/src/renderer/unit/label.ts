@@ -36,6 +36,12 @@ export interface FitOptions {
   lineHeight?: number;
   /** The key's short label, shown when the game's word won't fit at a readable size. */
   short?: string | undefined;
+  /**
+   * What the label says before the name and must never lose: the press it is on ("Long:",
+   * "Double:"). Only the name part is fitted (the game's word or the short label); the qualifier
+   * is drawn before whichever is chosen, and a last resort squeezes both rather than drop it.
+   */
+  qualifier?: string | undefined;
 }
 
 // Advance widths of Inter 600, in em, as the app draws them (measured in the app's own window).
@@ -126,9 +132,12 @@ export function fitLabel(
   };
   const sizes = [...new Set(options.sizes ?? KEY_FONT_SIZES)].filter((s) => s >= MIN_FONT_SIZE);
   const above = sizes.filter((s) => s > MIN_FONT_SIZE);
-  const full = joinShortWords(text.trim());
+  const qualifier = options.qualifier?.trim() ?? '';
+  const withQualifier = (name: string) =>
+    joinShortWords(qualifier === '' ? name : `${qualifier} ${name}`);
+  const full = withQualifier(text.trim());
   const shortText = options.short?.trim() ?? '';
-  const short = shortText === '' ? undefined : joinShortWords(shortText);
+  const short = shortText === '' ? undefined : withQualifier(shortText);
   const steps: [string | undefined, boolean, readonly number[]][] = [
     [full, false, above],
     [short, true, above],

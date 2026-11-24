@@ -72,9 +72,13 @@ function Said({ children }: { children: string }) {
 }
 
 function KeyButton({ cap, control }: { cap: KeyCap; control: ReturnType<typeof useControls> }) {
-  const { label, short, said, attrs } = control.props(cap.id, true, sideOf(cap.id));
+  const { label, name, short, qualifier, said, attrs } = control.props(
+    cap.id,
+    true,
+    sideOf(cap.id),
+  );
   const width = cap.w - 16;
-  const fit = label === null ? null : fitLabel(label, width, cap.h - 24, { short });
+  const fit = name === null ? null : fitLabel(name, width, cap.h - 24, { short, qualifier });
   return (
     <button
       {...attrs}

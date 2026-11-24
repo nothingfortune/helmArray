@@ -276,6 +276,26 @@ test.describe('the Editor’s labels', () => {
   });
 });
 
+test.describe('a key label on a button with only a long press', () => {
+  for (const [width, height] of SIZES) {
+    test(`keeps "Long:" before it, at ${width} x ${height}`, async ({ helm }) => {
+      const { page } = helm;
+      await contentSize(helm, width, height);
+      await startWithChecks(page);
+      // The d-pad's up key, its long press only: Ping / comms wheel.
+      await leftUnit(page).getByRole('button', { name: 'Empty, d-pad ↑' }).click();
+      await page.getByRole('button', { name: /^Long/ }).click();
+      await page.getByRole('button', { name: 'Ping / comms wheel' }).click();
+      const key = leftUnit(page).getByRole('button', { name: 'Long: Ping / comms wheel, d-pad ↑' });
+      await expect(key.locator('.ul')).toHaveText(/^Long:/);
+      await page.getByLabel('Key label').fill('Ping');
+      await page.getByLabel('Key label').press('Enter');
+      await expect(key.locator('.ul')).toHaveText('Long: Ping');
+      expect(await labelFaults(page, MIN_SCALE, FLOOR)).toEqual([]);
+    });
+  }
+});
+
 test.describe('the Editor at the window’s smallest, 1280 x 720', () => {
   test('the Keyboard tab: the window never scrolls and a check stays in reach', async ({
     helm,

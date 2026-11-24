@@ -314,13 +314,16 @@ function keysOf(
     const lead = leadingAction(scheme, mode, control);
     if (lead === undefined) continue;
     const ref = actionRef(game, lead.id);
-    // A button with only a long press must not read as if its tap did that.
-    const label = lead.press === 'tap' ? ref.name : `${PRESS_WORD[lead.press]}: ${ref.name}`;
+    // A button with only a long press must not read as if its tap did that: the press word is kept
+    // apart from the name, so fitting the label (a key label for the name) never loses it.
+    const qualifier = lead.press === 'tap' ? undefined : `${PRESS_WORD[lead.press]}:`;
+    const label = qualifier === undefined ? ref.name : `${qualifier} ${ref.name}`;
     const short = keyLabelOf(scheme, mode, control);
     keys.push([
       control,
       {
         label,
+        ...(qualifier === undefined ? {} : { qualifier, name: ref.name }),
         action: lead.id,
         press: lead.press,
         ...(ref.role === undefined ? {} : { role: ref.role }),

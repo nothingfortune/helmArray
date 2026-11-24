@@ -23,8 +23,14 @@ export interface UnitKey {
   action?: string;
   /** The press that action is on (a button with only a long press shows that). Defaults to tap. */
   press?: Press;
-  /** The key's short label: drawn instead of `label` only when `label` won't fit (label.ts). */
+  /** The key's short label: drawn instead of the name only when the name won't fit (label.ts). */
   short?: string;
+  /**
+   * What `label` says before the action's name, kept whatever is fitted: "Long:" on a button with
+   * only a long press. With it, `name` is the action's name alone; `label` stays the whole of it.
+   */
+  qualifier?: string;
+  name?: string;
 }
 
 /** What the stick's four directions send, shown as chips around it. */
@@ -141,13 +147,14 @@ export function Unit({
     const action = keys[k.id];
     const assigned = action !== undefined;
     const isPress = k.shape === 'press';
-    const text = assigned ? action.label : isPress ? 'Press' : k.name;
+    const text = assigned ? (action.name ?? action.label) : isPress ? 'Press' : k.name;
     const pad = isPress ? 0 : k.flat ? 8 : 10;
     // The text area: the key less its padding (unit.css) and its border.
     const width = k.w - (k.flat ? 17 : 15) - (isPress ? 0 : BORDER);
     const fit = fitLabel(text, width, k.h - pad - (isPress ? 0 : BORDER), {
       ...(isPress ? { sizes: [11, 10] } : {}),
       short: action?.short,
+      qualifier: action?.qualifier,
     });
     const classes = [
       'uk',
