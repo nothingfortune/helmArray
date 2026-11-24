@@ -141,6 +141,14 @@ brings the built app to the model before game files are written.
 the drawer lists both the unit write and the game binding, and a *left Azeron + mouse* setup
 writes the left unit only.
 
+**Game data in the app** (the owner, 2026-11-24): a Game screen, reached from a Library tile
+(*Set up* on a Steam game helmArray doesn't know, *Edit game* on one it does). It lists the
+game's modes and actions; each action has a name, a role, *required*, and a default key and
+controller button, set by pressing them while the window has focus (ordinary key, mouse and
+Gamepad events in the window; never a hook). Saved to `games/<id>.json`; a built-in game is
+copied on first edit, with *back to helmArray's*. Not drawn on the canvas: designed in its style,
+and the audit covers it.
+
 **Then a UI audit** against the canvas, screen by screen: what's drawn against what's built,
 wording, and clicks per journey, as a list of gaps with fixes.
 
