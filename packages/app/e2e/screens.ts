@@ -4,6 +4,7 @@ import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Locator, Page } from '@playwright/test';
 import { expect } from './helm';
+import type { Helm } from './helm';
 
 export const AZERON_APP = 'Azeron Software.exe';
 export const CLOSE_AZERON_FIRST = 'Close the Azeron app first: it talks to the units too.';
@@ -165,4 +166,59 @@ export async function seriousViolations(page: Page, leaveOut?: string): Promise<
       (v) =>
         `${v.id} (${v.impact}, ${v.nodes.length}): ${v.nodes[0]?.target.join(' ') ?? ''} - ${v.help}`,
     );
+}
+
+/**
+ * Sets the main window's content to `width` x `height` (the audit's sizes: 1440 x 900, the Editor
+ * board's, and 1280 x 900, the window's minimum width) and waits until the page has that size.
+ */
+export async function contentSize(helm: Helm, width: number, height: number) {
+  await helm.app.evaluate(
+    ({ BrowserWindow }, [w, h]) => {
+      const win = BrowserWindow.getAllWindows().find((b) => b.getTitle() === 'helmArray');
+      win?.setContentSize(w ?? 0, h ?? 0);
+    },
+    [width, height],
+  );
+  await expect
+    .poll(() => helm.page.evaluate(() => [window.innerWidth, window.innerHeight]))
+    .toEqual([width, height]);
+}
+
+/** What the width probe read for one family, in a page. */
+export interface FontProbe {
+  /** The probe string's width with the family named first, then the fallback. */
+  named: number;
+  /** The same string in the fallback alone. */
+  fallback: number;
+  /** A face of that family, from the app's own files, has loaded. */
+  loaded: boolean;
+}
+
+/**
+ * The audit's width probe: one string, measured with the family named and without it. Equal widths
+ * mean the family isn't drawn. The face is loaded first, so the fallback a `swap` face shows while
+ * it loads is not what is measured; the fallback is a generic with clearly different metrics.
+ */
+export function fontProbe(page: Page, family: string, weight: number): Promise<FontProbe> {
+  return page.evaluate(
+    async ([family, weight]) => {
+      const fallback = family === 'JetBrains Mono' ? 'serif' : 'monospace';
+      await document.fonts.load(`${weight} 40px "${family}"`).catch(() => []);
+      const width = (stack: string) => {
+        const span = document.createElement('span');
+        span.style.cssText = `position:absolute;visibility:hidden;white-space:nowrap;font:${weight} 40px ${stack}`;
+        span.textContent = 'Hamburgefonstiv 0123 WMil';
+        document.body.append(span);
+        const w = span.getBoundingClientRect().width;
+        span.remove();
+        return w;
+      };
+      const loaded = [...document.fonts].some(
+        (face) => face.family.replace(/["']/g, '') === family && face.status === 'loaded',
+      );
+      return { named: width(`"${family}", ${fallback}`), fallback: width(fallback), loaded };
+    },
+    [family, weight] as const,
+  );
 }
