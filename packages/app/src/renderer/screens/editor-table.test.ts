@@ -2,7 +2,7 @@
 // of control on that tab: the action list is the selected control's binding set's, and every action
 // cleared off a control can be put back on it in two clicks (the control, then the action).
 import { describe, expect, it } from 'vitest';
-import type { Game, Scheme, SetupDevices } from '@helmarray/core';
+import type { Action, BindingSet, Game, Scheme, SetupDevices } from '@helmarray/core';
 import {
   AZERONS_ONLY,
   BUILT_IN_DEVICES,
@@ -11,8 +11,11 @@ import {
   controlSet,
   helldivers2,
   inSetup,
+  nativeIn,
   resolve,
   setupOf,
+  signalId,
+  stickSends,
   xboxControllerPreset,
 } from '@helmarray/core';
 import {
@@ -64,15 +67,26 @@ function kindsOn(view: EditorView, tab: DeviceTabId): string[] {
   ];
 }
 
-/** The mode's actions on no control of the setup in this binding set, in the game's order. */
-function expectedFor(scheme: Scheme, set: string, g: Game, MODE: string): string[] {
+/**
+ * The mode's actions on no control of the setup in this binding set, and on no stick of the setup
+ * sending what the game ships it on in this set (the left stick is Move forward), in the game's
+ * order. A stick's action is placed: the audit found it listed as on no button.
+ */
+function expectedFor(scheme: Scheme, set: BindingSet, g: Game, MODE: string): string[] {
   const setup = setupOf(scheme.devices);
   const placed = new Set(
     ALL_CONTROLS.filter((c) => inSetup(setup, c) && controlSet(scheme, c) === set).flatMap((c) =>
       Object.values(shownPresses(scheme, MODE, c)),
     ),
   );
-  return g.actions.filter((a) => a.mode === MODE && !placed.has(a.id)).map((a) => a.id);
+  const sticks = stickSends(scheme);
+  const onStick = (a: Action) => {
+    const native = nativeIn(a, set);
+    return native !== null && sticks.has(signalId(native));
+  };
+  return g.actions
+    .filter((a) => a.mode === MODE && !placed.has(a.id) && !onStick(a))
+    .map((a) => a.id);
 }
 
 /** The action list the side panel shows for the selected control: one list, its set's. */
@@ -82,6 +96,7 @@ const listFor = (view: EditorView): string[] =>
 const offeredBy = (view: EditorView): string[] => [
   ...listFor(view),
   ...view.moves.map((m) => m.id),
+  ...view.onStick.map((m) => m.id),
 ];
 
 const viewOf = (g: Game, MODE: string, scheme: Scheme, tab: DeviceTabId, selected?: string) =>
@@ -125,7 +140,7 @@ describe.each(cases)(
             (c) => c.startsWith(kind) && inSetup(setupOf(scheme.devices), c),
           );
           for (const control of controls) {
-            const set = controlSet(scheme, control) ?? '';
+            const set = controlSet(scheme, control) ?? 'keyboard';
             const list = listFor(viewOf(g, MODE, scheme, tab, control));
             if (JSON.stringify(list) !== JSON.stringify(expectedFor(scheme, set, g, MODE)))
               faults.push(

@@ -36,6 +36,7 @@ import type { History } from './editor-model';
 import { assignable, editorView } from './editor-view';
 import { sidePanelWidth } from './editor-layout';
 import type { DeviceTabId } from './editor-view';
+import type { Fix } from './fixes';
 import type { DragSource } from '../devices/drag';
 import { runMake, runPick } from './libraryFlow';
 import { runCopy, runDelete } from './schemeFlow';
@@ -312,6 +313,16 @@ function EditorBody({
     setSelected(undefined);
     setPress('tap');
   };
+  /** A fix, applied; the control it put something on (if any) is selected, to show where. */
+  const applyFix = (fix: Fix) => {
+    const where = fix.select?.(historyRef.current.present);
+    edit(fix.apply);
+    if (where !== undefined) {
+      setSelected(where);
+      setPress('tap');
+      setInspector(true);
+    }
+  };
   const showTab = (id: DeviceTabId) => {
     setTab(id);
     setSelected(undefined);
@@ -484,9 +495,13 @@ function EditorBody({
               />
               <Checks
                 view={view}
-                onFix={(row) => row.fix && edit(row.fix.apply)}
+                onFix={(row) => row.fix && applyFix(row.fix)}
                 onKeep={(row) => edit((s) => acceptFinding(s, row.finding))}
                 onFlag={(row) => edit((s) => unacceptFinding(s, row.finding))}
+                onFixAll={(group) => group.fix && applyFix(group.fix)}
+                onKeepAll={(group) =>
+                  edit((s) => group.rows.reduce((x, row) => acceptFinding(x, row.finding), s))
+                }
               />
             </section>
             {inspector && (

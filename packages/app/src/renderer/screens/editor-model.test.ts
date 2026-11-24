@@ -34,7 +34,6 @@ import {
   clear,
   commit,
   drop,
-  fixFor,
   historyAction,
   hasDevices,
   historyShortcut,
@@ -55,6 +54,7 @@ import {
   unacceptFinding,
   undo,
 } from './editor-model';
+import { fixFor } from './fixes';
 import type { Slot } from './editor-model';
 import {
   deepFreeze,

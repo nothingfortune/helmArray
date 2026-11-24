@@ -20,6 +20,7 @@ import {
   hasDevices,
 } from './editor-model';
 import type { EditorView, FindingRow, PanelView, UnitSide } from './editor-view';
+import type { CheckGroup } from './check-groups';
 import { MOUSE_WIDTH, keyboardRow, unitRow } from './editor-layout';
 import { KEYBOARD_WIDTH } from '../devices/layouts';
 
@@ -45,16 +46,100 @@ function unitProps(side: UnitSide): Pick<UnitProps, 'keys' | 'conflicts' | 'stic
   };
 }
 
+/** One finding: dot, its sentence, its fix, "Keep, I know". */
+function CheckRow({
+  row,
+  onFix,
+  onKeep,
+}: {
+  row: FindingRow;
+  onFix(row: FindingRow): void;
+  onKeep(row: FindingRow): void;
+}) {
+  return (
+    <div className={`ed-check tone-${row.finding.severity}`}>
+      <span
+        className={`dot tone-${row.finding.severity === 'error' ? 'error' : 'warning'}`}
+        aria-hidden="true"
+      />
+      <span className="ed-check-text">{row.finding.message}</span>
+      {row.fix && (
+        <button type="button" className="btn ed-fix" onClick={() => onFix(row)}>
+          {row.fix.label}
+        </button>
+      )}
+      {row.canKeep && (
+        <button type="button" className="btn ghost" onClick={() => onKeep(row)}>
+          Keep, I know
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Findings of one rule about actions of one role, as one line with one fix and one "Keep, I know"
+ * for them all; "Show each" opens the findings themselves, each with its own.
+ */
+function CheckGroupRow({
+  group,
+  onFix,
+  onKeep,
+  onFixAll,
+  onKeepAll,
+}: {
+  group: CheckGroup;
+  onFix(row: FindingRow): void;
+  onKeep(row: FindingRow): void;
+  onFixAll(group: CheckGroup): void;
+  onKeepAll(group: CheckGroup): void;
+}) {
+  const severity = group.rows.some((r) => r.finding.severity === 'error') ? 'error' : 'warning';
+  return (
+    <div className="ed-check-group">
+      <div className={`ed-check tone-${severity}`}>
+        <span className={`dot tone-${severity}`} aria-hidden="true" />
+        <span className="ed-check-text">
+          <strong className="ed-check-subject">{group.subject}</strong>
+          {group.rest}
+        </span>
+        {group.fix && (
+          <button type="button" className="btn ed-fix" onClick={() => onFixAll(group)}>
+            {group.fix.label}
+          </button>
+        )}
+        {group.canKeep && (
+          <button type="button" className="btn ghost" onClick={() => onKeepAll(group)}>
+            Keep, I know
+          </button>
+        )}
+      </div>
+      <details className="ed-check-each">
+        <summary>Show each</summary>
+        {group.rows.map((row) => (
+          <CheckRow key={row.key} row={row} onFix={onFix} onKeep={onKeep} />
+        ))}
+      </details>
+    </div>
+  );
+}
+
 export function Checks({
   view,
   onFix,
   onKeep,
   onFlag,
+  onFixAll,
+  onKeepAll,
 }: {
   view: EditorView;
   onFix(row: FindingRow): void;
   onKeep(row: FindingRow): void;
   onFlag(row: FindingRow): void;
+  /** A group's fix: every finding in it fixed, one after the other. */
+  onFixAll(group: CheckGroup): void;
+  /** A group's "Keep, I know": every finding in it kept. */
+  onKeepAll(group: CheckGroup): void;
 }) {
   return (
     <section className="ed-checks" aria-label="Checks">
@@ -64,25 +149,20 @@ export function Checks({
           Nothing to fix.
         </p>
       )}
-      {view.findings.map((row) => (
-        <div key={row.key} className={`ed-check tone-${row.finding.severity}`}>
-          <span
-            className={`dot tone-${row.finding.severity === 'error' ? 'error' : 'warning'}`}
-            aria-hidden="true"
+      {view.checks.map((item) =>
+        item.kind === 'row' ? (
+          <CheckRow key={item.row.key} row={item.row} onFix={onFix} onKeep={onKeep} />
+        ) : (
+          <CheckGroupRow
+            key={item.key}
+            group={item}
+            onFix={onFix}
+            onKeep={onKeep}
+            onFixAll={onFixAll}
+            onKeepAll={onKeepAll}
           />
-          <span className="ed-check-text">{row.finding.message}</span>
-          {row.fix && (
-            <button type="button" className="btn ed-fix" onClick={() => onFix(row)}>
-              {row.fix.label}
-            </button>
-          )}
-          {row.canKeep && (
-            <button type="button" className="btn ghost" onClick={() => onKeep(row)}>
-              Keep, I know
-            </button>
-          )}
-        </div>
-      ))}
+        ),
+      )}
       {view.kept.length > 0 && (
         <details className="ed-kept">
           <summary>{view.kept.length} kept</summary>
@@ -156,9 +236,22 @@ export function Panel({
       )}
 
       {panel.stick ? (
-        <p className="ed-hint">
-          The stick sends its four directions. Changing them isn&apos;t possible here yet.
-        </p>
+        <div className="ed-group" role="group" aria-labelledby="ed-directions">
+          <span className="ed-lbl" id="ed-directions">
+            Directions
+          </span>
+          {panel.directions.map((row) => (
+            <div key={row.direction} className="ed-slot ed-direction">
+              <span className="ed-slot-word">{row.word}</span>
+              {row.action ? (
+                <span className="ed-slot-name">{row.action.name}</span>
+              ) : (
+                <span className="ed-slot-empty">Nothing</span>
+              )}
+              {row.sends !== null && <span className="ed-direction-sends">{row.sends}</span>}
+            </div>
+          ))}
+        </div>
       ) : (
         <>
           <div className="ed-group">
@@ -354,6 +447,15 @@ export function Unplaced({
           )}
         </div>
       ))}
+      {view.onStick.length > 0 && (
+        <div className="ed-group ed-on-stick">
+          <div className="ed-unplaced-head">
+            <span className="ed-lbl">On the stick</span>
+            <span className="ed-count">{view.onStick.length}</span>
+          </div>
+          <ul className="ed-actions">{view.onStick.map((a) => act(a, a.where))}</ul>
+        </div>
+      )}
       {view.moves.length > 0 && (
         <div className="ed-group ed-moves">
           <div className="ed-unplaced-head">

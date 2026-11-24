@@ -579,7 +579,10 @@ describe('checks', () => {
     expect(rows.find((r) => r.finding.rule === 'hold-on-movement')?.fix?.label).toBe(
       'Turn off hold to latch',
     );
-    expect(rows.find((r) => r.finding.rule === 'missing-required')?.fix).toBeUndefined();
+    // A required action on no button has one now (the audit: every check has its fix button).
+    expect(rows.find((r) => r.finding.rule === 'missing-required')?.fix?.label).toBe(
+      'Put it on a button',
+    );
   });
 
   it('moves a finding the player kept into the kept list, with their reason', () => {

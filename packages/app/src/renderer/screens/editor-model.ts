@@ -14,13 +14,11 @@ import type {
   Game,
   ModeId,
   PadControl,
-  Plan,
   Press,
   Scheme,
   SetupDevices,
 } from '@helmarray/core';
 import {
-  BUILT_IN_DEVICES,
   CHECK_RULES,
   DEFAULT_TURBO_INTERVAL,
   KEYBOARD_MOUSE,
@@ -517,88 +515,6 @@ export function acceptFinding(
 export function unacceptFinding(scheme: Scheme, finding: Finding): Scheme {
   if (!scheme.accepted.some((a) => sameFinding(a, finding))) return scheme;
   return { ...scheme, accepted: scheme.accepted.filter((a) => !sameFinding(a, finding)) };
-}
-
-// ---- Fixes: the obvious one-click answer to a finding, where there is one ----
-
-export interface Fix {
-  /** The button's words. */
-  label: string;
-  apply: (scheme: Scheme) => Scheme;
-}
-
-const nameOf = (game: Game, id: ActionId): string =>
-  game.actions.find((a) => a.id === id)?.name ?? id;
-
-/** The slots of a control, in a mode, that hold an action. */
-function slotsOn(
-  scheme: Scheme,
-  mode: ModeId,
-  control: ControlId,
-): (Slot & { action: ActionId })[] {
-  const presses = own(own(scheme.map, mode) ?? {}, control) ?? {};
-  return PRESSES.flatMap((press) => {
-    const action = presses[press];
-    return action === undefined ? [] : [{ mode, control, press, action }];
-  });
-}
-
-const clearAll = (scheme: Scheme, slots: readonly Slot[]): Scheme =>
-  slots.reduce((s, slot) => clear(s, slot), scheme);
-
-/**
- * The one edit that clears a finding, when one clear edit does. Key collisions, a missing
- * required action and the stick findings have no obvious fix: which of two actions should give
- * way is the player's call.
- */
-export function fixFor(finding: Finding, scheme: Scheme, game: Game, plan: Plan): Fix | undefined {
-  const { control, mode } = finding;
-  if (control === undefined) return undefined;
-  switch (finding.rule) {
-    case 'hold-on-movement':
-      return { label: 'Turn off hold to latch', apply: (s) => setLatch(s, control, false) };
-    case 'combat-tap-delayed': {
-      // The unit keeps one setting per button for every mode, so the delay reaches them all.
-      const slots = game.modes.flatMap((m) =>
-        slotsOn(scheme, m.id, control).filter((s) => s.press !== 'tap'),
-      );
-      if (slots.length === 0) return undefined;
-      const hasLong = slots.some((s) => s.press === 'long');
-      const hasDouble = slots.some((s) => s.press === 'double');
-      const what =
-        hasLong && hasDouble ? 'long press and double tap' : hasLong ? 'long press' : 'double tap';
-      return { label: `Remove ${what}`, apply: (s) => clearAll(s, slots) };
-    }
-    case 'menu-with-combat': {
-      if (mode === undefined) return undefined;
-      const slots = slotsOn(scheme, mode, control).filter(
-        (s) => game.actions.find((a) => a.id === s.action)?.role === 'menu',
-      );
-      const first = slots[0];
-      if (first === undefined) return undefined;
-      return { label: `Take ${nameOf(game, first.action)} off`, apply: (s) => clearAll(s, slots) };
-    }
-    case 'sends-nothing': {
-      if (mode === undefined) return undefined;
-      // The same reading core's check makes of each press. A unit's button sends what its pin
-      // says. A fixed control (a key, a mouse button, a pad button) only taps, so only its
-      // other presses send nothing: its tap must survive. A control no device has sends nothing.
-      const pin = [...(plan.units.left?.pins ?? []), ...(plan.units.right?.pins ?? [])].find(
-        (p) => p.control === control,
-      );
-      // A control of a device the setup doesn't use sends nothing on any press.
-      const known =
-        inSetup(setupOf(scheme.devices), control) &&
-        BUILT_IN_DEVICES.some((d) => d.controls.some((c) => c.id === control));
-      const sendsNothing = (press: Press): boolean =>
-        pin !== undefined ? pin.presses[press] === undefined : known ? press !== 'tap' : true;
-      const slots = slotsOn(scheme, mode, control).filter((s) => sendsNothing(s.press));
-      if (slots.length === 0) return undefined;
-      return { label: 'Take it off the button', apply: (s) => clearAll(s, slots) };
-    }
-    default:
-      return undefined;
-  }
 }
 
 // ---- Undo and redo, in memory, per scheme ----
