@@ -9,10 +9,13 @@ import type { Plan } from '@helmarray/core';
 export function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
   if (typeof value === 'object' && value !== null) {
-    const entries = Object.entries(value)
-      .filter(([, v]) => v !== undefined)
-      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-      .map(([k, v]) => `${JSON.stringify(k)}:${canonical(v)}`);
+    const record: Record<string, unknown> = { ...value };
+    // The default sort is by UTF-16 code unit, which is the order `<` gives strings; a key is
+    // never compared with itself, so no comparator is needed.
+    const entries = Object.keys(record)
+      .filter((k) => record[k] !== undefined)
+      .sort()
+      .map((k) => `${JSON.stringify(k)}:${canonical(record[k])}`);
     return `{${entries.join(',')}}`;
   }
   return JSON.stringify(value) ?? 'null';

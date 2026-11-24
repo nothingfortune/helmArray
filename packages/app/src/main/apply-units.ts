@@ -240,7 +240,9 @@ export function previewUnits(
 export function verifyUnits(plan: Plan, held: HeldUnits): Record<Hand, Verdict | null> {
   const one = (hand: Hand): Verdict | null => {
     const unit = held[hand];
-    if (!unit || plan.units[hand] === undefined) return null;
+    if (!unit) return null;
+    // Stryker disable next-line ConditionalExpression: recordsFor throws for a unit the plan lacks and the catch below returns null: the same answer
+    if (plan.units[hand] === undefined) return null;
     try {
       // A running slot the unit doesn't list holds nothing: every input then shows as missing.
       return verify(
@@ -312,6 +314,7 @@ async function applyUnit(
   name: string,
 ): Promise<UnitOutcome> {
   const unit = handName(hand);
+  // Stryker disable next-line StringLiteral: the message is always set before an outcome leaves, by the Stop handler or by the success path
   const outcome = blank(hand, 'failed', '');
   const trace = (line: string) => deps.trace?.(`${unit}: ${line}`);
   let left = 'nothing on it was changed';
@@ -408,6 +411,7 @@ async function applyUnit(
       outcome.slot = slot;
       // The gate: a slot that does not read back as the layout is never run, and nothing is deleted.
       if (!isClean(result)) {
+        const unreadable = (u: { id: number }) => ({ id: u.id, what: 'could not be read back' });
         const first = [...result.differences, ...result.unchecked.map(unreadable)][0];
         const count = new Set([
           ...result.differences.map((d) => d.id),
@@ -498,8 +502,6 @@ async function applyUnit(
     return outcome;
   }
 }
-
-const unreadable = (u: { id: number }) => ({ id: u.id, what: 'could not be read back' });
 
 /** What the units the setup uses are called in a sentence: "Both units", "The left unit". */
 function unitsWord(hands: readonly Hand[]): string {

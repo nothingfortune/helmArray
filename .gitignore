@@ -7,3 +7,9 @@ coverage/
 .claude/worktrees/
 test-results/
 playwright-report/
+
+# Stryker: the sandbox and the reports. Only the incremental state is kept.
+.stryker-tmp/
+reports/mutation/*
+!reports/mutation/incremental.json
+.tmp-run/
