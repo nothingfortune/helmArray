@@ -12,6 +12,7 @@ import {
   keepEveryCheck,
   leftUnit,
   pill,
+  schemePicker,
   seriousViolations,
   unseen,
   walkTabOrder,
@@ -316,6 +317,47 @@ test('Back to helmArray’s on a copy saved earlier shows helmArray’s game, an
     expect.objectContaining({ id: 'reload', name: 'Reload' }),
     expect.objectContaining({ id: 'melee', name: 'Punch' }),
   ]);
+});
+
+test('a game whose last action is deleted keeps its scheme: opened, applied and deleted from the Library', async ({
+  helm,
+}) => {
+  const { page } = helm;
+  await setUpUnknown(page);
+  await addAction(page, 'Jump', 'Space', 'Space');
+  await page
+    .getByRole('group', { name: 'New scheme from' })
+    .getByRole('button', { name: "Game's own keys" })
+    .click();
+  await expect(page.getByRole('heading', { name: UNKNOWN })).toBeVisible();
+  await page.getByRole('button', { name: 'Library' }).click();
+
+  // The game's last action goes.
+  await page.getByRole('button', { name: `Edit game: ${UNKNOWN}` }).click();
+  await page.getByRole('button', { name: 'More for Jump' }).click();
+  await page.getByRole('button', { name: 'Delete Jump' }).click();
+  await expect(page.getByText('No actions yet.')).toBeVisible();
+  await page.getByRole('button', { name: 'Library' }).click();
+
+  // Its scheme is still there to open, beside Edit game.
+  await expect(page.getByRole('button', { name: `Edit game: ${UNKNOWN}` })).toBeVisible();
+  await page.locator('.tile', { hasText: UNKNOWN }).locator('.tile-button').click();
+  await expect(page.getByRole('heading', { name: UNKNOWN })).toBeVisible();
+  await keepEveryCheck(page);
+  await page.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(applyInDrawer(page)).toBeEnabled();
+  await applyInDrawer(page).click();
+  await expect(drawer(page).getByLabel('Result')).toContainText('Both units now run the layout.');
+  await drawer(page).getByRole('button', { name: 'Close' }).click();
+
+  await schemePicker(page).click();
+  await page.getByRole('button', { name: 'Delete this scheme' }).click();
+  await page
+    .getByRole('group', { name: "Delete Game's own keys?" })
+    .getByRole('button', { name: 'Delete' })
+    .click();
+  // With no scheme and no action left, the game is set up again from its tile.
+  await expect(page.getByRole('button', { name: `Set up ${UNKNOWN}` })).toBeVisible();
 });
 
 test.describe('the Game screen: axe and the keyboard in each state', () => {

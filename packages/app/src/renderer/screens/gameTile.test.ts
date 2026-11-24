@@ -11,6 +11,24 @@ describe('needsSetUp', () => {
     expect(needsSetUp(entry({ gameId: 'rover', actionCount: 0 }))).toBe(true);
   });
 
+  it('is false for a game with no actions left but schemes: they stay reachable from the tile', () => {
+    const scheme = { id: 'rover-keys', name: "Game's own keys", output: 'keys' as const };
+    expect(
+      needsSetUp(
+        entry({
+          gameId: 'rover',
+          actionCount: 0,
+          schemes: [
+            {
+              ...scheme,
+              devices: { azerons: 'both', keyboard: false, mouse: false, controller: false },
+            },
+          ],
+        }),
+      ),
+    ).toBe(false);
+  });
+
   it('is false for a game with actions', () => {
     expect(needsSetUp(entry({ gameId: 'helldivers2', actionCount: 30 }))).toBe(false);
   });
