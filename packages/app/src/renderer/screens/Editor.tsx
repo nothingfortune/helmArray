@@ -281,6 +281,7 @@ function EditorBody({
   const changeDevices = (next: Scheme['devices']) => {
     edit((s) => setDevices(s, next, game));
     setSelected(undefined);
+    setPress('tap');
   };
   const showTab = (id: DeviceTabId) => {
     setTab(id);
@@ -288,6 +289,9 @@ function EditorBody({
   };
 
   const canPlace = selected !== undefined && !isStick(selected);
+  // The press a click on an action fills: the one asked for while the button can send it (the
+  // view's own reading of it, so an undo or a switch of output never leaves an unsendable one).
+  const target = view?.panel?.presses.find((r) => r.target)?.press ?? 'tap';
 
   return (
     <Tooltip.Provider>
@@ -331,7 +335,10 @@ function EditorBody({
                     type="button"
                     className="ed-seg-btn"
                     aria-pressed={view.output === output}
-                    onClick={() => edit((s) => setOutput(s, output, game))}
+                    onClick={() => {
+                      edit((s) => setOutput(s, output, game));
+                      setPress('tap');
+                    }}
                   >
                     {output === 'keys' ? 'Keys' : 'Controller'}
                   </button>
@@ -467,11 +474,11 @@ function EditorBody({
                 modeName={view.modes.find((m) => m.active)?.name ?? ''}
                 prompt={
                   canPlace && view.panel
-                    ? `Click an action to put it on ${view.panel.where}, ${PRESS_WORD[press]}.`
+                    ? `Click an action to put it on ${view.panel.where}, ${PRESS_WORD[target]}.`
                     : null
                 }
                 onPlace={(id) => {
-                  if (selected !== undefined && canPlace) place(selected, id, press);
+                  if (selected !== undefined && canPlace) place(selected, id, target);
                 }}
               />
             </aside>

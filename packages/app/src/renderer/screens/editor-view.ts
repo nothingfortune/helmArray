@@ -36,7 +36,7 @@ import {
 import { fixedWhere } from '../devices/layouts';
 import type { StickLabels, UnitKey } from '../unit/Unit';
 import { handPrefix, positionName, positionOf } from '../unit/layout';
-import { fixFor, isAcceptable, isStick, shownAction } from './editor-model';
+import { fixFor, isAcceptable, isStick, pressesOf, shownAction } from './editor-model';
 import type { Fix } from './editor-model';
 
 // ---- Signals, as words for a caption ----
@@ -562,7 +562,11 @@ const SEVERITY_ORDER = { error: 0, warning: 1 } as const;
 
 export function editorView(input: EditorViewInput): EditorView {
   const { scheme, game, plan, mode, selected } = input;
-  const press = input.press ?? 'tap';
+  // The press asked for, while the selected control can send it: a switch to a controller leaves
+  // no long press or double tap to target.
+  const asked = input.press ?? 'tap';
+  const press =
+    selected === undefined || pressesOf(scheme, selected).includes(asked) ? asked : 'tap';
   const setup = setupOf(scheme.devices);
   const tabs = deviceTabs(scheme.devices);
   const tab = shownTab(tabs, input.tab);
@@ -641,8 +645,9 @@ export function editorView(input: EditorViewInput): EditorView {
       stick: stickLabels(scheme, game, mode, 'right'),
       conflicts: conflicts('right'),
     },
+    // A control of a device the setup no longer has (an undo took it away) shows no panel.
     panel:
-      selected === undefined
+      selected === undefined || !inSetup(setup, selected)
         ? null
         : panelFor({ scheme, game, plan, mode, press, control: selected }),
     unplaced: game.actions

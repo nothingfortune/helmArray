@@ -181,6 +181,17 @@ describe('the side panel', () => {
     expect(rows?.find((r) => r.target)?.press).toBe('tap');
   });
 
+  it('is absent for a control of a device the setup no longer has', () => {
+    // A key selected, then the keyboard taken away (by an undo, say).
+    expect(view(keysScheme(), 'ship', 'key.J').panel).toBeNull();
+  });
+
+  it('targets the tap when the press asked for is one the button can’t send', () => {
+    // A long press targeted with keys, then the Azerons switched to a controller.
+    const rows = view(padScheme(), 'ship', 'L.index_1', 'long').panel?.presses;
+    expect(rows?.find((r) => r.target)?.press).toBe('tap');
+  });
+
   it('has no long press or double tap to give a controller button', () => {
     const rows = view(padScheme(), 'ship', 'L.index_1').panel?.presses;
     expect(rows?.map((r) => r.available)).toEqual([true, false, false]);
@@ -561,14 +572,17 @@ describe('checks', () => {
   });
 
   it('gives every finding its own key, even when core reports one rule twice', () => {
-    // Long and double on one pad button: sends-nothing once for each.
-    let scheme = assign(
-      padScheme(),
-      { mode: 'ship', control: 'L.index_1', press: 'long' },
-      'galaxy',
-      game,
-    );
-    scheme = assign(scheme, { mode: 'ship', control: 'L.index_1', press: 'double' }, 'gear', game);
+    // Long and double on one pad button: sends-nothing once for each. The editor no longer puts
+    // them there; a scheme saved before can still have them.
+    const scheme: Scheme = {
+      ...padScheme(),
+      map: {
+        ship: {
+          ...padScheme().map['ship'],
+          'L.index_1': { tap: 'boost', long: 'galaxy', double: 'gear' },
+        },
+      },
+    };
     const rows = [...view(scheme).findings, ...view(scheme).kept];
     expect(rows.filter((r) => r.finding.rule === 'sends-nothing')).toHaveLength(2);
     expect(new Set(rows.map((r) => r.key)).size).toBe(rows.length);

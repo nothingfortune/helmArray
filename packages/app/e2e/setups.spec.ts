@@ -110,6 +110,31 @@ test.describe('setups', () => {
     await expect(left.getByRole('button', { name: 'Empty, index 2' })).toBeVisible();
   });
 
+  test('switching to Controller with a long press targeted puts the next action on the tap', async ({
+    helm,
+  }) => {
+    const { page } = helm;
+    await startFrom(page, "Game's own keys");
+    const left = leftUnit(page);
+    await left.getByRole('button', { name: 'Empty, index 2' }).click();
+    await page.locator('.ed-panel').getByRole('button', { name: /^Long/ }).click();
+    await expect(page.locator('.ed-panel').getByRole('button', { name: /^Long/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+
+    await azeronsSend(page).getByRole('button', { name: 'Controller' }).click();
+    await page.locator('.ed-actions').getByRole('button', { name: 'Throw grenade' }).click();
+
+    // On the tap, which a controller button sends: not on a long press that would send nothing.
+    await expect(left.getByRole('button', { name: 'Throw grenade, index 2' })).toBeVisible();
+    await expect(page.locator('.ed-panel').getByRole('button', { name: /^Tap/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await expect(page.getByText(/sends nothing/)).toHaveCount(0);
+  });
+
   test('a left Azeron + mouse setup writes the left unit only', async ({ helm }) => {
     const { page } = helm;
     await startFrom(page, 'Xbox controller');

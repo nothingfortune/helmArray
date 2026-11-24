@@ -247,6 +247,18 @@ function givePad(scheme: Scheme, control: ControlId, action: ActionId, game: Gam
   return { ...scheme, padMap: withOwn(padMap, control, pick) };
 }
 
+/** Whether a control is one of a device's: a unit, the keyboard, the mouse or the controller. */
+const ofDevice = (control: ControlId): boolean => /^(L|R|key|mouse|pad)\./.test(control);
+
+/**
+ * The presses a control can send: an Azeron button sending keys has all three; one sending Xbox
+ * controls, a key, a mouse button and a controller button only tap. Nothing is put on another.
+ */
+export function pressesOf(scheme: Scheme, control: ControlId): readonly Press[] {
+  const azeron = control.startsWith('L.') || control.startsWith('R.');
+  return azeron && scheme.output === 'keys' ? PRESSES : ['tap'];
+}
+
 /**
  * Puts an action on a slot. Assigning is moving: the action leaves any other slot it held in
  * this mode in the same binding set (a key and a mouse button, or two buttons sending Xbox
@@ -254,7 +266,9 @@ function givePad(scheme: Scheme, control: ControlId, action: ActionId, game: Gam
  * sending an Xbox control, whatever else is on that control is displaced (THE PAD RULE).
  */
 export function assign(scheme: Scheme, slot: Slot, action: ActionId, game: Game): Scheme {
-  if (isStick(slot.control)) return scheme;
+  if (isStick(slot.control) || !pressesOf(scheme, slot.control).includes(slot.press)) return scheme;
+  // A control of a device the setup doesn't have takes nothing (an undo may have taken it away).
+  if (ofDevice(slot.control) && !inSetup(setupOf(scheme.devices), slot.control)) return scheme;
   const given = slot.press === 'tap' ? givePad(scheme, slot.control, action, game) : scheme;
   let byControl = copyMode(given, slot.mode);
   let changed = given !== scheme;
@@ -343,6 +357,7 @@ export function move(scheme: Scheme, from: Slot, to: Slot, game: Game): Scheme {
     actionAt(scheme, from) ??
     (from.press === 'tap' && shown?.press === 'tap' ? shown.id : undefined);
   if (action === undefined || isStick(to.control)) return scheme;
+  if (!pressesOf(scheme, to.control).includes(to.press)) return scheme;
   return assign(clear(scheme, from), to, action, game);
 }
 
@@ -382,34 +397,31 @@ export function setDevices(scheme: Scheme, devices: SetupDevices, game: Game): S
   const before = setupOf(scheme.devices);
   const after = setupOf(next);
   if (JSON.stringify(next) === JSON.stringify(scheme.devices)) return scheme;
-  const map: Scheme['map'] = Object.fromEntries(
-    Object.entries(scheme.map).map(([mode, byControl]) => [
-      mode,
-      Object.fromEntries(Object.entries(byControl).filter(([control]) => inSetup(after, control))),
-    ]),
-  );
-  let out: Scheme = { ...scheme, devices: next, map };
-  // A control the setup keeps shows what it showed: what it showed only through its Xbox control,
-  // carried by a control of a device the setup loses, becomes its own.
-  for (const [mode, byControl] of Object.entries(scheme.map)) {
-    const controls = new Set([
-      ...Object.keys(byControl),
-      ...Object.keys(scheme.padMap),
-      ...XBOX_PAD.controls.map((c) => c.id),
-    ]);
-    for (const control of controls) {
-      if (!inSetup(before, control) || !inSetup(after, control) || isStick(control)) continue;
-      const tap = shownPresses(scheme, mode, control).tap;
-      if (tap === undefined || shownPresses(out, mode, control).tap === tap) continue;
-      const here = own(own(out.map, mode) ?? {}, control) ?? {};
-      out = withMode(out, mode, withOwn<PressMap>(copyMode(out, mode), control, { ...here, tap }));
-    }
-  }
-  const gained = (control: ControlId) => inSetup(after, control) && !inSetup(before, control);
+  const kept = (control: ControlId) =>
+    inSetup(before, control) && inSetup(after, control) && !isStick(control);
   // The fixed controls an action can go on: keys, mouse buttons, the controller's buttons.
   const known = new Set(
     [...KEYBOARD_MOUSE.controls, ...XBOX_PAD.controls].filter((c) => c.sends).map((c) => c.id),
   );
+  const out: Scheme = { ...scheme, devices: next };
+  const map: Scheme['map'] = {};
+  for (const [mode, byControl] of Object.entries(scheme.map)) {
+    // Every control the setup keeps shows what it showed, the tap it showed through its Xbox
+    // control included: that control may be one the setup loses.
+    const controls = new Set([...Object.keys(byControl), ...Object.keys(scheme.padMap), ...known]);
+    const rows: ByControl = {};
+    for (const control of controls) {
+      if (!kept(control)) continue;
+      const shown = shownPresses(scheme, mode, control);
+      if (Object.keys(shown).length > 0) Object.assign(rows, withOwn<PressMap>({}, control, shown));
+    }
+    map[mode] = rows;
+  }
+  // A device the setup gains starts from what the game ships: each action on no control of that
+  // binding set in its mode goes on its own key, mouse button or controller button, where nothing
+  // of the setup shows or sends anything.
+  const gained = (control: ControlId) => inSetup(after, control) && !inSetup(before, control);
+  const withMap: Scheme = { ...out, map };
   for (const action of game.actions) {
     const mode = action.mode;
     const key = action.native?.key;
@@ -418,20 +430,30 @@ export function setDevices(scheme: Scheme, devices: SetupDevices, game: Game): S
       key?.kind === 'mouse' ? `mouse.${key.button}` : undefined,
       action.native?.pad === undefined ? undefined : `pad.${action.native.pad}`,
     ];
+    const rows = own(map, mode) ?? {};
     for (const home of homes) {
       if (home === undefined || !known.has(home) || !gained(home)) continue;
-      if (shownAction(out, mode, home) !== undefined) continue;
-      // Already on a control of that binding set (an Azeron button sending it counts): kept there.
-      const set = controlSet(out, home);
-      const placed = Object.entries(own(out.map, mode) ?? {}).some(
+      const set = controlSet(withMap, home);
+      const busy = Object.entries(rows).some(
         ([control, presses]) =>
-          controlSet(out, control) === set && PRESSES.some((p) => presses[p] === action.id),
+          (controlSet(withMap, control) === set && PRESSES.some((p) => presses[p] === action.id)) ||
+          (control === home && PRESSES.some((p) => presses[p] !== undefined)),
       );
-      if (placed) continue;
-      out = assign(out, { mode, control: home, press: 'tap' }, action.id, game);
+      // An Xbox control an Azeron button sends is that button's too: it would start showing it.
+      const sent =
+        home.startsWith('pad.') &&
+        Object.keys(withMap.padMap).some(
+          (c) => c !== home && padSignalOf(withMap, c) === home.slice(4),
+        );
+      if (busy || sent) continue;
+      map[mode] = withOwn<PressMap>(rows, home, { tap: action.id });
+      Object.assign(rows, map[mode]);
     }
   }
-  return out;
+  return settle(
+    { ...out, map: Object.fromEntries(Object.entries(map).map(([m, r]) => [m, prune(r)])) },
+    game,
+  );
 }
 
 interface BehaviourPatch {
@@ -749,26 +771,50 @@ function stickFor(
  */
 export function setOutput(scheme: Scheme, output: Scheme['output'], game: Game): Scheme {
   if (scheme.output === output) return scheme;
-  // What each Azeron button shows, its own presses and what its Xbox control does: all of it is
-  // the button's after the switch, bar the presses a controller button hasn't got.
-  const carried: (Slot & { action: ActionId })[] = [];
+  const setup = setupOf(scheme.devices);
+  // 1. The whole layout as shown, for every control of the setup.
+  const pads = XBOX_PAD.controls.filter((c) => c.sends).map((c) => c.id);
+  const shown: Record<ModeId, ByControl> = {};
   for (const [mode, byControl] of Object.entries(scheme.map)) {
-    const controls = new Set([...Object.keys(byControl), ...Object.keys(scheme.padMap)]);
-    for (const control of controls) {
-      if (!isAzeron(control) || isStick(control)) continue;
-      const shown = shownPresses(scheme, mode, control);
-      for (const press of output === 'pad' ? (['tap'] as const) : PRESSES) {
-        const action = shown[press];
-        if (action !== undefined) carried.push({ mode, control, press, action });
+    const rows: ByControl = {};
+    for (const control of new Set([
+      ...Object.keys(byControl),
+      ...Object.keys(scheme.padMap),
+      ...pads,
+    ])) {
+      if (!inSetup(setup, control) || isStick(control)) continue;
+      const presses = shownPresses(scheme, mode, control);
+      if (Object.keys(presses).length > 0)
+        Object.assign(rows, withOwn<PressMap>({}, control, presses));
+    }
+    shown[mode] = rows;
+  }
+  // 2. The new maps, built from it. The Azeron buttons keep what they showed, as their own: all
+  // of it with keys, the tap with a controller. With keys the controller's buttons keep what they
+  // showed, which may have been an Azeron button's; with a controller they keep their own. Every
+  // other control keeps its own presses, untouched.
+  const map: Scheme['map'] = {};
+  for (const [mode, byControl] of Object.entries(scheme.map)) {
+    const rows: ByControl = {};
+    for (const [control, presses] of Object.entries(byControl)) {
+      if (!isAzeron(control) && !(control.startsWith('pad.') && output === 'keys'))
+        Object.assign(rows, withOwn<PressMap>({}, control, { ...presses }));
+    }
+    for (const [control, presses] of Object.entries(own(shown, mode) ?? {})) {
+      if (isAzeron(control)) {
+        const kept: PressMap =
+          output === 'keys'
+            ? { ...presses }
+            : presses.tap === undefined
+              ? {}
+              : { tap: presses.tap };
+        Object.assign(rows, withOwn<PressMap>({}, control, kept));
+      } else if (control.startsWith('pad.') && output === 'keys') {
+        Object.assign(rows, withOwn<PressMap>({}, control, { ...presses }));
       }
     }
+    map[mode] = prune(rows);
   }
-  const map: Scheme['map'] = Object.fromEntries(
-    Object.entries(scheme.map).map(([mode, byControl]) => [
-      mode,
-      Object.fromEntries(Object.entries(byControl).filter(([control]) => !isAzeron(control))),
-    ]),
-  );
   let behaviour: Scheme['behaviour'] = { ...scheme.behaviour };
   for (const prefix of ['L', 'R'] as const) {
     const id = `${prefix}.stick`;
@@ -778,38 +824,79 @@ export function setOutput(scheme: Scheme, output: Scheme['output'], game: Game):
       stick: stickFor(prefix, before.stick, output, game),
     });
   }
-  let out: Scheme = { ...scheme, output, padMap: {}, map, behaviour };
-  const controller = setupOf(scheme.devices).controller;
-  const buttons = new Set(XBOX_PAD.controls.filter((c) => c.sends).map((c) => c.id));
-  for (const slot of carried) {
-    if (controller && output === 'keys' && slot.press === 'tap') {
-      // The controller's button sending the same Xbox control kept doing it only through this
-      // button: it now carries the action itself, so the controller does what it did.
-      const pad = `pad.${padSignalOf(scheme, slot.control) ?? ''}`;
-      if (buttons.has(pad) && own(own(out.map, slot.mode) ?? {}, pad)?.tap === undefined)
-        out = assign(out, { ...slot, control: pad }, slot.action, game);
-    }
-    if (controller && output === 'pad') {
-      // The controller already has the action on a button: the Azeron button joins that control.
-      const pad = [...buttons].find(
-        (c) => own(own(out.map, slot.mode) ?? {}, c)?.tap === slot.action,
-      );
-      if (pad !== undefined) {
-        const byControl = withOwn<PressMap>(copyMode(out, slot.mode), slot.control, {
-          tap: slot.action,
-        });
-        out = withMode(
-          { ...out, padMap: withOwn(out.padMap, slot.control, pad.slice(4) as PadControl) },
-          slot.mode,
-          byControl,
-        );
-        continue;
-      }
-    }
-    out = assign(out, slot, slot.action, game);
-  }
-  return out;
+  const out: Scheme = { ...scheme, output, padMap: {}, map, behaviour };
+  // 3. With a controller, the Xbox control each Azeron button sends; then one consistency pass.
+  return settle(output === 'pad' ? { ...out, padMap: choosePads(out, game) } : out, game);
 }
+
+/**
+ * The Xbox control for each Azeron button with an action, for a switch to controller output. One
+ * control per action where it can be: a button whose action is already on a control (the
+ * controller's button, or a button chosen before) joins it, so the game binds one control, not two.
+ * Else the stick's direction for an action a stick of the setup sends; else the control the game
+ * ships its action on when nothing carries it; else the first that nothing carries. A join that
+ * would put two actions on one control in another mode isn't made: the button gets its own, and the
+ * game's set then has the action on two controls, which the checks say (`pad-bound-twice`). With
+ * none free a button sends nothing, which the checks say too (`sends-nothing`).
+ */
+function choosePads(scheme: Scheme, game: Game): Scheme['padMap'] {
+  const sticks = stickPadsOf(scheme);
+  const modes = Object.keys(scheme.map);
+  // What each Xbox control carries, per mode.
+  const carries = new Map<PadControl, Map<ModeId, ActionId>>();
+  const note = (pad: PadControl, mode: ModeId, action: ActionId) => {
+    const byMode = carries.get(pad) ?? new Map<ModeId, ActionId>();
+    byMode.set(mode, action);
+    carries.set(pad, byMode);
+  };
+  for (const mode of modes) {
+    for (const [control, presses] of Object.entries(own(scheme.map, mode) ?? {})) {
+      const pad = control.startsWith('pad.') ? padSignalOf(scheme, control) : undefined;
+      if (pad !== undefined && presses.tap !== undefined) note(pad, mode, presses.tap);
+    }
+  }
+  const buttons = [
+    ...new Set(
+      modes.flatMap((mode) =>
+        Object.entries(own(scheme.map, mode) ?? {})
+          .filter(([control, presses]) => isAzeron(control) && presses.tap !== undefined)
+          .map(([control]) => control),
+      ),
+    ),
+  ];
+  let padMap: Scheme['padMap'] = {};
+  for (const button of buttons) {
+    const taps = modes.flatMap((mode) => {
+      const id = own(own(scheme.map, mode) ?? {}, button)?.tap;
+      return id === undefined ? [] : [[mode, id] as const];
+    });
+    const fits = (pad: PadControl) =>
+      taps.every(([mode, id]) => {
+        const there = carries.get(pad)?.get(mode);
+        return there === undefined || there === id;
+      });
+    const nativeOf = (id: ActionId) => game.actions.find((a) => a.id === id)?.native?.pad;
+    const free = (pad: PadControl) => !sticks.has(pad) && (carries.get(pad)?.size ?? 0) === 0;
+    const join = PAD_CONTROLS.find(
+      (pad) =>
+        !sticks.has(pad) &&
+        fits(pad) &&
+        taps.some(([mode, id]) => carries.get(pad)?.get(mode) === id),
+    );
+    const stick = taps
+      .map(([, id]) => nativeOf(id))
+      .find((pad) => pad !== undefined && sticks.has(pad));
+    const native = taps.map(([, id]) => nativeOf(id)).find((pad) => pad !== undefined && free(pad));
+    const pick = join ?? stick ?? native ?? PAD_CONTROLS.find(free);
+    if (pick === undefined) continue;
+    padMap = withOwn(padMap, button, pick);
+    if (!sticks.has(pick)) for (const [mode, id] of taps) note(pick, mode, id);
+  }
+  return padMap;
+}
+
+/** The one consistency pass after a conversion: a button sends a stick's direction only for it. */
+const settle = (scheme: Scheme, game: Game): Scheme => dropStrayStickPads(scheme, game);
 
 /**
  * Which Xbox control an Azeron button sends, chosen in the side panel (controller output only).

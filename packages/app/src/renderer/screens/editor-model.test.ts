@@ -122,6 +122,42 @@ describe('assign', () => {
   });
 });
 
+describe('a press the control can’t send', () => {
+  it('is refused on an Azeron button with controller output, and on a key', () => {
+    const pad = deepFreeze(padScheme());
+    const kbm = deepFreeze({
+      ...keysScheme(),
+      devices: { ...AZERONS_ONLY, keyboard: true, mouse: true },
+    });
+    expect([
+      assign(pad, slot('ship', 'L.index_1', 'long'), 'gear', padGame) === pad,
+      assign(pad, slot('ship', 'L.index_1', 'double'), 'gear', padGame) === pad,
+      assign(kbm, slot('ship', 'key.J', 'long'), 'gear', game) === kbm,
+      assign(kbm, slot('ship', 'L.index_1', 'long'), 'gear', game).map['ship']?.['L.index_1'],
+    ]).toEqual([true, true, true, { tap: 'boost', long: 'gear' }]);
+  });
+
+  it('is refused on a control of a device the setup doesn’t have (an undo can take it away)', () => {
+    const scheme = frozen();
+    expect([
+      assign(scheme, slot('ship', 'key.J', 'tap'), 'gear', game) === scheme,
+      assign(
+        { ...scheme, devices: { ...AZERONS_ONLY, azerons: 'left' } },
+        slot('ship', 'R.index_2'),
+        'gear',
+        game,
+      ).map['ship']?.['R.index_2'],
+    ]).toEqual([true, undefined]);
+  });
+
+  it('is never moved onto: the action stays where it was', () => {
+    const pad = deepFreeze(padScheme());
+    expect(move(pad, slot('ship', 'L.index_1'), slot('ship', 'L.index_2', 'long'), padGame)).toBe(
+      pad,
+    );
+  });
+});
+
 describe('drop: an action dropped on a button', () => {
   it('from the list goes on the tap', () => {
     const next = drop(frozen(), 'ship', 'L.index_2', 'gear', undefined, game);
@@ -371,9 +407,14 @@ describe('fixes', () => {
   });
 
   it('an action on a press that sends nothing: take it off', () => {
-    const scheme = deepFreeze(
-      assign(padScheme(), slot('ship', 'L.index_1', 'long'), 'galaxy', game),
-    );
+    // The editor no longer puts one there; a scheme saved before can still have it.
+    const scheme = deepFreeze({
+      ...padScheme(),
+      map: {
+        ...padScheme().map,
+        ship: { ...padScheme().map['ship'], 'L.index_1': { tap: 'boost', long: 'galaxy' } },
+      },
+    });
     const { after } = fixed(scheme, 'sends-nothing');
     expect(find(after, 'sends-nothing')).toBeUndefined();
     expect(after.map['ship']?.['L.index_1']).toEqual({ tap: 'boost' });
@@ -1352,6 +1393,62 @@ describe('a switch of output or devices keeps what every control shows', () => {
     ]).toEqual([{ tap: 'reload' }, {}, { long: 'gear' }]);
   });
 
+  it('controller to keys with the keyboard in the setup: the keyboard keeps every key it had', () => {
+    // Codex's first case: Reload is on R and on the Azeron button sending X.
+    const scheme = deepFreeze(
+      setDevices(
+        xboxControllerPreset(helldivers2),
+        { ...AZERONS_ONLY, keyboard: true, mouse: true },
+        helldivers2,
+      ),
+    );
+    expect(shownPresses(scheme, 'default', 'key.R')).toEqual({ tap: 'reload' });
+    const keys = setOutput(scheme, 'keys', helldivers2);
+    expect([
+      shownPresses(keys, 'default', 'key.R'),
+      shownPresses(keys, 'default', 'L.middle_1'),
+    ]).toEqual([{ tap: 'reload' }, { tap: 'reload' }]);
+  });
+
+  it('controller to keys: two buttons sending one Xbox control both keep its action', () => {
+    // Codex's second case: the empty left pinky 5 is set to send X, so it shows Reload too.
+    const scheme = deepFreeze(
+      setPadControl(xboxControllerPreset(helldivers2), 'L.pinky_5', 'X', helldivers2),
+    );
+    expect(shownPresses(scheme, 'default', 'L.pinky_5')).toEqual({ tap: 'reload' });
+    const keys = setOutput(scheme, 'keys', helldivers2);
+    expect([
+      shownPresses(keys, 'default', 'L.middle_1'),
+      shownPresses(keys, 'default', 'L.pinky_5'),
+    ]).toEqual([{ tap: 'reload' }, { tap: 'reload' }]);
+  });
+
+  it('one action on several keys after a switch is kept on all: the keyboard set takes several', () => {
+    const scheme = setPadControl(xboxControllerPreset(helldivers2), 'L.pinky_5', 'X', helldivers2);
+    const keys = setOutput(
+      setDevices(scheme, { ...AZERONS_ONLY, keyboard: true, mouse: true }, helldivers2),
+      'keys',
+      helldivers2,
+    );
+    const p = plan(keys, helldivers2);
+    expect([
+      ['L.middle_1', 'L.pinky_5', 'key.R'].map((c) => shownPresses(keys, 'default', c).tap),
+      p.findings.filter((f) => f.severity === 'error').map((f) => f.rule),
+    ]).toEqual([['reload', 'reload', 'reload'], []]);
+  });
+
+  it('one action on several Azeron buttons, switched to a controller, puts them on one Xbox control', () => {
+    // The controller set takes one control per action: the buttons join, and nothing is flagged.
+    const there = setPadControl(xboxControllerPreset(helldivers2), 'L.pinky_5', 'X', helldivers2);
+    const back = setOutput(setOutput(there, 'keys', helldivers2), 'pad', helldivers2);
+    const p = plan(back, helldivers2);
+    expect([
+      back.padMap['L.middle_1'] === back.padMap['L.pinky_5'],
+      shownPresses(back, 'default', 'L.pinky_5').tap,
+      p.findings.filter((f) => f.rule === 'pad-bound-twice' || f.rule === 'key-collision'),
+    ]).toEqual([true, 'reload', []]);
+  });
+
   // A long run of edits, with switches of output and of devices among them. After each switch,
   // every control the setup keeps shows what it showed: no action is lost or changed, on any
   // press. Two things a switch may do: a control that showed nothing may come to show an action
@@ -1375,7 +1472,18 @@ describe('a switch of output or devices keeps what every control shows', () => {
       .map((c) => c.id),
   ];
 
-  function lost(before: Scheme, after: Scheme): string[] {
+  const azeron = (control: string) => control.startsWith('L.') || control.startsWith('R.');
+  const same = (a: object, b: object) => JSON.stringify(a) === JSON.stringify(b);
+
+  /**
+   * What a switch may not do to a control the setup keeps. A device switch, and a switch of the
+   * Azerons' output for every control but theirs: show exactly what it showed. The one thing an
+   * output switch to a controller may do to the controller is give an empty button an action: an
+   * Azeron button now sends that Xbox control too, and every Xbox control is the controller's.
+   * The Azerons themselves: to keys, exactly what they showed; to a controller, the same tap, and
+   * no long press or double tap, which a controller button hasn't got.
+   */
+  function faultsOf(before: Scheme, after: Scheme, outputSwitch: boolean): string[] {
     const was = setupOf(before.devices);
     const now = setupOf(after.devices);
     const out: string[] = [];
@@ -1383,13 +1491,20 @@ describe('a switch of output or devices keeps what every control shows', () => {
       if (!inSetup(was, control) || !inSetup(now, control)) continue;
       const a = shownPresses(before, 'default', control);
       const b = shownPresses(after, 'default', control);
-      for (const press of ['tap', 'long', 'double'] as const) {
-        const dropped =
-          press !== 'tap' &&
-          after.output === 'pad' &&
-          (control.startsWith('L.') || control.startsWith('R.'));
-        if (a[press] !== undefined && a[press] !== b[press] && !dropped)
-          out.push(`${control} ${press}: ${a[press]} became ${b[press] ?? 'nothing'}`);
+      const say = () => `${control}: ${JSON.stringify(a)} became ${JSON.stringify(b)}`;
+      if (
+        !outputSwitch ||
+        after.output === 'keys' ||
+        control.startsWith('key.') ||
+        control.startsWith('mouse.')
+      ) {
+        if (!same(a, b)) out.push(say());
+      } else if (azeron(control)) {
+        if (!same(a.tap === undefined ? {} : { tap: a.tap }, b)) out.push(say());
+      } else if (
+        !(['tap', 'long', 'double'] as const).every((p) => a[p] === undefined || a[p] === b[p])
+      ) {
+        out.push(say());
       }
     }
     return out;
@@ -1417,7 +1532,8 @@ describe('a switch of output or devices keeps what every control shows', () => {
           kind === 7
             ? setOutput(scheme, scheme.output === 'pad' ? 'keys' : 'pad', g)
             : setDevices(scheme, DEVICES[next(DEVICES.length)] ?? AZERONS_ONLY, g);
-        for (const fault of lost(before, scheme)) found.push(`after edit ${i}: ${fault}`);
+        for (const fault of faultsOf(before, scheme, kind === 7))
+          found.push(`after edit ${i}: ${fault}`);
       }
     }
     expect(found).toEqual([]);
