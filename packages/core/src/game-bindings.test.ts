@@ -395,7 +395,7 @@ describe('two actions resolved onto one live signal are a collision, from a stic
       [
         'L.middle_2',
         'error',
-        'In Default, Move forward and Reload are both on Xbox LS_UP: the game does them at once.',
+        'Move forward and Reload are both on Xbox left stick up: one press does both.',
       ],
     ]);
   });

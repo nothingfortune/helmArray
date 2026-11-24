@@ -14,8 +14,10 @@
 // The first failure stops everything and says, in one sentence, what failed, on which unit, and
 // what is left as it was. The units' profile button is never part of any of it.
 
-import type { StoredSlot, Verdict } from '@helmarray/azeron';
+import type { StoredRecord, StoredSlot, Verdict } from '@helmarray/azeron';
 import {
+  BLOCK_TYPES,
+  INPUT_ID_BY_PIN,
   MAX_PROFILE_NAME,
   UnitError,
   encodeRecord,
@@ -25,6 +27,7 @@ import {
 } from '@helmarray/azeron';
 import type { UnitRecord } from '@helmarray/azeron';
 import type { Hand, Plan, UnitProfile } from '@helmarray/core';
+import type { ApplyButtonChange, RemovedLayout } from '../shared/api';
 import type { UnitOps } from './gated-session';
 import { CYBORG2_LEFT, CYBORG2_RIGHT, handsOf, unitOf } from '@helmarray/core';
 
@@ -48,11 +51,27 @@ export type HeldUnits = Partial<Record<Hand, HeldUnit | undefined>>;
 export interface UnitsOptions {
   /** The slot's name on the unit; plain ASCII, cut to the 19 characters a unit keeps. */
   name?: string;
+  /** The game's name for an action, for the buttons a preview lists. Its id without it. */
+  actionName?(mode: string, action: string): string;
+  /**
+   * What is known of a layout on this hand's unit (see `RemovedLayout`): by identity, never by
+   * name. Without it no layout is taken for the scheme's own earlier copy.
+   */
+  layoutOf?(hand: Hand, slot: { slot: number; name: string }): Omit<RemovedLayout, 'slot' | 'name'>;
 }
+
+/** Nothing known of a layout: not this scheme's, of no known game. */
+const UNKNOWN_LAYOUT = { ownCopy: false, game: null } as const;
 
 const handName = (hand: Hand) => (hand === 'left' ? 'left' : 'right');
 const slotLabel = (slot: Pick<StoredSlot, 'slot' | 'name'>) =>
   slot.name === '' ? `slot ${slot.slot}` : `slot ${slot.slot} ("${slot.name}")`;
+/**
+ * A slot in the person's words: a layout, by the name it has on the unit. The numbers are the
+ * unit's business, and the log's.
+ */
+const layoutLabel = (slot: Pick<StoredSlot, 'name'>) =>
+  slot.name === '' ? 'a layout with no name' : `the layout "${slot.name}"`;
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 const isClean = (verdict: Verdict) =>
@@ -78,25 +97,25 @@ export type SlotChoice =
  * Which slot the layout goes into.
  *  1. The lowest free slot, when the unit has one: nothing it holds is touched, so a failure
  *     leaves everything as it was. (Reusing one of ours would risk the slot being run.)
- *  2. When every slot is in use: a slot the unit is NOT running, preferring one that already has
- *     our name, else the lowest-numbered. The slot is deleted afterwards anyway; it is named in
- *     the preview as written over.
+ *  2. When every slot is in use: the lowest-numbered slot the unit is NOT running. A name says
+ *     nothing of whose a layout is (every game's preset is "Xbox controller", and a unit keeps 19
+ *     characters of one), so none is preferred by name. The slot is deleted afterwards anyway;
+ *     the preview names it as written over.
  *  3. Never the slot the unit runs. If that is the only slot there is no other place: refused.
  */
 export function chooseSlot(
   slots: readonly StoredSlot[],
   running: number,
   limit: number,
-  name: string,
 ): SlotChoice {
   const free = lowestFree(slots, limit);
   if (free !== undefined) return { ok: true, slot: free, overwrites: null };
   const others = slots.filter((s) => s.slot !== running).sort((a, b) => a.slot - b.slot);
-  const pick = others.find((s) => s.name === name) ?? others[0];
+  const pick = others[0];
   if (!pick) {
     return {
       ok: false,
-      reason: `The unit has room for ${limit} slot${limit === 1 ? '' : 's'} and is running the only one, so there is nowhere to write without overwriting it.`,
+      reason: `The unit has room for ${limit} layout${limit === 1 ? '' : 's'} and is running the only one, so there is nowhere to write without overwriting it.`,
     };
   }
   return { ok: true, slot: pick.slot, overwrites: pick };
@@ -116,10 +135,12 @@ export interface UnitPreview {
   differs: boolean;
   /** How many of the unit's inputs differ. */
   inputsChanged: number;
+  /** The buttons that change, for the person: see `ApplyUnitChange.buttons`. */
+  buttons: ApplyButtonChange[];
   /** The slot that gets written, or null when the unit already holds the layout. */
   write: { slot: number; name: string; overwrites: { slot: number; name: string } | null } | null;
   /** Slots that go, by name, so the drawer can say what is lost. */
-  deletes: { slot: number; name: string }[];
+  deletes: RemovedLayout[];
   /** The above in plain words, one line each. */
   changes: string[];
   /** Why Apply can't do this unit at all, in one sentence; null when it can. */
@@ -150,11 +171,78 @@ function writableRecordsFor(plan: Plan, hand: Hand): UnitRecord[] {
   return records;
 }
 
+/** Block type bytes that send nothing: none, disabled, and 0 (never written). */
+const SILENT = new Set<number>([0, BLOCK_TYPES.none, BLOCK_TYPES.disabled]);
+
+/** The unit held nothing on this input: no record, or a button whose every press sends nothing. */
+function heldNothing(stored: StoredRecord | undefined): boolean {
+  if (stored === undefined) return true;
+  if (stored.kind !== 'button') return false;
+  return [stored.tap, stored.long, stored.double].every(
+    (block) => SILENT.has(block.typeByte) && block.wheel === undefined,
+  );
+}
+
+/**
+ * The buttons (and the stick) whose inputs differ, as the person knows them: the position, the
+ * actions on it once applied, and whether it was empty before or is empty after. A button that
+ * was empty and stays empty is no change to anyone, and is left out.
+ */
+function changedButtons(
+  plan: Plan,
+  hand: Hand,
+  verdict: Verdict,
+  running: readonly StoredRecord[],
+  actionName: (mode: string, action: string) => string,
+): ApplyButtonChange[] {
+  const profile = unitOf(plan, hand);
+  const ids = new Set([
+    ...verdict.differences.map((d) => d.id),
+    ...verdict.unchecked.map((u) => u.id),
+  ]);
+  const stickId = recordsFor(plan, hand).find((r) => r.kind === 'stick')?.id;
+  const out: ApplyButtonChange[] = [];
+  for (const pin of profile.pins) {
+    const id = INPUT_ID_BY_PIN.get(pin.pin);
+    if (id === undefined || !ids.has(id)) continue;
+    const wasEmpty = heldNothing(running.find((r) => r.id === id));
+    const nowEmpty = Object.keys(pin.presses).length === 0;
+    if (wasEmpty && nowEmpty) continue;
+    const actions: string[] = [];
+    for (const b of plan.bindings) {
+      if (b.control !== pin.control) continue;
+      const words = actionName(b.mode, b.action);
+      if (!actions.includes(words)) actions.push(words);
+    }
+    out.push({
+      position: pin.position,
+      actions,
+      sends: pin.presses.tap ?? null,
+      stick: null,
+      wasEmpty,
+      nowEmpty,
+    });
+  }
+  if (stickId !== undefined && ids.has(stickId)) {
+    out.push({
+      position: 'stick',
+      actions: [],
+      sends: null,
+      stick: structuredClone(profile.stick),
+      wasEmpty: false,
+      nowEmpty: false,
+    });
+  }
+  return out;
+}
+
 function previewUnit(
   plan: Plan,
   hand: Hand,
   held: HeldUnit | undefined,
   name: string,
+  actionName: (mode: string, action: string) => string,
+  layoutOf: NonNullable<UnitsOptions['layoutOf']>,
 ): UnitPreview {
   const base: UnitPreview = {
     hand,
@@ -162,6 +250,7 @@ function previewUnit(
     connected: held !== undefined,
     differs: false,
     inputsChanged: 0,
+    buttons: [],
     write: null,
     deletes: [],
     changes: [],
@@ -176,18 +265,20 @@ function previewUnit(
   } catch (error) {
     return { ...base, problem: sentence(messageOf(error)) };
   }
-  const verdict = verify(records, held.slots.find((s) => s.slot === held.running)?.records ?? []);
+  const runningRecords = held.slots.find((s) => s.slot === held.running)?.records ?? [];
+  const verdict = verify(records, runningRecords);
   const differs = !isClean(verdict);
   const inputsChanged = new Set([
     ...verdict.differences.map((d) => d.id),
     ...verdict.unchecked.map((u) => u.id),
   ]).size;
+  const buttons = changedButtons(plan, hand, verdict, runningRecords, actionName);
   let target = held.running;
   let write: UnitPreview['write'] = null;
   const changes: string[] = [];
   if (differs) {
-    const choice = chooseSlot(held.slots, held.running, held.slotLimit, name);
-    if (!choice.ok) return { ...base, differs, inputsChanged, problem: choice.reason };
+    const choice = chooseSlot(held.slots, held.running, held.slotLimit);
+    if (!choice.ok) return { ...base, differs, inputsChanged, buttons, problem: choice.reason };
     target = choice.slot;
     write = {
       slot: choice.slot,
@@ -204,11 +295,11 @@ function previewUnit(
   }
   const deletes = held.slots
     .filter((s) => s.slot !== target)
-    .map((s) => ({ slot: s.slot, name: s.name }));
+    .map((s) => ({ slot: s.slot, name: s.name, ...layoutOf(hand, s) }));
   if (deletes.length > 0) {
     changes.push(`Delete ${deletes.map((s) => slotLabel(s)).join(', ')} from the ${unit} unit.`);
   }
-  return { ...base, differs, inputsChanged, write, deletes, changes };
+  return { ...base, differs, inputsChanged, buttons, write, deletes, changes };
 }
 
 /** What Apply would do to the units, in words. `held` is what each unit holds now. */
@@ -218,8 +309,10 @@ export function previewUnits(
   options: UnitsOptions = {},
 ): UnitsPreview {
   const name = unitSlotName(options.name);
-  const left = previewUnit(plan, 'left', held.left, name);
-  const right = previewUnit(plan, 'right', held.right, name);
+  const actionName = options.actionName ?? ((_mode: string, action: string) => action);
+  const layoutOf = options.layoutOf ?? (() => UNKNOWN_LAYOUT);
+  const left = previewUnit(plan, 'left', held.left, name, actionName, layoutOf);
+  const right = previewUnit(plan, 'right', held.right, name, actionName, layoutOf);
   // A unit the setup doesn't use has nothing to do, so it adds no line, no change and no problem.
   const units = [left, right];
   return {
@@ -282,6 +375,12 @@ export interface UnitsDeps {
   unit(hand: Hand): { session: UnitOps; deviceId: number } | undefined;
   /** The slot's name on the unit. */
   name?: string;
+  /**
+   * What a good apply says of the layouts it removed from a unit, as a clause ("your layout
+   * “Main” from Rover was removed"), or null when nothing of the person's went (the scheme's own
+   * earlier copy). Without it: "its other 2 layouts were removed".
+   */
+  removed?(hand: Hand, gone: readonly { slot: number; name: string }[]): string | null;
   trace?(line: string): void;
 }
 
@@ -387,14 +486,14 @@ async function applyUnit(
     if (isClean(verdict)) {
       trace(`already holds the layout in slot ${slot}`);
     } else {
-      const choice = chooseSlot(slots, running, identity.slotLimit, name);
+      const choice = chooseSlot(slots, running, identity.slotLimit);
       if (!choice.ok) return stop(choice.reason);
       slot = choice.slot;
       const into = choice.overwrites ? slotLabel(choice.overwrites) : `slot ${slot}`;
       // A slot written over has lost what it held, whatever happens next: say so.
       const overwritten = (clause: string) =>
         choice.overwrites
-          ? `${clause} and what it held before${choice.overwrites.name === '' ? '' : ` ("${choice.overwrites.name}")`} is gone`
+          ? `${clause}, and the layout${choice.overwrites.name === '' ? '' : ` "${choice.overwrites.name}"`} it replaced is gone`
           : clause;
       trace(`writing the layout into ${into}`);
 
@@ -408,12 +507,14 @@ async function applyUnit(
           return stop(messageOf(error));
         }
         if (now === slot) {
-          return stop(`it now runs ${into}, which was about to be written over`);
+          return stop(
+            `it now runs ${layoutLabel(choice.overwrites)}, which was about to be written over`,
+          );
         }
       }
       left = choice.overwrites
-        ? `${into} may be part-written, and the unit still runs slot ${running} with its other slots as they were`
-        : `a new slot ${slot} may be part-written, and the unit still runs slot ${running} with its other slots as they were`;
+        ? `${layoutLabel(choice.overwrites)} may be part-written, and the unit still runs what it ran before, with its other layouts as they were`
+        : 'a new layout may be part-written, and the unit still runs what it ran before, with its other layouts as they were';
       let result;
       try {
         result = await session.write(slot, name, records, deviceId);
@@ -434,12 +535,16 @@ async function applyUnit(
           ...result.differences.map((d) => d.id),
           ...result.unchecked.map((u) => u.id),
         ]).size;
-        left = `${overwritten(`slot ${slot} is not in use`)}, the unit still runs slot ${running}, and nothing was deleted`;
+        // Which inputs, and how, is for the log; the person is told what it means.
+        trace(
+          `slot ${slot} read back differently: ${count} input${count === 1 ? '' : 's'}${first ? `, first: input ${first.id} ${first.what}` : ''}`,
+        );
+        left = `${overwritten('the new layout is not in use')}, the unit still runs what it ran before, and nothing was removed`;
         return stop(
-          `slot ${slot} read back differently from the layout (${count} input${count === 1 ? '' : 's'}${first ? `, first: input ${first.id} ${first.what}` : ''})`,
+          `the new layout read back differently from what was written (${count} button${count === 1 ? '' : 's'})`,
         );
       }
-      left = `${overwritten(`slot ${slot} holds the layout`)}, the unit still runs slot ${running}, and nothing was deleted`;
+      left = `${overwritten('the new layout is in place')}, the unit still runs what it ran before, and nothing was removed`;
       await guard();
       try {
         await session.switchTo(slot);
@@ -447,7 +552,7 @@ async function applyUnit(
         return stop(messageOf(error));
       }
       outcome.switched = true;
-      left = `the unit runs the layout in slot ${slot}, and the slots it had before are still there`;
+      left = 'the unit runs the new layout, and the layouts it had before are still there';
     }
     outcome.slot = slot;
 
@@ -461,8 +566,8 @@ async function applyUnit(
       return stop(messageOf(error));
     }
     for (const [index, other] of others.entries()) {
-      const remaining = others.slice(index).map(slotLabel);
-      left = `the unit runs the layout in slot ${slot}, and ${remaining.join(' and ')} ${remaining.length === 1 ? 'is' : 'are'} still there`;
+      const remaining = others.slice(index).map(layoutLabel);
+      left = `the unit runs the new layout, and ${remaining.join(' and ')} ${remaining.length === 1 ? 'is' : 'are'} still there`;
       await guard();
       // Every deletion rests on the unit running the layout: asked again each time, because the
       // button can move it, and a slot is then deleted on a false premise.
@@ -473,20 +578,21 @@ async function applyUnit(
         return stop(messageOf(error));
       }
       if (now !== slot) {
-        return stop(`it now runs slot ${now}, not slot ${slot} where the layout is`);
+        trace(`runs slot ${now}, not slot ${slot}: not deleting`);
+        return stop('it now runs another layout, not the new one');
       }
       try {
         await session.deleteSlot(other.slot);
       } catch (error) {
         return stop(
-          `${slotLabel(other)} could not be deleted (${withoutPeriod(messageOf(error))})`,
+          `${layoutLabel(other)} could not be removed (${withoutPeriod(messageOf(error))})`,
         );
       }
       outcome.deleted.push({ slot: other.slot, name: other.name });
     }
 
     // Read every slot back and compare what the unit runs with the plan.
-    left = 'the other slots are deleted';
+    left = 'the other layouts are removed';
     await guard();
     let finalVerdict: Verdict;
     try {
@@ -494,8 +600,11 @@ async function applyUnit(
       const running = await session.runningSlot();
       finalVerdict = verify(records, after.find((s) => s.slot === running)?.records ?? []);
       outcome.verdict = finalVerdict;
-      left = `the unit runs slot ${running} and the other slots are deleted`;
-      if (running !== slot) return stop(`it is not running slot ${slot}, where the layout is`);
+      left = `the unit runs ${running === slot ? 'the new layout' : 'another layout'} and the other layouts are removed`;
+      if (running !== slot) {
+        trace(`runs slot ${running}, not slot ${slot}, after the clean-up`);
+        return stop('it is not running the new layout');
+      }
     } catch (error) {
       if (error instanceof Stop) throw error;
       return stop(messageOf(error));
@@ -507,11 +616,20 @@ async function applyUnit(
     const wrote = outcome.wrote;
     const n = outcome.deleted.length;
     outcome.status = wrote ? 'applied' : 'unchanged';
+    // In the person's words: their layouts, not the unit's numbered slots, and nothing said of
+    // the scheme's own earlier copy (told by identity, by whoever knows it).
+    const removed =
+      n === 0
+        ? null
+        : deps.removed !== undefined
+          ? deps.removed(hand, outcome.deleted)
+          : n === 1
+            ? 'its other layout was removed'
+            : `its other ${n} layouts were removed`;
+    const said = removed === null ? '' : `; ${removed}`;
     outcome.message = wrote
-      ? `The ${unit} unit runs the layout in slot ${slot}${n > 0 ? `; ${n} other slot${n === 1 ? ' was' : 's were'} deleted` : ''}.`
-      : n > 0
-        ? `The ${unit} unit already held the layout; ${n} other slot${n === 1 ? ' was' : 's were'} deleted.`
-        : `The ${unit} unit already held the layout.`;
+      ? `The ${unit} unit runs the layout${said}.`
+      : `The ${unit} unit already held the layout${said}.`;
     return outcome;
   } catch (error) {
     if (!(error instanceof Stop)) throw error;

@@ -116,6 +116,13 @@ export interface UnitWrite {
   gameId: string;
   /** The scheme's name when it was applied: it may be renamed or deleted since. */
   schemeName: string;
+  /** The game's name when it was applied: the game may be deleted since. */
+  gameName?: string;
+  /**
+   * The game was deleted since (a game added by hand): this is history, and a game added later
+   * under the same id is never taken for it.
+   */
+  gameDeleted?: true;
   devices: SetupDevices;
   output: Scheme['output'];
   /** Milliseconds since 1970. */

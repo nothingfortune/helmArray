@@ -1,6 +1,7 @@
 import type { AppState, DeviceChip } from '../../shared/api';
 
-export type Tone = 'ok' | 'warning' | 'error';
+/** `plain`: nothing wrong and nothing known (a unit let go of for the Azeron app). */
+export type Tone = 'ok' | 'warning' | 'error' | 'plain';
 
 export interface ChipView {
   /** Stable across renders: a unit's id, else its place in the row. */
@@ -23,12 +24,14 @@ const TONE: Record<DeviceChip['state'], Tone> = {
   ready: 'ok',
   connecting: 'warning',
   failed: 'error',
+  paused: 'plain',
 };
 
 const WORD: Record<DeviceChip['state'], string> = {
   ready: 'ready',
   connecting: 'connecting',
   failed: 'failed',
+  paused: 'paused while the Azeron app is open',
 };
 
 const FALLBACK_ERROR = 'This unit did not answer.';

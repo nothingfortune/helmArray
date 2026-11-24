@@ -39,12 +39,9 @@ function Game({ section }: { section: GameSection }) {
   );
 }
 
+/** A check's dot: green when it is ready, red when it is not. Its words say which as well. */
 function Mark({ ok }: { ok: boolean }) {
-  return (
-    <span className={`apply-mark ${ok ? 'tone-ok' : 'tone-error'}`} aria-hidden="true">
-      {ok ? '✓' : '✕'}
-    </span>
-  );
+  return <span className={`dot apply-dot tone-${ok ? 'ok' : 'error'}`} aria-hidden="true" />;
 }
 
 /**
@@ -95,9 +92,10 @@ export function ApplyDrawer({ schemeId, open, onClose, onApplied, state }: Apply
     }
     if (drawer.phase !== 'ready') return;
     dispatch({ type: 'apply' });
+    const shown = drawer.preview;
     // Exactly the layout that was shown: if the scheme changed since, main refuses and the
     // drawer looks again.
-    window.helm.apply(schemeId, drawer.preview.fingerprint).then(
+    window.helm.apply(schemeId, shown.fingerprint).then(
       (result) => {
         dispatch({ type: 'applied', result });
         if (result.units.length > 0) onApplied?.();

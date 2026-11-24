@@ -7,10 +7,11 @@ import {
   chooseDevice,
   deviceTab,
   drawer,
+  editorApply,
   gameHalf,
+  keepEveryCheck,
   leftUnit,
   schemePicker,
-  keepEveryCheck,
   startFrom,
   startWithChecks,
   unseen,
@@ -28,7 +29,7 @@ test.describe('keyboard: Tab order and visible focus', () => {
         'Settings',
         'Look again',
         'Find a game',
-        expect.stringMatching(/^HELLDIVERS/),
+        expect.stringMatching(/^Helldivers 2\. /),
       ]),
     );
     expect(unseen(stops)).toEqual([]);
@@ -51,7 +52,7 @@ test.describe('keyboard: Tab order and visible focus', () => {
     const { page } = helm;
     await startFrom(page, 'Xbox controller');
     await keepEveryCheck(page);
-    await page.getByRole('button', { name: 'Apply', exact: true }).click();
+    await editorApply(page).click();
     await expect(applyInDrawer(page)).toBeEnabled();
     const stops = await walkTabOrder(page);
     expect(stops.map((s) => s.label)).toEqual(expect.arrayContaining(['Cancel', 'Apply']));
@@ -172,7 +173,7 @@ test.describe('keyboard: the setups', () => {
     await left
       .getByRole('button', { name: 'Reload, middle 1' })
       .dragTo(left.getByRole('button', { name: 'Empty, middle 2' }));
-    await page.getByRole('button', { name: 'Apply', exact: true }).click();
+    await editorApply(page).click();
     await expect(gameHalf(page)).toContainText('Set Reload to Xbox Y');
     await expect(applyInDrawer(page)).toBeEnabled();
     const stops = await walkTabOrder(page);

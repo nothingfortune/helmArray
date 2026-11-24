@@ -69,6 +69,31 @@ interface Context {
 
 const actionName = (game: Game, id: ActionId) => game.actions.find((a) => a.id === id)?.name ?? id;
 const modeName = (game: Game, id: ModeId) => game.modes.find((m) => m.id === id)?.name ?? id;
+/**
+ * " in Ship" for a game with modes to tell apart; nothing for a game with one, whose mode has no
+ * name the player knows (it is "Default").
+ */
+const inMode = (game: Game, id: ModeId) =>
+  game.modes.length > 1 ? ` in ${modeName(game, id)}` : '';
+/** "one press does both", or "them all" for more than two. */
+const doesAll = (count: number) =>
+  count === 2 ? 'one press does both' : 'one press does them all';
+const PAD_STICK_WORDS: Readonly<Record<string, string>> = {
+  LS: 'left stick press',
+  RS: 'right stick press',
+  LS_UP: 'left stick up',
+  LS_DOWN: 'left stick down',
+  LS_LEFT: 'left stick left',
+  LS_RIGHT: 'left stick right',
+  RS_UP: 'right stick up',
+  RS_DOWN: 'right stick down',
+  RS_LEFT: 'right stick left',
+  RS_RIGHT: 'right stick right',
+  DPAD_UP: 'D-pad up',
+  DPAD_DOWN: 'D-pad down',
+  DPAD_LEFT: 'D-pad left',
+  DPAD_RIGHT: 'D-pad right',
+};
 const hasRole = (game: Game, id: ActionId, roles: readonly Role[]) => {
   const role = game.actions.find((a) => a.id === id)?.role;
   return role !== undefined && roles.includes(role);
@@ -83,7 +108,7 @@ function signalName(signal: Signal): string {
     case 'scroll':
       return `scroll ${signal.dir}`;
     case 'pad':
-      return `Xbox ${signal.control}`;
+      return `Xbox ${Object.hasOwn(PAD_STICK_WORDS, signal.control) ? PAD_STICK_WORDS[signal.control] : signal.control}`;
     case 'macro':
       return `the macro on ${signal.trigger}`;
   }
@@ -211,7 +236,7 @@ function keyCollision(ctx: Context): Finding[] {
           severity: 'error',
           control,
           mode: mode.id,
-          message: `In ${modeName(ctx.game, mode.id)}, ${listed} are ${names.length === 2 ? 'both' : 'all'} on ${signalName(mine.signal)}: the game does them at once.`,
+          message: `${listed} are ${names.length === 2 ? 'both' : 'all'} on ${signalName(mine.signal)}${inMode(ctx.game, mode.id)}: ${doesAll(names.length)}.`,
         });
       }
     }
@@ -244,7 +269,7 @@ function keyCollision(ctx: Context): Finding[] {
         severity: 'error',
         control,
         mode: mode.id,
-        message: `In ${modeName(ctx.game, mode.id)}, the ${control.startsWith('L.') ? 'left' : 'right'} stick's ${direction} and ${actionName(ctx.game, clash.action)} are both on ${signalName(signal)}: the game does them at once.`,
+        message: `${actionName(ctx.game, clash.action)} and the ${control.startsWith('L.') ? 'left' : 'right'} stick's ${direction} are both on ${signalName(signal)}${inMode(ctx.game, mode.id)}: one press does both.`,
       });
     }
   }
@@ -282,7 +307,7 @@ function keyCollision(ctx: Context): Finding[] {
         severity: 'error',
         control: by.control,
         mode: mode.id,
-        message: `In ${modeName(ctx.game, mode.id)}, ${listed} are ${names.length === 2 ? 'both' : 'all'} on ${signalName(signal)}: the game does them at once.`,
+        message: `${listed} are ${names.length === 2 ? 'both' : 'all'} on ${signalName(signal)}${inMode(ctx.game, mode.id)}: ${doesAll(names.length)}.`,
       });
     }
   }
@@ -320,7 +345,7 @@ function sendsNothing(ctx: Context): Finding[] {
       severity: 'error',
       control,
       mode,
-      message: `${actionName(ctx.game, action)} ${why}, so pressing it does nothing.`,
+      message: `${actionName(ctx.game, action)} ${why}.`,
     });
   }
   return out;
@@ -360,7 +385,7 @@ function missingRequired(ctx: Context): Finding[] {
         severity: 'error',
         action: action.id,
         mode: mode.id,
-        message: `${action.name} is needed to play ${modeName(ctx.game, mode.id)}, and it is on no button.`,
+        message: `${action.name} isn't on a button${inMode(ctx.game, mode.id)}.`,
       });
     }
   }
@@ -405,7 +430,7 @@ function combatTapDelayed(ctx: Context): Finding[] {
       rule: 'combat-tap-delayed',
       severity: 'warning',
       control: pin.control,
-      message: `This button has a long press or double tap, so its tap waits to see which you meant. ${actionName(ctx.game, critical)} needs the tap at once.`,
+      message: `${actionName(ctx.game, critical)} waits on every tap: its button also has a long press or double tap.`,
     });
   }
   return out;
@@ -422,7 +447,7 @@ function holdOnMovement(ctx: Context): Finding[] {
       rule: 'hold-on-movement',
       severity: 'warning',
       control: pin.control,
-      message: `This button stays down until pressed again, so ${actionName(ctx.game, moving)} keeps going after you let go.`,
+      message: `${actionName(ctx.game, moving)} keeps going after you let go: its button stays down until pressed again.`,
     });
   }
   return out;
@@ -476,7 +501,7 @@ function stickNotKeyboard(ctx: Context): Finding[] {
       rule: 'stick-not-keyboard',
       severity: 'error' as const,
       control,
-      message: `${ctx.game.name} needs this stick to send keys: as an Xbox stick it stutters, and as a mouse it spins.`,
+      message: `The ${control.startsWith('L.') ? 'left' : 'right'} stick must send keys: ${ctx.game.name} stutters with an Xbox stick and spins with a mouse.`,
     }));
 }
 
@@ -492,7 +517,7 @@ function stickNoDirections(ctx: Context): Finding[] {
       rule: 'stick-no-directions',
       severity: 'error' as const,
       control,
-      message: `The ${control.startsWith('L.') ? 'left' : 'right'} stick sends nothing: give its directions keys or set it to a controller stick.`,
+      message: `The ${control.startsWith('L.') ? 'left' : 'right'} stick sends nothing.`,
     }));
 }
 
@@ -525,7 +550,7 @@ function actionDeleted(ctx: Context): Finding[] {
         control,
         ...(gameModes.includes(mode) ? { mode } : {}),
         action: gone,
-        message: `The action on this ${control.startsWith('key.') ? 'key' : 'button'} was deleted from ${ctx.game.name}, so pressing it does nothing.`,
+        message: `This ${control.startsWith('key.') ? 'key' : 'button'}'s action was deleted from ${ctx.game.name}.`,
       });
     }
   }

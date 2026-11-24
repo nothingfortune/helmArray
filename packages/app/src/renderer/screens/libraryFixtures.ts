@@ -10,6 +10,8 @@ export const entry = (over: Partial<LibraryEntry> = {}): LibraryEntry => ({
   activeSchemeId: null,
   applied: null,
   nativeKeys: true,
+  shipsDefaults: true,
+  inSteam: true,
   hasCover: true,
   hasHeader: true,
   actionCount: 30,

@@ -5,10 +5,11 @@ import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { expect, test } from './helm';
 import {
+  applyInDrawer,
   AZERON_APP,
   CLOSE_AZERON_FIRST,
-  applyInDrawer,
   drawer,
+  editorApply,
   helldivers,
   keepEveryCheck,
   pill,
@@ -32,7 +33,7 @@ test.describe('the M4 screens', () => {
       'e2e-left',
       'e2e-right',
     ]);
-    await expect(helldivers(page)).toHaveAttribute('aria-label', /Not set up/);
+    await expect(helldivers(page)).toHaveAttribute('aria-label', /Defaults found · no scheme yet/);
     await expect(page.getByText('A Game Nobody Wrote Yet')).toBeVisible();
     // A game helmArray has no data for is set up on the Game screen (it said "Not supported yet"
     // until games could be added in the app).
@@ -40,7 +41,7 @@ test.describe('the M4 screens', () => {
       page.getByRole('button', { name: 'Set up A Game Nobody Wrote Yet' }),
     ).toBeVisible();
     // The helm-cover:// protocol served the file the Steam read found.
-    const cover = page.locator('.tile', { hasText: 'HELLDIVERS' }).locator('img.art');
+    const cover = page.locator('.tile', { hasText: 'Helldivers 2' }).locator('img.art');
     await expect(cover).toBeVisible();
     await expect
       .poll(() => cover.evaluate((img: HTMLImageElement) => img.naturalWidth))
@@ -56,7 +57,7 @@ test.describe('the M4 screens', () => {
     const { page } = helm;
     await startFrom(page, 'Xbox controller');
     await expect(page.getByRole('button', { name: 'Keep, I know' })).toHaveCount(0);
-    await page.getByRole('button', { name: 'Apply', exact: true }).click();
+    await editorApply(page).click();
     await expect(applyInDrawer(page)).toBeEnabled({ timeout: 3000 });
   });
 
@@ -73,17 +74,27 @@ test.describe('the M4 screens', () => {
     await startFrom(page, 'Xbox controller');
     // Nothing is flagged, so nothing is kept (see the test above).
     await expect(page.getByRole('button', { name: 'Keep, I know' })).toHaveCount(0);
-    await page.getByRole('button', { name: 'Apply', exact: true }).click();
+    await editorApply(page).click();
 
     await expect(drawer(page)).toBeVisible();
     await expect(applyInDrawer(page)).toBeEnabled();
     await expect(drawer(page).getByLabel('What is ready')).toContainText(
       'The Azeron app is closed.',
     );
-    await expect(drawer(page).getByLabel('Left Azeron')).toContainText('"Xbox controller"');
-    await expect(drawer(page).getByLabel('Right Azeron')).toContainText('"Xbox controller"');
+    // Each unit lists its buttons in the game's words, and each layout of the person's it removes:
+    // nothing wrote them that helmArray knows of, so each is said by its name.
+    await expect(drawer(page).getByLabel('Left Azeron')).toContainText('Index 3 · Interact');
+    await expect(drawer(page).getByLabel('Right Azeron')).toContainText('Thumb upper · Menu');
+    await expect(drawer(page).getByLabel('Right Azeron').locator('.kind-housekeeping')).toHaveText([
+      'Your layout “Default” is removed.',
+      'Your layout “Old layout” is removed.',
+    ]);
     await applyInDrawer(page).click();
     await expect(drawer(page).getByLabel('Result')).toContainText('Both units now run the layout.');
+    // The result says so too.
+    await expect(drawer(page).getByLabel('Result')).toContainText(
+      'The right unit runs the layout; your layout “Default” and your layout “Old layout” were removed.',
+    );
     await drawer(page).getByRole('button', { name: 'Close' }).click();
 
     // What the fake units hold: the scheme as the only slot, and it is the one they run.
@@ -101,7 +112,7 @@ test.describe('the M4 screens', () => {
     // Back in the Library the card says what is on the Azerons now; the data folder has it too.
     await page.getByRole('button', { name: 'Library' }).click();
     const card = page.getByLabel('On your Azerons now');
-    await expect(card).toContainText('HELLDIVERS™ 2 · Xbox controller');
+    await expect(card).toContainText('Helldivers 2 · Xbox controller');
     await expect(card).toContainText('Applied · Controller');
     expect(await schemeFiles(helm.dataDir)).toHaveLength(1);
     expect(await readdir(join(helm.dataDir, 'applied'))).toHaveLength(1);
@@ -129,7 +140,7 @@ test.describe('the M4 screens', () => {
 
     // The rest of what Helldivers 2 needs is kept, as the owner would in the real app.
     expect(await keepEveryCheck(page)).toBeGreaterThan(0);
-    await page.getByRole('button', { name: 'Apply', exact: true }).click();
+    await editorApply(page).click();
     await expect(applyInDrawer(page)).toBeEnabled();
     await applyInDrawer(page).click();
     await expect(drawer(page).getByLabel('Result')).toContainText('Both units now run the layout.');
@@ -157,7 +168,7 @@ test.describe('the M4 screens', () => {
     await helm.setProcesses([AZERON_APP]);
     await expect(page.getByText(CLOSE_AZERON_FIRST).first()).toBeVisible();
 
-    await page.getByRole('button', { name: 'Apply', exact: true }).click();
+    await editorApply(page).click();
     await expect(drawer(page).getByLabel('What is ready')).toContainText(CLOSE_AZERON_FIRST);
     await expect(applyInDrawer(page)).toBeDisabled();
 

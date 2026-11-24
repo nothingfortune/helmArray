@@ -4,13 +4,16 @@
 
 import type {
   AppState,
+  ApplyButtonChange,
   ApplyGame,
   ApplyGameRow,
   ApplyPreview,
   ApplyResult,
   ApplyUnitChange,
+  ReadyCheck,
 } from '../../shared/api';
 import { signalText } from '../screens/editor-view';
+import { positionName } from '../unit/layout';
 
 export type DrawerState =
   /** `notice`: why it is looking again (the scheme changed under the drawer). */
@@ -101,7 +104,11 @@ export function previewKey(state: AppState | null): string {
 // ------------------------------------------------------------------------------------- view
 
 export interface UnitLine {
-  kind: 'write' | 'delete' | 'same' | 'problem';
+  /**
+   * `button`: one button that changes, in the game's words; `housekeeping`: the unit's other
+   * layouts going, one muted line; `same`: nothing to do; `problem`: why it can't be done.
+   */
+  kind: 'button' | 'housekeeping' | 'same' | 'problem';
   text: string;
 }
 
@@ -131,7 +138,8 @@ export interface DrawerView {
   unavailable: string | null;
   /** Why the layout shown is not the one before (it changed since), else null. */
   notice: string | null;
-  checks: { ok: boolean; text: string }[];
+  /** Only what can fail or needs doing: the Azeron app, and anything not ready. */
+  checks: ReadyCheck[];
   sections: UnitSection[];
   /** The game's bindings that change, before Apply; null when none does. */
   game: GameSection | null;
@@ -151,44 +159,89 @@ export interface DrawerView {
   closable: boolean;
 }
 
-const slotName = (slot: { slot: number; name: string }) =>
-  slot.name === '' ? `Slot ${slot.slot}` : `Slot ${slot.slot} (${slot.name})`;
+/** What the stick does, in the words the side panel uses. */
+function stickWords(stick: NonNullable<ApplyButtonChange['stick']>): string {
+  switch (stick.mode) {
+    case 'pad-left':
+      return 'Xbox left stick';
+    case 'pad-right':
+      return 'Xbox right stick';
+    case 'mouse':
+      return 'Mouse movement';
+    case 'keys': {
+      const keys = (['up', 'left', 'down', 'right'] as const).flatMap((d) => {
+        const signal = stick.directions?.[d];
+        return signal === undefined ? [] : [signalText(signal)];
+      });
+      return keys.length === 0 ? 'sends nothing' : keys.join(' ');
+    }
+  }
+}
+
+/**
+ * One button that changes, as the canvas words it: "Middle 1 · Frame shift drive", "Index 5 ·
+ * Silent running · new" for a button that sent nothing before, "D-pad ↑ · cleared" for one that
+ * sends nothing now.
+ */
+export function buttonLine(button: ApplyButtonChange): string {
+  const where = positionName(button.position);
+  if (button.stick !== null) return `${where} · ${stickWords(button.stick)}`;
+  if (button.nowEmpty) return `${where} · cleared`;
+  const what =
+    button.actions.length > 0
+      ? button.actions.join(', ')
+      : button.sends === null
+        ? 'sends nothing'
+        : signalText(button.sends);
+  return button.wasEmpty ? `${where} · ${what} · new` : `${where} · ${what}`;
+}
+
+/**
+ * A layout Apply removes that isn't this scheme's own earlier copy, by name and, when the units'
+ * record says, its game: "Your layout “Xbox controller” from Helldivers 2 is removed."
+ */
+export function removedLine(layout: { name: string; game: string | null }): string {
+  const what = layout.name === '' ? 'A layout with no name' : `Your layout “${layout.name}”`;
+  return `${what}${layout.game === null ? '' : ` from ${layout.game}`} is removed.`;
+}
 
 export function unitSection(unit: ApplyUnitChange, azeronOpen: boolean): UnitSection {
   const title = unit.hand === 'left' ? 'Left Azeron' : 'Right Azeron';
   const base = { hand: unit.hand, title };
   if (azeronOpen) {
-    return { ...base, summary: 'Not looked at', lines: [] };
+    return { ...base, summary: 'Waiting for the Azeron app to close', lines: [] };
   }
   if (!unit.connected) return { ...base, summary: 'Not connected', lines: [] };
-  const lines: UnitLine[] = [];
-  if (unit.write) {
-    lines.push({
-      kind: 'write',
-      text: unit.write.overwrites
-        ? `${slotName(unit.write.overwrites)} is written over with "${unit.write.name}", then switched to.`
-        : `A new slot ${unit.write.slot} ("${unit.write.name}") is written, then switched to.`,
-    });
-  }
-  for (const gone of unit.deletes) {
-    lines.push({ kind: 'delete', text: `${slotName(gone)} is deleted.` });
-  }
+  const lines: UnitLine[] = unit.buttons.map((b) => ({ kind: 'button', text: buttonLine(b) }));
+  // Every layout that goes and isn't this scheme's own earlier copy (by identity, from main, never
+  // by name) is said, muted, one line each. A layout written over is never the scheme's own: the
+  // unit doesn't run it.
+  const gone = [
+    ...unit.deletes.filter((layout) => !layout.ownCopy),
+    ...(unit.write?.overwrites ? [{ ...unit.write.overwrites, game: null }] : []),
+  ];
+  for (const layout of gone) lines.push({ kind: 'housekeeping', text: removedLine(layout) });
   if (unit.problem !== null) lines.push({ kind: 'problem', text: unit.problem });
   if (!unit.write && unit.deletes.length === 0 && unit.problem === null) {
     lines.push({ kind: 'same', text: 'It already holds this layout.' });
   }
+  const n = unit.buttons.length;
   const summary =
     unit.problem !== null
       ? "Can't be done"
-      : unit.write
-        ? unit.inputsChanged === 1
-          ? '1 input changes'
-          : `${unit.inputsChanged} inputs change`
-        : unit.deletes.length > 0
-          ? 'Tidy up'
+      : n > 0
+        ? n === 1
+          ? '1 button'
+          : `${n} buttons`
+        : unit.write || unit.deletes.length > 0
+          ? 'No button changes'
           : 'No change';
   return { ...base, summary, lines };
 }
+
+/** What can fail or needs doing: the Azeron app (always), and any other check not ready. */
+const shownChecks = (checks: readonly ReadyCheck[]): ReadyCheck[] =>
+  checks.filter((c) => !c.ok || c.kind === 'azeron-app');
 
 const SET_WORD = { controller: 'Controller', keyboard: 'Keyboard and mouse' } as const;
 
@@ -286,7 +339,7 @@ export function drawerView(state: DrawerState): DrawerView {
       ...head,
       ...idle,
       notice: state.notice ?? null,
-      checks: preview.checks,
+      checks: shownChecks(preview.checks),
       sections,
       game,
       sheet: null,
@@ -300,7 +353,7 @@ export function drawerView(state: DrawerState): DrawerView {
       ...head,
       ...idle,
       progress: progressWords(preview),
-      checks: preview.checks,
+      checks: shownChecks(preview.checks),
       sections,
       game,
       sheet: null,

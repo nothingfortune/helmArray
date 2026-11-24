@@ -17,6 +17,8 @@ import {
 import { useLibrary } from './useLibrary';
 import { gameTarget, needsSetUp } from './gameTile';
 import type { GameTarget } from './game-model';
+import { sheetLine } from '../apply/bindSheet';
+import type { SheetLine } from '../apply/bindSheet';
 
 type Send = (event: FlowEvent) => void;
 type OpenGame = (target: GameTarget) => void;
@@ -38,12 +40,28 @@ function SearchIcon() {
   );
 }
 
-/** A portrait or header image, or the dashed placeholder when there is none (or it won't load). */
-function Art({ entry, kind }: { entry: LibraryEntry; kind: 'portrait' | 'header' }) {
+/**
+ * A portrait or header image, or the dashed placeholder when there is none (or it won't load).
+ * `inButton`: the art is inside the tile's button, whose name is the game's: there a portrait's
+ * "No cover" is drawn (CSS), not text the name doesn't hold. Elsewhere it is text.
+ */
+function Art({
+  entry,
+  kind,
+  inButton = false,
+}: {
+  entry: LibraryEntry;
+  kind: 'portrait' | 'header';
+  inButton?: boolean;
+}) {
   const [failed, setFailed] = useState(false);
   const there = kind === 'portrait' ? entry.hasCover : entry.hasHeader;
-  if (entry.appId === null || !there || failed)
+  if (entry.appId === null || !there || failed) {
+    if (kind === 'portrait' && inButton) {
+      return <span className="art-none" data-placeholder="No cover" aria-hidden="true" />;
+    }
     return <span className="art-none">{kind === 'portrait' ? 'No cover' : entry.name}</span>;
+  }
   return (
     <img className="art" src={coverUrl(entry.appId, kind)} alt="" onError={() => setFailed(true)} />
   );
@@ -67,16 +85,19 @@ function Choices({ entry, send }: { entry: LibraryEntry; send: Send }) {
   );
 }
 
-/** *Edit game*: the game's modes and actions, on the Game screen. */
+/**
+ * *Edit actions*: the game's actions and modes, on the Game screen. Named for what it opens, so it
+ * doesn't read as the scheme the tile opens.
+ */
 function EditGame({ entry, onOpenGame }: { entry: LibraryEntry; onOpenGame: OpenGame }) {
   return (
     <button
       type="button"
       className="btn ghost small"
-      aria-label={`Edit game: ${entry.name}`}
+      aria-label={`Edit actions: ${entry.name}`}
       onClick={() => onOpenGame(gameTarget(entry))}
     >
-      Edit game
+      Edit actions
     </button>
   );
 }
@@ -96,11 +117,12 @@ function Tile({
   onOpenGame: OpenGame;
 }) {
   const status = statusLine(entry, onUnits);
-  const body = (
+  const cover = (inButton: boolean) => (
     <span className={`cover${entry.hasCover ? '' : ' cover-empty'}`}>
-      <Art entry={entry} kind="portrait" />
+      <Art entry={entry} kind="portrait" inButton={inButton} />
     </span>
   );
+  const body = cover(true);
   const caption = (
     <>
       <div className="game-name">{entry.name}</div>
@@ -115,7 +137,7 @@ function Tile({
   if (needsSetUp(entry)) {
     return (
       <li className="tile unsupported">
-        {body}
+        {cover(false)}
         <div className="game-name">{entry.name}</div>
         <button
           type="button"
@@ -164,28 +186,37 @@ function Tile({
     );
   }
 
+  // The schemes list opens beside the cover (its anchor), so it never sits over its own tile.
   return (
     <li className="tile">
-      <button
-        type="button"
-        className="tile-button"
-        aria-label={label}
-        onClick={() => send({ type: 'tile', entry })}
-      >
-        {body}
-      </button>
-      {caption}
-      <EditGame entry={entry} onOpenGame={onOpenGame} />
       <Popover.Root>
+        <Popover.Anchor asChild>
+          <button
+            type="button"
+            className="tile-button"
+            aria-label={label}
+            onClick={() => send({ type: 'tile', entry })}
+          >
+            {body}
+          </button>
+        </Popover.Anchor>
+        {caption}
+        <EditGame entry={entry} onOpenGame={onOpenGame} />
         <Popover.Trigger asChild>
           <button type="button" className="btn ghost small" aria-label={`${entry.name} schemes`}>
             {entry.schemes.length > 1 ? `${entry.schemes.length} schemes` : 'Schemes'}
           </button>
         </Popover.Trigger>
         <Popover.Portal>
-          <Popover.Content className="popover" sideOffset={8} aria-label={`${entry.name} schemes`}>
+          <Popover.Content
+            className="popover"
+            side="right"
+            align="start"
+            sideOffset={8}
+            aria-label={`${entry.name} schemes`}
+          >
             <div className="choices">
-              <span className="hint">Pick one to apply</span>
+              <span className="hint">Open a scheme</span>
               {entry.schemes.map((scheme) => (
                 <button
                   key={scheme.id}
@@ -207,16 +238,67 @@ function Tile({
   );
 }
 
+/**
+ * What is still to set by hand in a game's controls, from the last apply's bind sheet: one line on
+ * the card, *Show* for the rows, *Done* once they are set.
+ */
+function SheetReminder({ line, onDone }: { line: SheetLine; onDone(gameId: string): void }) {
+  return (
+    <div className="current-sheet" role="status">
+      <span className="dot tone-warning" aria-hidden="true" />
+      <span>{line.text}</span>
+      <Popover.Root>
+        <Popover.Trigger asChild>
+          <button type="button" className="btn ghost small" aria-label="Show what to set">
+            Show
+          </button>
+        </Popover.Trigger>
+        <Popover.Portal>
+          <Popover.Content
+            className="popover sheet-popover"
+            sideOffset={8}
+            align="start"
+            aria-label={line.section.title}
+          >
+            <span className="hint">{line.section.title}</span>
+            {line.section.groups.map((group) => (
+              <div key={group.label ?? ''} className="sheet-group">
+                {group.label !== null && <span className="sheet-group-label">{group.label}</span>}
+                {group.lines.map((text) => (
+                  <p key={text} className="sheet-line">
+                    {text}
+                  </p>
+                ))}
+              </div>
+            ))}
+          </Popover.Content>
+        </Popover.Portal>
+      </Popover.Root>
+      <button
+        type="button"
+        className="btn ghost small"
+        aria-label="Done, they are set"
+        onClick={() => onDone(line.gameId)}
+      >
+        Done
+      </button>
+    </div>
+  );
+}
+
 /** The Library: what is current on the Azerons, then every game as a cover with one line. */
 export function Library({
   state,
   onOpenEditor,
   onOpenGame,
+  onSheetDone,
 }: {
   state: AppState | null;
   onOpenEditor: (schemeId: string) => void;
-  /** The Game screen: *Set up*, *Edit game* and *Add a game*. */
+  /** The Game screen: *Set up*, *Edit actions* and *Add a game*. */
   onOpenGame: OpenGame;
+  /** *Done* on what is still to set by hand in a game's controls (`state.sheets`). */
+  onSheetDone?(gameId: string): void;
 }) {
   const library = useLibrary();
   const [flow, setFlow] = useState<FlowState>(START);
@@ -250,6 +332,7 @@ export function Library({
   const held = heldSchemes(state);
   const shown = filterEntries(entries, query);
   const editing = card?.scheme ?? null;
+  const sheet = sheetLine(state?.sheets ?? [], card?.entry.gameId ?? null);
 
   return (
     <main className="screen library">
@@ -266,6 +349,9 @@ export function Library({
             <span className="eyebrow">On your Azerons now</span>
             <span className="current-title">{card ? card.title : 'Nothing yet'}</span>
             <span className="hint">{card ? card.detail : 'Pick a game below to start.'}</span>
+            {sheet !== null && onSheetDone !== undefined && (
+              <SheetReminder line={sheet} onDone={onSheetDone} />
+            )}
           </div>
           {card !== null && editing !== null && (
             <div className="row">

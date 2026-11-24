@@ -95,8 +95,19 @@ describe('the status line', () => {
     });
   });
 
-  it('says a known game with no scheme is not set up', () => {
-    expect(statusLine(entry(), NONE)).toEqual({ text: 'Not set up', tone: 'plain' });
+  it('says a known game with no scheme has none yet', () => {
+    // A game whose data has no binding of its own: nothing to start from but the actions.
+    expect(statusLine(entry({ shipsDefaults: false }), NONE)).toEqual({
+      text: 'No scheme yet',
+      tone: 'plain',
+    });
+  });
+
+  it('says a game with no scheme that ships its own bindings has defaults found', () => {
+    expect(statusLine(entry({ shipsDefaults: true }), NONE)).toEqual({
+      text: 'Defaults found · no scheme yet',
+      tone: 'plain',
+    });
   });
 
   it('a setup applied and unchanged since is Ready, with what it plays with', () => {
@@ -192,9 +203,23 @@ describe('searching and counting', () => {
     expect(filterEntries(all, 'zzz')).toEqual([]);
   });
 
-  it('counts the games with a scheme', () => {
-    expect(summary(all)).toBe('From Steam · 0 with a scheme');
-    expect(summary([entry({ schemes: [XBOX] }), ...all])).toBe('From Steam · 1 with a scheme');
+  it('counts the games with a scheme, from Steam when Steam lists every one', () => {
+    const steam = all.map((e) => ({ ...e, inSteam: true }));
+    expect([
+      summary(steam),
+      summary([entry({ schemes: [XBOX], inSteam: true }), ...steam]),
+    ]).toEqual(['From Steam · 0 with a scheme', 'From Steam · 1 with a scheme']);
+  });
+
+  it('does not say From Steam for a game Steam does not list', () => {
+    // The built-in game alone, Steam having none, is not "From Steam"; nor is a list with one.
+    expect([
+      summary([entry({ inSteam: false })]),
+      summary([
+        entry({ inSteam: false, schemes: [XBOX] }),
+        entry({ name: 'Everspace 2', appId: '1', gameId: null, inSteam: true }),
+      ]),
+    ]).toEqual(['1 game · 0 with a scheme', '2 games · 1 with a scheme']);
   });
 });
 
@@ -240,6 +265,13 @@ describe('the card of what is current', () => {
         'Applied · Controller',
         { left: XBOX.id, right: XBOX.id },
       ]);
+    });
+
+    it('says how many changes the scheme the units hold has not had applied, as the tile does', () => {
+      const edited = entry({ schemes: [XBOX, KEYS], applied: applied(XBOX.id, 2) });
+      expect(currentCard([edited], state(holds(XBOX)))?.detail).toBe(
+        'Applied · Controller · 2 changes not applied',
+      );
     });
 
     it('words it as applied, though the scheme has been edited since to drop its Azerons', () => {
@@ -311,6 +343,22 @@ describe('the card of what is current', () => {
     expect(card?.detail).toBe('No scheme picked');
     expect(card?.entry.name).toBe('Helldivers 2');
     expect(chosenScheme(noneActive)).toBe(XBOX);
+  });
+});
+
+describe('the card, for a unit last written with a game since deleted', () => {
+  it('never takes a game added later under the same id for it, and names it as it was', () => {
+    const fresh = entry({ schemes: [KEYS], activeSchemeId: KEYS.id });
+    const deleted = holds(XBOX, 100, { gameDeleted: true, gameName: 'Helldivers 2' });
+    const card = currentCard([fresh], {
+      activeGameId: 'helldivers2',
+      onUnits: units(deleted, holds(KEYS, 50)),
+    });
+    expect([card?.applied, card?.scheme, card?.detail]).toEqual([
+      true,
+      KEYS,
+      'Applied · Keys · Left unit: Helldivers 2 · Xbox controller',
+    ]);
   });
 });
 

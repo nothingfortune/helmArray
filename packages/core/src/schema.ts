@@ -5,6 +5,7 @@
 import { clone } from './clone';
 import type { AppSettings, Game, Scheme } from './model';
 import type { Plan, UnitsHeld } from './plan';
+import type { Baselines } from './sheets';
 import { AZERONS_ONLY, DEFAULT_TURBO_INTERVAL } from './model';
 
 /** Rules that no longer exist: the editor's findings about the game's fixed pad bindings (M4). */
@@ -20,6 +21,11 @@ export interface StoredKinds {
   applied: Plan;
   /** What each unit was last written with (units.json). */
   units: UnitsHeld;
+  /**
+   * The bindings each game holds as far as helmArray knows, where they differ from what it ships
+   * (sheets.json). What is still to set by hand is worked out from them.
+   */
+  sheets: Baselines;
 }
 export type StoredKind = keyof StoredKinds;
 
@@ -63,6 +69,16 @@ export const MIGRATIONS: Readonly<Record<StoredKind, readonly Migration[]>> = {
   game: [],
   settings: [],
   units: [],
+  sheets: [
+    // 1 → 2: a baseline per game, not the reminders themselves. A version-1 file held reminder
+    // rows merged apply by apply; what the game holds can't be told from them faithfully (their
+    // `from` was the apply before, not the game), so they are dropped, and counted for the log.
+    // With no baseline a game holds what it ships, so nothing still to set is ever hidden.
+    (doc) => {
+      const games = Array.isArray(doc['games']) ? doc['games'] : [];
+      return { games: [], droppedReminders: games.length };
+    },
+  ],
   applied: [
     // 1 → 2: game bindings. A plan saved before them claims none; its bind sheet rows (key output
     // only, so keys) say which set they are in, and that the shipped binding wasn't recorded.
@@ -95,6 +111,7 @@ const NAMES: Record<StoredKind, string> = {
   settings: 'settings file',
   applied: 'applied plan',
   units: 'record of what the units hold',
+  sheets: 'list of bindings to set in the game',
 };
 
 /** Run the migrations from `version` up to the current one. Exposed for tests. */

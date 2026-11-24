@@ -139,4 +139,40 @@ describe('the devices gate', () => {
     await gate.azeronRunning(false);
     expect(calls).toEqual(['start', 'stop', 'start']);
   });
+
+  describe('with a service that can pause', () => {
+    const pausable = () => {
+      const devices = service();
+      return {
+        ...devices,
+        pause: async () => void devices.calls.push('pause'),
+      };
+    };
+
+    it('pauses it, keeping the units it lets go, when the Azeron app opens', async () => {
+      const devices = pausable();
+      const gate = createDevicesGate(devices);
+      await gate.azeronRunning(false);
+      await gate.azeronRunning(true);
+      expect(devices.calls).toEqual(['start', 'pause']);
+    });
+
+    it('pauses it at the first look when the Azeron app is already open, and starts it once closed', async () => {
+      const devices = pausable();
+      const gate = createDevicesGate(devices);
+      await gate.azeronRunning(true);
+      await gate.azeronRunning(true);
+      await gate.azeronRunning(false);
+      expect(devices.calls).toEqual(['pause', 'start']);
+    });
+
+    it('stops a paused service for good when the app quits', async () => {
+      const devices = pausable();
+      const gate = createDevicesGate(devices);
+      await gate.azeronRunning(true);
+      await gate.shutdown();
+      await gate.azeronRunning(false);
+      expect(devices.calls).toEqual(['pause', 'stop begins', 'stop ends']);
+    });
+  });
 });

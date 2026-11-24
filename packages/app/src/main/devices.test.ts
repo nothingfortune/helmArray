@@ -600,4 +600,72 @@ describe('the devices service', () => {
       expect(bench.opened).toEqual(['left-path', 'left-path']);
     });
   });
+
+  // The Azeron app is open: every unit is let go, but a unit still plugged in is still there. The
+  // bus is only listed (no unit is opened, and nothing is sent), so a unit unplugged meanwhile is
+  // seen to go.
+  describe('pausing for the Azeron app', () => {
+    const pausedOnes = () =>
+      devices.snapshot().units.map((u) => [u.path, u.state, u.identity?.deviceId]);
+
+    it('lets every unit go and keeps each as paused, with who it is', async () => {
+      bench.plug('left-path', new FakeUnit({ deviceId: LEFT }));
+      bench.plug('right-path', new FakeUnit({ deviceId: RIGHT }));
+      devices.start();
+      await settle();
+      await devices.pause();
+      expect([[...bench.closed].sort(), pausedOnes()]).toEqual([
+        ['left-path', 'right-path'],
+        [
+          ['left-path', 'paused', LEFT],
+          ['right-path', 'paused', RIGHT],
+        ],
+      ]);
+    });
+
+    it('never opens a unit or talks to one while paused', async () => {
+      const unit = new FakeUnit({ deviceId: LEFT });
+      bench.plug('left-path', unit);
+      devices.start();
+      await settle();
+      await devices.pause();
+      const opened = bench.opened.length;
+      const received = unit.received.length;
+      bench.plug('new-path', new FakeUnit({ deviceId: RIGHT }));
+      await vi.advanceTimersByTimeAsync(POLL_MS * 5);
+      expect([bench.opened.length, unit.received.length]).toEqual([opened, received]);
+    });
+
+    it('drops a unit unplugged while paused, and shows one plugged in, not yet known', async () => {
+      bench.plug('left-path', new FakeUnit({ deviceId: LEFT }));
+      devices.start();
+      await settle();
+      await devices.pause();
+      bench.unplug('left-path');
+      bench.plug('new-path', new FakeUnit({ deviceId: RIGHT }));
+      await vi.advanceTimersByTimeAsync(POLL_MS + 1);
+      expect(pausedOnes()).toEqual([['new-path', 'paused', undefined]]);
+    });
+
+    it('stops listing when stopped, and lists nothing then', async () => {
+      bench.plug('left-path', new FakeUnit({ deviceId: LEFT }));
+      devices.start();
+      await settle();
+      await devices.pause();
+      await devices.stop();
+      const listed = bench.listed;
+      await vi.advanceTimersByTimeAsync(POLL_MS * 5);
+      expect([bench.listed, devices.snapshot().units]).toEqual([listed, []]);
+    });
+
+    it('opens and reads the units again when started', async () => {
+      bench.plug('left-path', new FakeUnit({ deviceId: LEFT }));
+      devices.start();
+      await settle();
+      await devices.pause();
+      devices.start();
+      await settle();
+      expect(pausedOnes()).toEqual([['left-path', 'ready', LEFT]]);
+    });
+  });
 });

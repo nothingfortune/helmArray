@@ -1,7 +1,7 @@
 // What the main process tells the windows, and what a window may ask of it. Plain data only:
 // it crosses IPC by structured clone. The preload exposes `HelmApi` as `window.helm`.
 
-import type { BindingSet, Game, Scheme, Signal } from '@helmarray/core';
+import type { Game, KeptSheet, Scheme, SheetRow, Signal, StickBehaviour } from '@helmarray/core';
 
 export type Hand = 'left' | 'right';
 
@@ -32,8 +32,10 @@ export interface LibrarySchemeRef {
  * Plain data: no file paths ever reach a window; covers are fetched by `coverUrl`.
  */
 export interface LibraryEntry {
-  /** Steam's name for the game, or the known game's own name when Steam doesn't list it. */
+  /** helmArray's name for a game it knows ("Helldivers 2"), else Steam's. */
   name: string;
+  /** Steam lists the game as installed. */
+  inSteam: boolean;
   /** The Steam app id, or null for a game added by hand that isn't on Steam. */
   appId: string | null;
   /** The id of helmArray's game definition, or null when helmArray doesn't know the game. */
@@ -55,6 +57,8 @@ export interface LibraryEntry {
   } | null;
   /** True when some action has a key the game ships with: "Game's own keys" can be offered. */
   nativeKeys: boolean;
+  /** True when some action has a key or an Xbox control the game ships it on: defaults found. */
+  shipsDefaults: boolean;
   /** Whether a portrait cover and a header image can be had for `coverUrl`. */
   hasCover: boolean;
   hasHeader: boolean;
@@ -74,7 +78,11 @@ export interface DeviceChip {
   hand: Hand | 'unknown';
   /** The unit's permanent id, so a question can name the unit it is about. */
   unitId: number | null;
-  state: 'connecting' | 'ready' | 'failed';
+  /**
+   * `paused`: plugged in, and let go of while the Azeron app is open: not talked to until it
+   * closes, so nothing of what it holds is known.
+   */
+  state: 'connecting' | 'ready' | 'failed' | 'paused';
   /** Firmware once the unit has answered. */
   firmware: number | null;
   /** Why it failed, in one plain sentence. */
@@ -88,7 +96,8 @@ export interface DeviceChip {
   running: number | null;
 }
 
-export type SyncTone = 'ok' | 'warning' | 'error';
+/** `plain`: nothing to act on. */
+export type SyncTone = 'ok' | 'warning' | 'error' | 'plain';
 
 /** The sync pill: its words and its colour. Read from the units, never inferred. */
 export interface SyncPill {
@@ -96,6 +105,16 @@ export interface SyncPill {
   tone: SyncTone;
   /** When a unit differs: which, and how much of it. For a tooltip. */
   detail?: string;
+  /**
+   * The active scheme's changes not applied, when it has any, whatever the label says (the Azeron
+   * app being open says first): the Editor's *Apply 3*. Counted as the person made them.
+   */
+  changes?: number;
+  /**
+   * The Azeron app is open and the active setup uses a unit: what it blocks is this setup. The band
+   * under the header says so only then; a setup with no Azeron is not blocked.
+   */
+  paused?: true;
 }
 
 /** A question the app must ask to tell the hands apart, or null. */
@@ -116,6 +135,10 @@ export interface UnitHolds {
   gameId: string;
   /** The scheme's name when it was applied. */
   schemeName: string;
+  /** The game's name when it was applied, when the record has it. */
+  gameName?: string;
+  /** The game was deleted since: history, never the game of the same id added later. */
+  gameDeleted?: true;
   /** What that setup played with when it was applied. */
   devices: Scheme['devices'];
   output: Scheme['output'];
@@ -137,12 +160,59 @@ export interface AppState {
   activeSchemeId: string | null;
   /** What each unit holds, by the apply that last wrote it; null for one never written. */
   onUnits: { left: UnitHolds | null; right: UnitHolds | null };
+  /**
+   * What is still to be set by hand in each game's own controls, after the applies that said so,
+   * the game applied last first; kept on disk until *Done* (`dismissSheet`).
+   */
+  sheets: KeptSheet[];
 }
 
 /** One line of "what's ready" in the Apply drawer: a check or a cross, with one sentence. */
 export interface ReadyCheck {
   ok: boolean;
   text: string;
+  /**
+   * What it is about: the Azeron app (shown always: it is the one thing the person may have to
+   * do), a unit, the scheme's errors, or another apply running. The drawer shows the others only
+   * when they are not ready.
+   */
+  kind?: 'azeron-app' | 'unit' | 'scheme' | 'busy';
+}
+
+/**
+ * One button of a unit (or its stick) that Apply changes, as facts: the drawer words them in the
+ * game's terms ("Middle 1 · Frame shift drive · new"). Read from what the unit holds now against
+ * the layout, so it is what changes on the unit, whatever was applied before.
+ */
+export interface ApplyButtonChange {
+  /** The position on the unit: `middle_1`, `dpad_up`, `stick`. */
+  position: string;
+  /** The game's actions it carries once applied, by name, each once, in mode then press order. */
+  actions: string[];
+  /** What its tap sends once applied (for a button with no action), or null. */
+  sends: Signal | null;
+  /** For the stick: what it does once applied. Null for a button. */
+  stick: (StickBehaviour & { angle?: number; invertX?: boolean }) | null;
+  /** It sent nothing before: the action on it is new. Never for the stick. */
+  wasEmpty: boolean;
+  /** It sends nothing once applied: cleared. Never for the stick. */
+  nowEmpty: boolean;
+}
+
+/**
+ * A layout Apply removes from a unit, and what is known of it. Whether it is this scheme's own
+ * earlier copy is told from the units' record (the scheme last written to the unit) and the unit
+ * read as running it, never from its name: names repeat across games ("Xbox controller") and a
+ * unit keeps 19 characters of one.
+ */
+export interface RemovedLayout {
+  slot: number;
+  /** Its name on the unit; may be empty. */
+  name: string;
+  /** This scheme's own earlier copy, by the record and the read: nothing of the person's is lost. */
+  ownCopy: boolean;
+  /** The game the record says it is of, when the unit is read as running it; else null. */
+  game: string | null;
 }
 
 /** What Apply would do to one unit. */
@@ -159,32 +229,27 @@ export interface ApplyUnitChange {
   differs: boolean;
   /** How many of the unit's inputs differ. */
   inputsChanged: number;
+  /**
+   * The buttons that change, in the unit's order: those that differ and are not empty both
+   * before and after (a button that sent nothing and still sends nothing is no change to anyone).
+   */
+  buttons: ApplyButtonChange[];
   /** The slot written, or null when the unit already holds the layout. */
   write: { slot: number; name: string; overwrites: { slot: number; name: string } | null } | null;
   /** The slots deleted afterwards, each by name (empty when the unit has no other). */
-  deletes: { slot: number; name: string }[];
+  deletes: RemovedLayout[];
   /** The above in words, one line each. */
   changes: string[];
   /** Why this unit can't be done at all, in one sentence, or null. */
   problem: string | null;
 }
 
-/** One of the game's bindings Apply changes. Words are the drawer's: these are the facts. */
-export interface ApplyGameRow {
-  /** The game's keyboard bindings or its controller bindings. */
-  set: BindingSet;
-  mode: string;
-  modeName: string;
-  action: string;
-  actionName: string;
-  /** What the action goes on; null: on nothing (it comes off what it is on). */
-  to: Signal | null;
-  /**
-   * What the game has it on now, as far as helmArray knows: what the setup applied to it last
-   * says, else what the game ships. Null: on nothing.
-   */
-  from: Signal | null;
-}
+/**
+ * One of the game's bindings Apply changes: the set, the mode and action (with their names), what
+ * it goes on and what it was on. Words are the drawer's: these are the facts. The same row is kept
+ * as the reminder after Apply (`SheetRow`, core).
+ */
+export type ApplyGameRow = SheetRow;
 
 /** The game's half of Apply. */
 export interface ApplyGame {
@@ -201,6 +266,8 @@ export interface ApplyGame {
 export interface ApplyPreview {
   schemeId: string;
   schemeName: string;
+  /** The scheme's game; empty when the scheme could not be worked out. */
+  gameId: string;
   gameName: string;
   /**
    * Stands for the layout this preview is of. `apply` takes it back and writes only that layout:
@@ -297,6 +364,8 @@ export interface HelmApi {
    * schemes are kept.
    */
   deleteGame(gameId: string): Promise<void>;
+  /** *Done*: the game's bindings still to set by hand are set; its reminder goes. */
+  dismissSheet(gameId: string): Promise<void>;
 }
 
 /** IPC channel names, shared by main and preload. */
@@ -319,4 +388,5 @@ export const CHANNELS = {
   apply: 'helm:apply',
   saveGame: 'helm:save-game',
   deleteGame: 'helm:delete-game',
+  dismissSheet: 'helm:dismiss-sheet',
 } as const;

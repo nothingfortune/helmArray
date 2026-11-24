@@ -58,3 +58,11 @@ which step and what the app showed, and attach the exchange log (Settings → Ex
 
 - [ ] Put both units back on your own layouts if anything was written.
 - [ ] File what failed, with the log, before calling the milestone done.
+
+## v1 · M4: the Azeron app open with helmArray running
+
+13. [ ] With both units plugged in and helmArray running, open the Azeron app and use it for a
+        minute: read a profile, switch profiles with the profile button. The units behave as
+        they do without helmArray, the Azeron app sees and reads them normally, and helmArray
+        shows both chips as paused with the pill saying *Azeron app is open*. (helmArray only
+        lists the Azeron units on the bus while the app is open; it opens and sends nothing.)

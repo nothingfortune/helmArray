@@ -73,7 +73,7 @@ describe('an action deleted from the game, in a setup that used it', () => {
         control: 'L.index_1',
         mode: 'fight',
         action: 'reload',
-        message: 'The action on this button was deleted from Arena, so pressing it does nothing.',
+        message: "This button's action was deleted from Arena.",
       },
     ]);
   });
@@ -139,7 +139,7 @@ describe('an action deleted from the game, in a setup that used it', () => {
       map: { fight: { 'key.R': { tap: 'reload' } }, drive: {} },
     };
     expect(deleted(scheme, without('reload')).map((f) => [f.control, f.message])).toEqual([
-      ['key.R', 'The action on this key was deleted from Arena, so pressing it does nothing.'],
+      ['key.R', "This key's action was deleted from Arena."],
     ]);
   });
 
@@ -157,7 +157,7 @@ describe('an action deleted from the game, in a setup that used it', () => {
         severity: 'warning',
         control: 'L.ring_1',
         action: 'honk',
-        message: 'The action on this button was deleted from Arena, so pressing it does nothing.',
+        message: "This button's action was deleted from Arena.",
       },
     ]);
   });

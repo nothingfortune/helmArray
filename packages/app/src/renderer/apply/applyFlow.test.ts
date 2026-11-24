@@ -3,6 +3,7 @@ import type {
   AppState,
   ApplyGameRow,
   ApplyPreview,
+  ApplyButtonChange,
   ApplyResult,
   ApplyUnitChange,
 } from '../../shared/api';
@@ -17,16 +18,32 @@ import {
 } from './applyFlow';
 import type { DrawerState } from './applyFlow';
 
+/** A button Apply changes, as main sends it: the Reload on middle 1 by default. */
+const button = (over: Partial<ApplyButtonChange> = {}): ApplyButtonChange => ({
+  position: 'middle_1',
+  actions: ['Reload'],
+  sends: { kind: 'pad', control: 'X' },
+  stick: null,
+  wasEmpty: false,
+  nowEmpty: false,
+  ...over,
+});
+
 const unit = (over: Partial<ApplyUnitChange> = {}): ApplyUnitChange => ({
   hand: 'left',
   used: true,
   connected: true,
   differs: true,
   inputsChanged: 3,
+  buttons: [
+    button(),
+    button({ position: 'index_5', actions: ['Silent running'], wasEmpty: true }),
+    button({ position: 'dpad_up', actions: [], sends: null, nowEmpty: true }),
+  ],
   write: { slot: 1, name: 'Main', overwrites: null },
   deletes: [
-    { slot: 0, name: 'Default' },
-    { slot: 2, name: '' },
+    { slot: 0, name: 'Default', ownCopy: false, game: null },
+    { slot: 2, name: '', ownCopy: false, game: null },
   ],
   changes: [],
   problem: null,
@@ -36,14 +53,16 @@ const unit = (over: Partial<ApplyUnitChange> = {}): ApplyUnitChange => ({
 const preview = (over: Partial<ApplyPreview> = {}): ApplyPreview => ({
   schemeId: 'skiff-main',
   schemeName: 'Main',
+  gameId: 'skiff',
   gameName: 'Skiff',
   fingerprint: 'f1',
   ready: true,
   azeronOpen: false,
   busy: false,
   checks: [
-    { ok: true, text: 'The Azeron app is closed.' },
-    { ok: true, text: 'The scheme has no errors.' },
+    { ok: true, text: 'The Azeron app is closed.', kind: 'azeron-app' },
+    { ok: true, text: 'The left Azeron is connected.', kind: 'unit' },
+    { ok: true, text: 'The scheme has no errors.', kind: 'scheme' },
   ],
   anyChange: true,
   left: unit(),
@@ -72,7 +91,7 @@ const FAILED: ApplyResult = {
     {
       hand: 'left',
       status: 'applied',
-      message: 'The left unit runs the layout in slot 1.',
+      message: 'The left unit runs the layout.',
       slot: 1,
     },
     {
@@ -159,7 +178,7 @@ describe('the Apply drawer flow', () => {
     expect(view.result?.ok).toBe(false);
     expect(view.result?.headline).toBe(FAILED.message);
     // The unit that did go through is said too; the failure is not said twice.
-    expect(view.result?.lines).toEqual(['The left unit runs the layout in slot 1.']);
+    expect(view.result?.lines).toEqual(['The left unit runs the layout.']);
     expect(view.apply).toEqual({ label: 'Try again', disabled: false });
     expect(reduce(done, { type: 'retry' })).toBe(START);
   });
@@ -383,59 +402,114 @@ describe('a setup with no Azeron, or the left one only', () => {
 });
 
 describe('what changes on a unit', () => {
-  it('names the slot written and the slots deleted, by name', () => {
+  it("lists each button that changes in the game's words, and counts buttons", () => {
     expect(unitSection(unit(), false)).toEqual({
       hand: 'left',
       title: 'Left Azeron',
-      summary: '3 inputs change',
+      summary: '3 buttons',
       lines: [
-        { kind: 'write', text: 'A new slot 1 ("Main") is written, then switched to.' },
-        { kind: 'delete', text: 'Slot 0 (Default) is deleted.' },
-        { kind: 'delete', text: 'Slot 2 is deleted.' },
+        { kind: 'button', text: 'Middle 1 · Reload' },
+        { kind: 'button', text: 'Index 5 · Silent running · new' },
+        { kind: 'button', text: 'D-pad ↑ · cleared' },
+        { kind: 'housekeeping', text: 'Your layout “Default” is removed.' },
+        { kind: 'housekeeping', text: 'A layout with no name is removed.' },
       ],
     });
   });
 
-  it('says a slot is written over, by its name, when there is no free one', () => {
-    const section = unitSection(
-      unit({ write: { slot: 3, name: 'Main', overwrites: { slot: 3, name: 'Old' } } }),
+  it('says one button in the singular, for a drag onto one empty button', () => {
+    const one = unit({
+      buttons: [button({ position: 'middle_2', wasEmpty: true })],
+      deletes: [],
+    });
+    expect(unitSection(one, false)).toMatchObject({
+      summary: '1 button',
+      lines: [{ kind: 'button', text: 'Middle 2 · Reload · new' }],
+    });
+  });
+
+  it('names every action on a button, and what a button with none sends', () => {
+    const lines = unitSection(
+      unit({
+        buttons: [
+          button({ actions: ['Fire', 'Map'] }),
+          button({ position: 'middle_2', actions: [], sends: { kind: 'pad', control: 'Y' } }),
+        ],
+        deletes: [],
+      }),
       false,
-    );
-    expect(section.lines[0]?.text).toBe(
-      'Slot 3 (Old) is written over with "Main", then switched to.',
-    );
+    ).lines;
+    expect(lines.map((l) => l.text)).toEqual(['Middle 1 · Fire, Map', 'Middle 2 · Xbox Y']);
   });
 
-  it('says one input in the singular', () => {
-    expect(unitSection(unit({ inputsChanged: 1 }), false).summary).toBe('1 input changes');
+  it('says what the stick does once applied', () => {
+    const stick = (mode: 'pad-left' | 'mouse') =>
+      button({ position: 'stick', actions: [], sends: null, stick: { mode } });
+    const lines = unitSection(
+      unit({ buttons: [stick('pad-left'), stick('mouse')], deletes: [] }),
+      false,
+    ).lines;
+    expect(lines.map((l) => l.text)).toEqual(['Stick · Xbox left stick', 'Stick · Mouse movement']);
   });
 
-  it('says a unit already holding the layout has no change, or only a tidy up', () => {
-    const same = unit({ differs: false, inputsChanged: 0, write: null, deletes: [] });
+  it('says a unit already holding the layout has no change, or no button change', () => {
+    const same = unit({ differs: false, inputsChanged: 0, buttons: [], write: null, deletes: [] });
     expect(unitSection(same, false)).toMatchObject({
       summary: 'No change',
       lines: [{ kind: 'same', text: 'It already holds this layout.' }],
     });
-    expect(unitSection({ ...same, deletes: [{ slot: 4, name: 'Spare' }] }, false).summary).toBe(
-      'Tidy up',
-    );
+    expect(
+      unitSection(
+        { ...same, deletes: [{ slot: 4, name: 'Spare', ownCopy: false, game: null }] },
+        false,
+      ),
+    ).toEqual({
+      hand: 'left',
+      title: 'Left Azeron',
+      summary: 'No button changes',
+      lines: [{ kind: 'housekeeping', text: 'Your layout “Spare” is removed.' }],
+    });
   });
 
-  it('says a unit that is not connected, or was not looked at, has nothing to show', () => {
+  it('says a unit that is not connected, or waits for the Azeron app, has nothing to show', () => {
     expect(unitSection(unit({ connected: false }), false)).toMatchObject({
       summary: 'Not connected',
       lines: [],
     });
     expect(unitSection(unit({ connected: false }), true)).toMatchObject({
-      summary: 'Not looked at',
+      summary: 'Waiting for the Azeron app to close',
       lines: [],
     });
   });
 
   it('shows why a unit cannot be done', () => {
-    const section = unitSection(unit({ write: null, deletes: [], problem: 'No room.' }), false);
+    const section = unitSection(
+      unit({ buttons: [], write: null, deletes: [], problem: 'No room.' }),
+      false,
+    );
     expect(section.summary).toBe("Can't be done");
     expect(section.lines).toEqual([{ kind: 'problem', text: 'No room.' }]);
+  });
+});
+
+describe('what is ready, as the drawer shows it', () => {
+  it('shows only what can fail or needs doing: the Azeron app always, the rest when not ready', () => {
+    expect(drawerView(ready()).checks).toEqual([
+      { ok: true, text: 'The Azeron app is closed.', kind: 'azeron-app' },
+    ]);
+  });
+
+  it('shows every check that is not ready', () => {
+    const checks = [
+      {
+        ok: false,
+        text: 'Close the Azeron app first: it talks to the units too.',
+        kind: 'azeron-app' as const,
+      },
+      { ok: false, text: "The right Azeron isn't connected.", kind: 'unit' as const },
+      { ok: true, text: 'The left Azeron is connected.', kind: 'unit' as const },
+    ];
+    expect(drawerView(ready({ ready: false, checks })).checks).toEqual([checks[0], checks[1]]);
   });
 });
 
@@ -467,6 +541,7 @@ describe('when to look again', () => {
     activeGameId: null,
     activeSchemeId: null,
     onUnits: { left: null, right: null },
+    sheets: [],
     ...over,
   });
 
@@ -519,7 +594,7 @@ describe('when to look again', () => {
       sync: {
         label: 'Left unit differs',
         tone: 'error',
-        detail: 'Left unit: 3 inputs not as applied.',
+        detail: 'Left unit: 3 buttons not as applied.',
       },
     });
     expect(previewKey(moved)).not.toBe(previewKey(state()));
@@ -528,5 +603,51 @@ describe('when to look again', () => {
   it('looks again when a unit is told which hand it is', () => {
     const asked = state({ question: { kind: 'press', prompt: 'Unplug your left Azeron.' } });
     expect(previews([asked, state()])).toBe(1);
+  });
+});
+
+// What main says of each layout Apply removes (by identity: `layoutIdentity`), and the line the
+// drawer gives it. Every one that isn't the scheme's own earlier copy is said, whatever its name.
+describe('the layouts a unit loses, said', () => {
+  const removing = (deletes: ApplyUnitChange['deletes']) =>
+    unitSection(unit({ buttons: [], deletes }), false)
+      .lines.filter((l) => l.kind === 'housekeeping')
+      .map((l) => l.text);
+
+  it.each([
+    ['its own earlier copy', { name: 'Main', ownCopy: true, game: 'Skiff' }, []],
+    [
+      'another scheme of the same game, same name',
+      { name: 'Main', ownCopy: false, game: 'Skiff' },
+      ['Your layout “Main” from Skiff is removed.'],
+    ],
+    [
+      'another game, same name',
+      { name: 'Xbox controller', ownCopy: false, game: 'Everspace 2' },
+      ['Your layout “Xbox controller” from Everspace 2 is removed.'],
+    ],
+    [
+      'no record, or one the unit does not agree with',
+      { name: 'Main', ownCopy: false, game: null },
+      ['Your layout “Main” is removed.'],
+    ],
+    [
+      'a layout with no name',
+      { name: '', ownCopy: false, game: null },
+      ['A layout with no name is removed.'],
+    ],
+  ] as const)('%s', (_, layout, lines) => {
+    expect(removing([{ slot: 1, ...layout }])).toEqual(lines);
+  });
+
+  it('says a layout written over, which the unit was not running, by its name', () => {
+    const over = unit({
+      buttons: [],
+      write: { slot: 3, name: 'Main', overwrites: { slot: 3, name: 'Old' } },
+      deletes: [],
+    });
+    expect(unitSection(over, false).lines.map((l) => l.text)).toEqual([
+      'Your layout “Old” is removed.',
+    ]);
   });
 });

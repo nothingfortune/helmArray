@@ -138,7 +138,7 @@ describe('key-collision: two actions live at once on the same key', () => {
       expect.objectContaining({ severity: 'error', control: 'L.index_4', mode: 'fight' }),
     ]);
     expect(found(plan, 'key-collision')[0]?.message).toBe(
-      'In Fighting, Heal and Pause are both on Insert: the game does them at once.',
+      'Heal and Pause are both on Insert in Fighting: one press does both.',
     );
   });
 
@@ -233,8 +233,8 @@ describe('sends-nothing: a button whose action sends nothing', () => {
   it("is an error for an action on a control of a device the setup doesn't use", () => {
     const plan = run(keys({}, { fight: { 'key.W': { tap: 'heal' }, 'pad.A': { tap: 'pause' } } }));
     expect(found(plan, 'sends-nothing').map((f) => [f.control, f.message])).toEqual([
-      ['key.W', "Heal is on a control this scheme doesn't use, so pressing it does nothing."],
-      ['pad.A', "Pause is on a control this scheme doesn't use, so pressing it does nothing."],
+      ['key.W', "Heal is on a control this scheme doesn't use."],
+      ['pad.A', "Pause is on a control this scheme doesn't use."],
     ]);
   });
 
@@ -276,8 +276,26 @@ describe('missing-required: a required action on no button', () => {
         severity: 'error',
         action: 'boost',
         mode: 'fight',
-        message: 'Boost is needed to play Fighting, and it is on no button.',
+        message: "Boost isn't on a button in Fighting.",
       },
+    ]);
+  });
+
+  it('names no mode for a game that has one: it has no name the player knows', () => {
+    const oneMode: Game = {
+      ...game,
+      modes: [{ id: 'fight', name: 'Default' }],
+      actions: game.actions.filter((a) => a.mode === 'fight'),
+    };
+    const scheme = keys();
+    delete scheme.map['fight']?.['L.index_2'];
+    const plan = resolve(
+      { ...scheme, map: { fight: scheme.map['fight'] ?? {} } },
+      oneMode,
+      BUILT_IN_DEVICES,
+    );
+    expect(found(plan, 'missing-required').map((f) => f.message)).toEqual([
+      "Boost isn't on a button.",
     ]);
   });
 
@@ -397,8 +415,7 @@ describe('stick-no-directions: a key-mode stick with no direction keys sends not
       expect.objectContaining({
         severity: 'error',
         control: 'L.stick',
-        message:
-          'The left stick sends nothing: give its directions keys or set it to a controller stick.',
+        message: 'The left stick sends nothing.',
       }),
     ]);
   });

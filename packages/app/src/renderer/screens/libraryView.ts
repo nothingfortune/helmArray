@@ -75,7 +75,14 @@ export function heldSchemes(state: Pick<AppState, 'onUnits'> | null): Set<string
 export function statusLine(entry: LibraryEntry, onUnits: ReadonlySet<string>): StatusLine {
   if (entry.gameId === null) return { text: 'Not supported yet', tone: 'unsupported' };
   const count = entry.schemes.length;
-  if (count === 0) return { text: 'Not set up', tone: 'plain' };
+  // "Set up" is the button that adds a game's data: a game with data and no scheme is not "not
+  // set up", it has no scheme yet.
+  if (count === 0) {
+    return {
+      text: entry.shipsDefaults ? 'Defaults found · no scheme yet' : 'No scheme yet',
+      tone: 'plain',
+    };
+  }
   const applied = appliedScheme(entry);
   if (applied !== null && entry.applied !== null) {
     const label = setupLabel(entry, applied);
@@ -106,10 +113,17 @@ export function filterEntries(entries: readonly LibraryEntry[], query: string): 
     : entries.filter((e) => e.name.toLowerCase().includes(wanted));
 }
 
-/** The line beside "Games". */
+/**
+ * The line beside "Games": where they come from and how many have a scheme. "From Steam" only
+ * when Steam lists every one of them; otherwise how many there are.
+ */
 export function summary(entries: readonly LibraryEntry[]): string {
   const withScheme = entries.filter((e) => e.schemes.length > 0).length;
-  return `From Steam · ${withScheme} with a scheme`;
+  if (entries.length > 0 && entries.every((e) => e.inSteam)) {
+    return `From Steam · ${withScheme} with a scheme`;
+  }
+  const games = entries.length === 1 ? '1 game' : `${entries.length} games`;
+  return `${games} · ${withScheme} with a scheme`;
 }
 
 export interface CurrentCard {
@@ -133,7 +147,8 @@ const HAND_WORD = { left: 'Left unit', right: 'Right unit' } as const;
 /**
  * The "On your Azerons now" card, from the units' own record: each unit's last write (state
  * `onUnits`), never a scheme's current fields, which may have been edited since. It shows the
- * latest of the two writes; when the other unit holds another scheme (the right one, after a left
+ * latest of the two writes of a game still in the Library (a game deleted since is only noted, by
+ * its name as applied); when the other unit holds another scheme (the right one, after a left
  * Azeron + mouse apply), the line says so, and a unit read as running something else says that.
  * With no unit ever written it is the active game's active scheme, worded as not applied yet. Null
  * when there is neither.
@@ -150,18 +165,28 @@ export function currentCard(
     left: state?.onUnits.left?.schemeId ?? null,
     right: state?.onUnits.right?.schemeId ?? null,
   };
-  const latest = holds.reduce<(typeof holds)[number] | null>(
-    (best, h) => (best === null || h.at > best.at ? h : best),
-    null,
-  );
   const named = (h: (typeof holds)[number]) => {
-    const entry = entries.find((e) => e.gameId === h.gameId);
+    // A game deleted since is history: a game added later under its id is never taken for it.
+    const entry = h.gameDeleted === true ? undefined : entries.find((e) => e.gameId === h.gameId);
     const scheme = entry?.schemes.find((s) => s.id === h.schemeId) ?? null;
-    return { entry, scheme, title: `${entry?.name ?? 'A game'} · ${scheme?.name ?? h.schemeName}` };
+    const game = entry?.name ?? h.gameName ?? 'A game';
+    return { entry, scheme, title: `${game} · ${scheme?.name ?? h.schemeName}` };
   };
+  // The latest write of a game still in the Library; a write of a game since deleted is only noted.
+  const latest = holds
+    .filter((h) => named(h).entry !== undefined)
+    .reduce<(typeof holds)[number] | null>(
+      (best, h) => (best === null || h.at > best.at ? h : best),
+      null,
+    );
   if (latest !== null) {
     const shown = named(latest);
     const notes = [`Applied · ${setupWords(latest)}`];
+    // The same count as the tile and the pill: the scheme the units hold, edited since.
+    const since = shown.entry?.applied;
+    if (since?.schemeId === latest.schemeId && since.changes > 0) {
+      notes.push(`${changesWord(since.changes)} not applied`);
+    }
     for (const h of holds) {
       if (h.schemeId !== latest.schemeId) notes.push(`${HAND_WORD[h.hand]}: ${named(h).title}`);
       if (h.check === 'differs') notes.push(`${HAND_WORD[h.hand]} differs`);

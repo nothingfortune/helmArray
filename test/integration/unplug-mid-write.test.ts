@@ -43,11 +43,11 @@ describe('the right unit is unplugged mid-write', () => {
     expect([pieces, world.right.plugged]).toEqual([UNPLUGGED_AFTER_PIECE, false]);
   });
 
-  it('Apply fails, names the right unit, and says its new slot may be part-written', () => {
+  it('Apply fails, names the right unit, and says its new layout may be part-written', () => {
     expect([failed.ok, failed.message]).toEqual([
       false,
       expect.stringMatching(
-        /^The right unit failed: .+; a new slot 1 may be part-written, and the unit still runs slot 0 with its other slots as they were\.$/,
+        /^The right unit failed: .+; a new layout may be part-written, and the unit still runs what it ran before, with its other layouts as they were\.$/,
       ),
     ]);
   });

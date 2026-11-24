@@ -6,6 +6,7 @@ import {
   FakeUnit,
   UnitError,
   UnitSession,
+  decodeStoredRecord,
   encodeRecord,
   parseHostReport,
   storedFromWritten,
@@ -16,6 +17,7 @@ import type { StoredSlot, UnitRecord } from '@helmarray/azeron';
 import { CYBORG2_LEFT, CYBORG2_RIGHT } from '@helmarray/core';
 import type { UnitOps } from './gated-session';
 import type { HeldUnit, HeldUnits, UnitsDeps } from './apply-units';
+import type { ApplyButtonChange } from '../shared/api';
 import { applyUnits, chooseSlot, previewUnits, unitSlotName, verifyUnits } from './apply-units';
 
 // Both units are written from one plan: keys from the pool, a long press, a latch, a turbo.
@@ -380,7 +382,7 @@ describe('applying to the units', () => {
       expect(result.units[0]?.wrote).toBe(true);
       expect(result.units[0]?.switched).toBe(false);
       expect(result.message).toMatch(
-        /^The left unit failed: slot 1 read back differently from the layout \(1 input, first: input \d+ .+\); slot 1 is not in use, the unit still runs slot 0, and nothing was deleted\.$/,
+        /^The left unit failed: the new layout read back differently from what was written \(1 button\); the new layout is not in use, the unit still runs what it ran before, and nothing was removed\.$/,
       );
       expect(writesAfterRead(left)).toEqual([]);
       expect(left.running).toBe(0);
@@ -419,7 +421,7 @@ describe('applying to the units', () => {
     expect(result.ok).toBe(false);
     expect(result.units[0]).toMatchObject({ wrote: true, switched: false, deleted: [] });
     expect(result.message).toMatch(
-      /^The left unit failed: slot 1 read back differently from the layout \(\d+ inputs?, first: input \d+ .+\); slot 1 is not in use and what it held before \("Skiff"\) is gone, the unit still runs slot 0, and nothing was deleted\.$/,
+      /^The left unit failed: the new layout read back differently from what was written \(\d+ buttons?\); the new layout is not in use, and the layout "Skiff" it replaced is gone, the unit still runs what it ran before, and nothing was removed\.$/,
     );
     expect(sent(left)).not.toContain(Command.SWITCH_PROFILE);
     expect(sent(left)).not.toContain(Command.DELETE_PROFILE);
@@ -433,7 +435,7 @@ describe('applying to the units', () => {
     const result = await applyUnits(plan, state.deps);
     expect(result.ok).toBe(false);
     expect(result.message).toBe(
-      'The left unit failed: it is not running slot 1, where the layout is; the unit runs slot 7 and the other slots are deleted.',
+      'The left unit failed: it is not running the new layout; the unit runs another layout and the other layouts are removed.',
     );
   });
 
@@ -500,7 +502,7 @@ describe('applying to the units', () => {
       const result = await applyUnits(plan, state.deps);
       expect(result.ok).toBe(false);
       expect(result.message).toBe(
-        'The left unit failed: it now runs slot 2, not slot 1 where the layout is; the unit runs the layout in slot 1, and slot 0 ("Old") and slot 2 ("Extra") are still there.',
+        'The left unit failed: it now runs another layout, not the new one; the unit runs the new layout, and the layout "Old" and the layout "Extra" are still there.',
       );
       expect(sent(left)).not.toContain(Command.DELETE_PROFILE);
       expect(slotsOf(left)).toEqual([0, 1, 2]);
@@ -527,7 +529,7 @@ describe('applying to the units', () => {
       const result = await applyUnits(plan, state.deps);
       expect(result.ok).toBe(false);
       expect(result.units[0]?.deleted).toEqual([{ slot: 0, name: 'Old' }]);
-      expect(result.message).toContain('it now runs slot 2, not slot 1 where the layout is');
+      expect(result.message).toContain('it now runs another layout, not the new one');
       expect(slotsOf(left)).toEqual([1, 2]);
     });
   });
@@ -540,7 +542,7 @@ describe('applying to the units', () => {
     expect(result.ok).toBe(false);
     expect(result.message).toContain('The left unit failed:');
     expect(result.message).toContain(
-      'a new slot 1 may be part-written, and the unit still runs slot 0 with its other slots as they were.',
+      'a new layout may be part-written, and the unit still runs what it ran before, with its other layouts as they were.',
     );
     expect(sent(left)).not.toContain(Command.SWITCH_PROFILE);
     expect(sent(left)).not.toContain(Command.DELETE_PROFILE);
@@ -560,7 +562,7 @@ describe('applying to the units', () => {
     expect(result.units.map((u) => u.status)).toEqual(['failed', 'not-attempted']);
     expect(result.units[0]).toMatchObject({ wrote: true, switched: true, deleted: [] });
     expect(result.message).toBe(
-      'The left unit failed: slot 0 ("Default") could not be deleted (Slot 0 is still there after deleting it); the unit runs the layout in slot 1, and slot 0 ("Default") and slot 2 ("Old") are still there.',
+      'The left unit failed: the layout "Default" could not be removed (Slot 0 is still there after deleting it); the unit runs the new layout, and the layout "Default" and the layout "Old" are still there.',
     );
     expect(left.running).toBe(1);
     expect(writesTo(right)).toEqual([]);
@@ -576,7 +578,7 @@ describe('applying to the units', () => {
     const result = await applyUnits(plan, state.deps);
     expect(result.ok).toBe(false);
     expect(result.message).toContain(
-      'slot 1 holds the layout, the unit still runs slot 0, and nothing was deleted.',
+      'the new layout is in place, the unit still runs what it ran before, and nothing was removed.',
     );
     expect(sent(left)).not.toContain(Command.DELETE_PROFILE);
     expect(slotsOf(left)).toEqual([0, 1]);
@@ -621,7 +623,7 @@ describe('applying to the units', () => {
       const preview = previewUnits(plan, await state.held(), { name: NAME });
       expect(preview.anyChange).toBe(true);
       expect(preview.left.write).toBeNull();
-      expect(preview.left.deletes).toEqual([{ slot: 0, name: 'Old' }]);
+      expect(preview.left.deletes).toEqual([{ slot: 0, name: 'Old', ownCopy: false, game: null }]);
       expect(preview.changes).toEqual(['Delete slot 0 ("Old") from the left unit.']);
 
       const result = await applyUnits(plan, state.deps);
@@ -648,7 +650,7 @@ describe('applying to the units', () => {
   });
 
   describe('a unit at its slot limit', () => {
-    it('writes over a slot it is not running, preferring one with our name, and never the running one', async () => {
+    it('writes over the lowest slot it is not running, and never the running one', async () => {
       const [left, right] = twoUnits({
         limit: 3,
         slots: { 0: { name: 'Default' }, 1: { name: NAME }, 2: { name: 'Old' } },
@@ -662,8 +664,8 @@ describe('applying to the units', () => {
         overwrites: { slot: 1, name: NAME },
       });
       expect(preview.left.deletes).toEqual([
-        { slot: 0, name: 'Default' },
-        { slot: 2, name: 'Old' },
+        { slot: 0, name: 'Default', ownCopy: false, game: null },
+        { slot: 2, name: 'Old', ownCopy: false, game: null },
       ]);
       expect(preview.changes[0]).toBe(
         'Write the layout over slot 1 ("Skiff") on the left unit (it has no free slot) and switch to it.',
@@ -720,7 +722,7 @@ describe('applying to the units', () => {
       const result = await applyUnits(plan, state.deps);
       expect(result.ok).toBe(false);
       expect(result.message).toBe(
-        'The left unit failed: it now runs slot 1 ("Old"), which was about to be written over; nothing on it was changed.',
+        'The left unit failed: it now runs the layout "Old", which was about to be written over; nothing on it was changed.',
       );
       expect(writesTo(left)).toEqual([]);
       expect(left.slots.get(1)?.name).toBe('Old');
@@ -732,7 +734,7 @@ describe('applying to the units', () => {
       const held = await state.held();
       const preview = previewUnits(plan, held, { name: NAME });
       expect(preview.left.problem).toBe(
-        'The unit has room for 1 slot and is running the only one, so there is nowhere to write without overwriting it.',
+        'The unit has room for 1 layout and is running the only one, so there is nowhere to write without overwriting it.',
       );
       expect(preview.problems).toHaveLength(1);
       const result = await applyUnits(plan, state.deps);
@@ -753,8 +755,8 @@ describe('previewing the units', () => {
     expect(preview.anyChange).toBe(true);
     expect(preview.left.write).toEqual({ slot: 1, name: NAME, overwrites: null });
     expect(preview.left.deletes).toEqual([
-      { slot: 0, name: 'Default' },
-      { slot: 2, name: 'Old' },
+      { slot: 0, name: 'Default', ownCopy: false, game: null },
+      { slot: 2, name: 'Old', ownCopy: false, game: null },
     ]);
     expect(preview.changes).toEqual([
       'Write the layout into a new slot 1 ("Skiff") on the left unit and switch to it.',
@@ -786,6 +788,61 @@ describe('previewing the units', () => {
     previewUnits(plan, held);
     verifyUnits(plan, held);
     expect([left.received.length, right.received.length]).toEqual(before);
+  });
+});
+
+describe("the buttons a preview changes, in the game's words", () => {
+  const nameOf = (_mode: string, action: string) =>
+    game.actions.find((a) => a.id === action)?.name ?? action;
+  const rows = (buttons: readonly ApplyButtonChange[]) =>
+    buttons
+      .map((b) => [b.position, b.actions, b.wasEmpty, b.nowEmpty] as const)
+      .sort(([a], [b]) => (a < b ? -1 : 1));
+  const holdingPlan = (hand: Hand): HeldUnit => ({
+    ...untouched(hand),
+    slots: [{ ...slotOf(1, NAME), records: holding(1, hand).map(decodeStoredRecord) }],
+    running: 1,
+  });
+
+  it('lists the one button a drag gave an action, and the one it left, on that unit only', () => {
+    const moved: Scheme = {
+      ...scheme,
+      map: { ship: { ...scheme.map['ship'], 'L.index_1': {}, 'L.ring_1': { tap: 'boost' } } },
+      behaviour: { 'R.middle_1': { turbo: { interval: 40 } } },
+      // The keys dealt when it was applied are kept, as Apply keeps them.
+      ledger: plan.ledger,
+    };
+    const next = resolve(moved, game, BUILT_IN_DEVICES);
+    const preview = previewUnits(
+      next,
+      { left: holdingPlan('left'), right: holdingPlan('right') },
+      { name: NAME, actionName: nameOf },
+    );
+    expect([rows(preview.left.buttons), preview.right.buttons]).toEqual([
+      [
+        ['index_1', [], false, true],
+        ['ring_1', ['Boost'], true, false],
+      ],
+      [],
+    ]);
+  });
+
+  it('names every action on a button, each once, and leaves out a button empty before and after', () => {
+    const preview = previewUnits(plan, { left: untouched('left') }, { actionName: nameOf });
+    const named = rows(preview.left.buttons).filter(([position]) => position !== 'stick');
+    expect(named).toEqual([
+      ['index_1', ['Boost'], true, false],
+      ['middle_1', ['Fire', 'Map'], true, false],
+    ]);
+  });
+
+  it('lists the stick when what it does changes, with what it does now', () => {
+    const preview = previewUnits(plan, { left: untouched('left') }, { actionName: nameOf });
+    expect(preview.left.buttons.find((b) => b.position === 'stick')).toMatchObject({
+      stick: unitOf(plan, 'left').stick,
+      wasEmpty: false,
+      nowEmpty: false,
+    });
   });
 });
 
@@ -827,12 +884,12 @@ describe('the verdict for the sync pill', () => {
 describe('choosing a slot', () => {
   const slot = (n: number, name = '') => ({ slot: n, name, settings: null, records: [] });
   it('takes the lowest free slot, which after a deletion is the gap', () => {
-    expect(chooseSlot([slot(0), slot(2)], 0, 6, NAME)).toEqual({
+    expect(chooseSlot([slot(0), slot(2)], 0, 6)).toEqual({
       ok: true,
       slot: 1,
       overwrites: null,
     });
-    expect(chooseSlot([slot(0), slot(1)], 1, 6, NAME)).toEqual({
+    expect(chooseSlot([slot(0), slot(1)], 1, 6)).toEqual({
       ok: true,
       slot: 2,
       overwrites: null,
@@ -840,7 +897,7 @@ describe('choosing a slot', () => {
   });
   it('never offers the slot being run', () => {
     for (const running of [0, 1, 2]) {
-      const choice = chooseSlot([slot(0, NAME), slot(1, NAME), slot(2, NAME)], running, 3, NAME);
+      const choice = chooseSlot([slot(0), slot(1, NAME), slot(2, NAME)], running, 3);
       expect(choice).toMatchObject({ ok: true });
       expect(choice.ok && choice.slot).not.toBe(running);
     }
@@ -893,26 +950,26 @@ describe('the slot name, character by character', () => {
 
 describe('choosing a slot, in the order a person would', () => {
   it('takes the lowest-numbered slot it is not running when none has our name, whatever order they came in', () => {
-    const choice = chooseSlot([slotOf(2, 'B'), slotOf(0, 'A'), slotOf(1, 'C')], 1, 3, NAME);
+    const choice = chooseSlot([slotOf(2, 'B'), slotOf(0, 'A'), slotOf(1, 'C')], 1, 3);
     expect(choice).toMatchObject({ ok: true, slot: 0 });
   });
 
-  it('prefers the slot with our name over a lower one without', () => {
-    const choice = chooseSlot([slotOf(0, 'A'), slotOf(1, NAME), slotOf(2, 'B')], 2, 3, NAME);
-    expect(choice).toMatchObject({ ok: true, slot: 1 });
+  it('takes the lowest it is not running whatever the names: a name says nothing of whose it is', () => {
+    const choice = chooseSlot([slotOf(0, 'A'), slotOf(1, NAME), slotOf(2, 'B')], 2, 3);
+    expect(choice).toMatchObject({ ok: true, slot: 0 });
   });
 
   it('says there is nowhere to write, for one slot and for several', () => {
-    expect([chooseSlot([slotOf(0)], 0, 1, NAME), chooseSlot([slotOf(0)], 0, 0, NAME)]).toEqual([
+    expect([chooseSlot([slotOf(0)], 0, 1), chooseSlot([slotOf(0)], 0, 0)]).toEqual([
       {
         ok: false,
         reason:
-          'The unit has room for 1 slot and is running the only one, so there is nowhere to write without overwriting it.',
+          'The unit has room for 1 layout and is running the only one, so there is nowhere to write without overwriting it.',
       },
       {
         ok: false,
         reason:
-          'The unit has room for 0 slots and is running the only one, so there is nowhere to write without overwriting it.',
+          'The unit has room for 0 layouts and is running the only one, so there is nowhere to write without overwriting it.',
       },
     ]);
   });
@@ -926,6 +983,7 @@ describe('a preview, field by field', () => {
       connected: false,
       differs: false,
       inputsChanged: 0,
+      buttons: [],
       write: null,
       deletes: [],
       changes: [],
@@ -1002,8 +1060,8 @@ describe('applying, said in words and traced', () => {
     const state = await rig(left, right);
     const result = await applyUnits(plan, state.deps);
     expect(result.units.map((u) => u.message)).toEqual([
-      'The left unit runs the layout in slot 1; 2 other slots were deleted.',
-      'The right unit runs the layout in slot 1; 1 other slot was deleted.',
+      'The left unit runs the layout; its other 2 layouts were removed.',
+      'The right unit runs the layout; its other layout was removed.',
     ]);
   });
 
@@ -1022,7 +1080,7 @@ describe('applying, said in words and traced', () => {
     const result = await applyUnits(plan, state.deps);
     expect(result.units.map((u) => u.message)).toEqual([
       'The left unit already held the layout.',
-      'The right unit already held the layout; 2 other slots were deleted.',
+      'The right unit already held the layout; its other 2 layouts were removed.',
     ]);
   });
 
@@ -1034,7 +1092,7 @@ describe('applying, said in words and traced', () => {
     const state = await rig(left, right);
     const result = await applyUnits(plan, state.deps);
     expect(result.units[0]?.message).toBe(
-      'The left unit already held the layout; 1 other slot was deleted.',
+      'The left unit already held the layout; its other layout was removed.',
     );
   });
 
@@ -1111,7 +1169,7 @@ describe('the unit stopping part way, said in words', () => {
     const state = await rig(left, right, { azeronAppRunning: opensAtLook(4) });
     const result = await applyUnits(plan, state.deps);
     expect(result.units[0]?.message).toBe(
-      `${failure('left')}; the unit runs the layout in slot 1, and the slots it had before are still there.`,
+      `${failure('left')}; the unit runs the new layout, and the layouts it had before are still there.`,
     );
   });
 
@@ -1120,7 +1178,7 @@ describe('the unit stopping part way, said in words', () => {
     const state = await rig(left, right, { azeronAppRunning: opensAtLook(5) });
     const result = await applyUnits(plan, state.deps);
     expect(result.units[0]?.message).toBe(
-      `${failure('left')}; the unit runs the layout in slot 1, and slot 0 ("Default") and slot 2 ("Old") are still there.`,
+      `${failure('left')}; the unit runs the new layout, and the layout "Default" and the layout "Old" are still there.`,
     );
   });
 
@@ -1129,7 +1187,7 @@ describe('the unit stopping part way, said in words', () => {
     const state = await rig(left, right, { azeronAppRunning: opensAtLook(6) });
     const result = await applyUnits(plan, state.deps);
     expect(result.units[0]?.message).toBe(
-      `${failure('left')}; the unit runs the layout in slot 1, and slot 2 ("Old") is still there.`,
+      `${failure('left')}; the unit runs the new layout, and the layout "Old" is still there.`,
     );
   });
 
@@ -1137,7 +1195,7 @@ describe('the unit stopping part way, said in words', () => {
     const [left, right] = standard();
     const state = await rig(left, right, { azeronAppRunning: opensAtLook(7) });
     const result = await applyUnits(plan, state.deps);
-    expect(result.units[0]?.message).toBe(`${failure('left')}; the other slots are deleted.`);
+    expect(result.units[0]?.message).toBe(`${failure('left')}; the other layouts are removed.`);
   });
 
   it('a write that stopped answering says which slot may be part-written, new or written over', async () => {
@@ -1154,10 +1212,10 @@ describe('the unit stopping part way, said in words', () => {
     const second = await applyUnits(plan, (await rig(full, other)).deps);
     expect([first.units[0]?.message, second.units[0]?.message]).toEqual([
       expect.stringContaining(
-        'a new slot 1 may be part-written, and the unit still runs slot 0 with its other slots as they were.',
+        'a new layout may be part-written, and the unit still runs what it ran before, with its other layouts as they were.',
       ),
       expect.stringContaining(
-        'slot 1 ("Other") may be part-written, and the unit still runs slot 0 with its other slots as they were.',
+        'the layout "Other" may be part-written, and the unit still runs what it ran before, with its other layouts as they were.',
       ),
     ]);
   });
@@ -1173,28 +1231,34 @@ describe('the unit stopping part way, said in words', () => {
     const state = await rig(left, new FakeUnit({ deviceId: RIGHT_ID }));
     const result = await applyUnits(plan, state.deps);
     expect(result.message).toContain(
-      'slot 1 is not in use and what it held before is gone, the unit',
+      'the new layout is not in use, and the layout it replaced is gone, the unit',
     );
   });
 
-  it('a read-back that differs in several inputs says how many, and names the first', async () => {
+  it('a read-back that differs in several inputs says how many buttons, and the log names the first', async () => {
     const [left, right] = twoUnits({
       slots: { 0: { name: 'Default' } },
       ignore: [Command.OBM_COPY],
     });
     const state = await rig(left, right);
-    const result = await applyUnits(plan, state.deps);
-    expect(result.message).toBe(
-      `The left unit failed: slot 1 read back differently from the layout (${records.left.length} inputs, first: input ${must(records.left[0]).id} input); slot 1 is not in use, the unit still runs slot 0, and nothing was deleted.`,
-    );
+    const lines: string[] = [];
+    const result = await applyUnits(plan, { ...state.deps, trace: (line) => lines.push(line) });
+    expect([result.message, lines]).toEqual([
+      `The left unit failed: the new layout read back differently from what was written (${records.left.length} buttons); the new layout is not in use, the unit still runs what it ran before, and nothing was removed.`,
+      expect.arrayContaining([
+        `left: slot 1 read back differently: ${records.left.length} inputs, first: input ${must(records.left[0]).id} input`,
+      ]),
+    ]);
   });
 
-  it('a read-back that differs in one input says input, not inputs', async () => {
+  it('a read-back that differs in one input says button, not buttons', async () => {
     const left = new CorruptingUnit({ deviceId: LEFT_ID, slots: { 0: { name: 'Default' } } });
     left.corruptSlot = 1;
     const state = await rig(left, new FakeUnit({ deviceId: RIGHT_ID }));
-    const result = await applyUnits(plan, state.deps);
-    expect(result.message).toMatch(/\(1 input, first: input \d+ tap keys\)/);
+    const lines: string[] = [];
+    const result = await applyUnits(plan, { ...state.deps, trace: (line) => lines.push(line) });
+    expect(result.message).toContain('(1 button)');
+    expect(lines.some((l) => /1 input, first: input \d+ tap keys$/.test(l))).toBe(true);
   });
 
   it('an input held in a layout it cannot read is the first named, as unreadable', async () => {
@@ -1214,13 +1278,18 @@ describe('the unit stopping part way, said in words', () => {
         unchecked: [{ id: first.id, raw: Uint8Array.of(1) }],
       }),
     };
+    const lines: string[] = [];
     const result = await applyUnits(plan, {
       ...state.deps,
       unit: (hand) => (hand === 'left' ? { ...base, session } : state.deps.unit(hand)),
+      trace: (line) => lines.push(line),
     });
-    expect(result.units[0]?.message).toContain(
-      `read back differently from the layout (1 input, first: input ${first.id} could not be read back)`,
-    );
+    expect([result.units[0]?.message, lines]).toEqual([
+      expect.stringContaining('read back differently from what was written (1 button)'),
+      expect.arrayContaining([
+        `left: slot 1 read back differently: 1 input, first: input ${first.id} could not be read back`,
+      ]),
+    ]);
   });
 
   it.each<[string, UnitError, string]>([
@@ -1232,12 +1301,12 @@ describe('the unit stopping part way, said in words', () => {
     [
       'lost with nothing written',
       new UnitError('no-answer', 'silence', 0),
-      'The left unit failed: silence; a new slot 1 may be part-written, and the unit still runs slot 0 with its other slots as they were.',
+      'The left unit failed: silence; a new layout may be part-written, and the unit still runs what it ran before, with its other layouts as they were.',
     ],
     [
       'refused after something was written',
       new UnitError('refused', 'no more', 2),
-      'The left unit failed: no more; a new slot 1 may be part-written, and the unit still runs slot 0 with its other slots as they were.',
+      'The left unit failed: no more; a new layout may be part-written, and the unit still runs what it ran before, with its other layouts as they were.',
     ],
   ])('a write %s', async (_, error, message) => {
     const [left, right] = twoUnits({ slots: { 0: { name: 'Default' } } });
@@ -1305,7 +1374,7 @@ describe('the last read after the others are deleted', () => {
       })),
     );
     expect(result.units[0]?.message).toBe(
-      'The left unit failed: it read back differently from the layout after cleaning up; the unit runs slot 1 and the other slots are deleted.',
+      'The left unit failed: it read back differently from the layout after cleaning up; the unit runs the new layout and the other layouts are removed.',
     );
   });
 
@@ -1328,7 +1397,7 @@ describe('the last read after the others are deleted', () => {
       unit: (hand) => (hand === 'left' ? { ...base, session } : state.deps.unit(hand)),
     });
     expect(result.units[0]?.message).toBe(
-      'The left unit failed: the cable came out; the other slots are deleted.',
+      'The left unit failed: the cable came out; the other layouts are removed.',
     );
   });
 
@@ -1382,13 +1451,18 @@ describe('counting the inputs of a read-back that is not clean', () => {
         unchecked: [{ id: first.id, raw: Uint8Array.of(1) }],
       }),
     };
+    const lines: string[] = [];
     const result = await applyUnits(plan, {
       ...state.deps,
       unit: (hand) => (hand === 'left' ? { ...base, session } : state.deps.unit(hand)),
+      trace: (line) => lines.push(line),
     });
-    expect(result.units[0]?.message).toContain(
-      `read back differently from the layout (1 input, first: input ${first.id} tap keys)`,
-    );
+    expect([result.units[0]?.message, lines]).toEqual([
+      expect.stringContaining('read back differently from what was written (1 button)'),
+      expect.arrayContaining([
+        `left: slot 1 read back differently: 1 input, first: input ${first.id} tap keys`,
+      ]),
+    ]);
   });
 });
 
@@ -1461,6 +1535,7 @@ describe('a setup of the left Azeron and the mouse', () => {
         connected: true,
         differs: false,
         inputsChanged: 0,
+        buttons: [],
         write: null,
         deletes: [],
         changes: [],

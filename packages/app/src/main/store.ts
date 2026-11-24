@@ -9,6 +9,8 @@
 //   schemes/<id>.json   one scheme
 //   settings.json       the active game, and the active scheme of each game
 //   units.json          what each unit was last written with: which scheme, of which game, when
+//   sheets.json         the bindings each game holds as far as helmArray knows (its baseline),
+//                       where they differ from what it ships; moved only by *Done*
 //   applied/<id>.json   the plan last applied for scheme <id>; `<game>.held.json`, what a game
 //                       holds after the scheme applied to it last was deleted
 //
@@ -29,13 +31,22 @@ import type {
   ApplyWho,
   Game,
   Hand,
+  Baselines,
+  GameBinding,
   Plan,
   Scheme,
   StoredKind,
   StoredKinds,
   UnitsHeld,
 } from '@helmarray/core';
-import { AZERON_USES, NOTHING_HELD, recordApply } from '@helmarray/core';
+import {
+  AZERON_USES,
+  NOTHING_HELD,
+  NO_BASELINES,
+  heldBy,
+  settleBaseline,
+  recordApply,
+} from '@helmarray/core';
 import {
   DEFAULT_SETTINGS,
   copyScheme,
@@ -49,6 +60,22 @@ import {
 } from '@helmarray/core';
 import type { GameEntry, Preset } from '../shared/api';
 import { MAX_ID_LENGTH, isSafeId } from '../shared/ids';
+
+/**
+ * Everything the store keeps, by kind, and what deleting a game added by hand does to what it
+ * keeps for that game. Every kind is listed (a new kind is a type error here until it is), and
+ * `deleteGame` does exactly this for each, so no data kept per game can be forgotten and inherited
+ * by a game added later under the same id.
+ */
+export const ON_GAME_DELETED: Readonly<Record<StoredKind, string>> = {
+  game: 'removed: its file',
+  scheme: 'removed: every scheme of the game',
+  applied: 'removed: the plan applied for each of its schemes, and what the game held',
+  settings: 'removed: no longer the active game, and no scheme picked for it',
+  sheets: 'removed: its baseline (the bindings the game held)',
+  units:
+    'kept as history, marked: what each unit was last written with is still true, but the record is marked as of a deleted game, so a game added later under the id is never taken for it',
+};
 
 /** A file the store could not use, in a sentence the person can act on. */
 export interface StoreProblem {
@@ -78,6 +105,8 @@ export interface DataStoreOptions {
   schedule?(job: () => Promise<void>, ms: number): () => void;
   /** Told of every file that couldn't be read or written. Must not throw. */
   onProblem?(problem: StoreProblem): void;
+  /** Told of something done to a file the person needs no word of, for the log. Must not throw. */
+  onNote?(file: string, message: string): void;
   /** A short unique text, for new scheme ids and for names of quarantined files. */
   newId?(): string;
 }
@@ -164,12 +193,33 @@ const isUnitWrite = (value: unknown) =>
 const isUnitsHeld = (value: unknown): value is UnitsHeld =>
   isRecord(value) && isUnitWrite(value['left']) && isUnitWrite(value['right']);
 
+const isSignalOrNone = (value: unknown) =>
+  value === null || (isRecord(value) && typeof value['kind'] === 'string');
+const isGameBinding = (value: unknown): value is GameBinding =>
+  isRecord(value) &&
+  (value['set'] === 'keyboard' || value['set'] === 'controller') &&
+  typeof value['mode'] === 'string' &&
+  typeof value['action'] === 'string' &&
+  isSignalOrNone(value['signal']) &&
+  isSignalOrNone(value['native']);
+const isBaselines = (value: unknown): value is Baselines =>
+  isRecord(value) &&
+  Array.isArray(value['games']) &&
+  value['games'].every(
+    (g: unknown) =>
+      isRecord(g) &&
+      typeof g['gameId'] === 'string' &&
+      Array.isArray(g['held']) &&
+      g['held'].every(isGameBinding),
+  );
+
 const CHECKS: { [K in StoredKind]: (value: unknown) => value is StoredKinds[K] } = {
   scheme: isScheme,
   game: isGame,
   settings: isSettings,
   applied: isPlan,
   units: isUnitsHeld,
+  sheets: isBaselines,
 };
 
 const THING: Record<StoredKind, string> = {
@@ -178,6 +228,7 @@ const THING: Record<StoredKind, string> = {
   settings: 'settings file',
   applied: 'applied plan',
   units: 'record of what the units hold',
+  sheets: 'list of bindings to set in the game',
 };
 
 // --- reading and writing files --------------------------------------------------------------
@@ -276,6 +327,7 @@ export class DataStore {
   private readonly debounceMs: number;
   private readonly schedule: (job: () => Promise<void>, ms: number) => () => void;
   private readonly onProblem: (problem: StoreProblem) => void;
+  private readonly onNote: (file: string, message: string) => void;
   private readonly newId: () => string;
 
   private settings: AppSettings = { ...DEFAULT_SETTINGS, activeScheme: {} };
@@ -286,6 +338,7 @@ export class DataStore {
   /** The settings are changed one call at a time. */
   private settingsTurn: Promise<unknown> = Promise.resolve();
   private unitsTurn: Promise<unknown> = Promise.resolve();
+  private sheetsTurn: Promise<unknown> = Promise.resolve();
   private createTurn: Promise<unknown> = Promise.resolve();
   /** Changes still under way, for `flush()` to wait for. */
   private readonly ops = new Set<Promise<void>>();
@@ -302,6 +355,7 @@ export class DataStore {
     this.debounceMs = options.debounceMs ?? AUTOSAVE_MS;
     this.schedule = options.schedule ?? timerSchedule;
     this.onProblem = options.onProblem ?? (() => undefined);
+    this.onNote = options.onNote ?? (() => undefined);
     this.newId = options.newId ?? (() => randomUUID().slice(0, 8));
   }
 
@@ -530,20 +584,54 @@ export class DataStore {
         );
       }
     });
-    // A game added by hand is gone, and its schemes with it: a game added later under its id must
-    // not take them over. Nothing may stay picked for it. A built-in game stays, with its schemes.
-    const done = builtIn
-      ? run
-      : run.then(() => this.dropSchemes(gameId)).then(() => this.forget(gameId));
+    // A game added by hand is gone, and everything kept for it (`ON_GAME_DELETED`): a game added
+    // later under its id must not take any of it over. A built-in game stays, with all of it.
+    const done = builtIn ? run : run.then(() => this.dropGameData(gameId));
     return this.track(done);
   }
 
-  /** Deletes every scheme of a game, and what the game holds once they are gone. */
+  /** What deleting a game added by hand does to each kind kept for it: see `ON_GAME_DELETED`. */
+  private readonly onGameDeleted: Record<StoredKind, (gameId: string) => Promise<void>> = {
+    // Removed by `deleteGame` itself, before the rest.
+    game: () => Promise.resolve(),
+    // Each scheme's applied plan goes with it (`deleteScheme`).
+    scheme: (gameId) => this.dropSchemes(gameId),
+    applied: (gameId) =>
+      this.enqueue(() => rm(join(this.root, 'applied', `${heldId(gameId)}.json`), { force: true })),
+    settings: (gameId) => this.forget(gameId),
+    sheets: (gameId) =>
+      this.changeBaselines((baselines) => ({
+        games: baselines.games.filter((g) => g.gameId !== gameId),
+      })),
+    units: (gameId) => this.markDeleted(gameId),
+  };
+
+  /** Everything kept for a game added by hand, in the order of `ON_GAME_DELETED`. */
+  private async dropGameData(gameId: string): Promise<void> {
+    for (const kind of Object.keys(ON_GAME_DELETED) as StoredKind[]) {
+      await this.onGameDeleted[kind](gameId);
+    }
+  }
+
+  /** Deletes every scheme of a game (and each one's applied plan). */
   private async dropSchemes(gameId: string): Promise<void> {
     for (const scheme of await this.listSchemes(gameId)) await this.deleteScheme(scheme.id);
-    await this.enqueue(() =>
-      rm(join(this.root, 'applied', `${heldId(gameId)}.json`), { force: true }),
-    );
+  }
+
+  /** Marks each unit's record of a deleted game as history (`UnitWrite.gameDeleted`). */
+  private markDeleted(gameId: string): Promise<void> {
+    const run = this.unitsTurn.then(async () => {
+      const held = await this.unitsHeld();
+      const mark = (write: UnitsHeld['left']) =>
+        write !== null && write.gameId === gameId && write.gameDeleted !== true
+          ? { ...write, gameDeleted: true as const }
+          : write;
+      const next = { left: mark(held.left), right: mark(held.right) };
+      if (next.left === held.left && next.right === held.right) return;
+      await this.put('units', 'units.json', next);
+    });
+    this.unitsTurn = run.catch(() => undefined);
+    return run;
   }
 
   /** Drops a game from the settings: no longer the active game, and no scheme picked for it. */
@@ -859,5 +947,60 @@ export class DataStore {
     });
     this.unitsTurn = run.catch(() => undefined);
     return this.track(run);
+  }
+
+  // What each game holds -----------------------------------------------------------------------
+
+  /**
+   * Every game's baseline: the bindings it holds as far as helmArray knows. None (what each game
+   * ships) when the file can't be read. A version-1 file's reminders were dropped by its migration:
+   * the log says how many, and the file is written again without them.
+   */
+  async baselines(): Promise<Baselines> {
+    const found = await this.read('sheets', 'sheets.json');
+    if (found.status !== 'ok') return NO_BASELINES;
+    const { droppedReminders } = found.value;
+    const baselines: Baselines = { games: found.value.games };
+    if (droppedReminders !== undefined) {
+      this.note(
+        'sheets.json',
+        `an earlier helmArray kept ${droppedReminders} game${droppedReminders === 1 ? "'s" : "s'"} reminders, not what the games hold; they were dropped, and each game is taken to hold what it ships`,
+      );
+      await this.changeBaselines(() => baselines).catch(() => undefined);
+    }
+    return baselines;
+  }
+
+  /** The bindings one game holds as far as helmArray knows, or null: what it ships. */
+  async heldBindings(gameId: string): Promise<GameBinding[] | null> {
+    return heldBy(await this.baselines(), gameId);
+  }
+
+  private note(file: string, message: string): void {
+    try {
+      this.onNote(file, message);
+    } catch {
+      // A listener must never take the store down.
+    }
+  }
+
+  /** One change to sheets.json at a time, in the order asked. */
+  private changeBaselines(change: (baselines: Baselines) => Baselines): Promise<void> {
+    const run = this.sheetsTurn.then(async () => {
+      const found = await this.read('sheets', 'sheets.json');
+      const now = found.status === 'ok' ? found.value : NO_BASELINES;
+      // A version-1 file's count of dropped reminders is said once (`baselines`), never kept.
+      await this.put('sheets', 'sheets.json', change({ games: now.games }));
+    });
+    this.sheetsTurn = run.catch(() => undefined);
+    return this.track(run);
+  }
+
+  /**
+   * The game now holds these bindings: *Done* on what was left to set by hand, or (M5) its file
+   * written. The only thing that moves a game's baseline.
+   */
+  settleBaseline(gameId: string, bindings: readonly GameBinding[]): Promise<void> {
+    return this.changeBaselines((baselines) => settleBaseline(baselines, gameId, bindings));
   }
 }

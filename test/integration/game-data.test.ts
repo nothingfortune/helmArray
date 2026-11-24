@@ -121,7 +121,7 @@ describe('a game added in the app: a setup from it, applied; then an action dele
           control: 'L.index_1',
           mode: 'default',
           action: 'jump',
-          message: 'The action on this button was deleted from Rover, so pressing it does nothing.',
+          message: "This button's action was deleted from Rover.",
         },
       ],
     );

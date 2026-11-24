@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import type { Game, Scheme } from '@helmarray/core';
 import { assign, acceptFinding, clear, setLatch } from './editor-model';
-import { assignable, deviceTabs, editorView, shownTab, signalText } from './editor-view';
+import {
+  assignable,
+  deviceTabs,
+  editorView,
+  gainedTab,
+  shownTab,
+  signalText,
+  splitSubject,
+} from './editor-view';
 import { game, keysScheme, padGame, padScheme, plan } from './editor-fixture';
 
 const view = (
@@ -572,6 +580,17 @@ describe('checks', () => {
     expect(view(scheme).findings.map((r) => r.finding.severity)).toEqual(['error', 'warning']);
   });
 
+  it('puts the subject of each sentence apart, to be drawn bold', () => {
+    let scheme = setLatch(keysScheme(), 'L.index_1', true);
+    scheme = { ...scheme, map: { ...scheme.map, ship: { 'L.index_1': { tap: 'boost' } } } };
+    const words = view(scheme).findings.map((r) => [r.finding.rule, r.subject, r.rest]);
+    expect(words).toContainEqual([
+      'missing-required',
+      'Frame shift drive',
+      " isn't on a button in Ship.",
+    ]);
+  });
+
   it('offers a fix where there is an obvious one, and not where there is not', () => {
     let scheme = setLatch(keysScheme(), 'L.index_1', true);
     scheme = { ...scheme, map: { ...scheme.map, ship: { 'L.index_1': { tap: 'boost' } } } };
@@ -719,6 +738,78 @@ describe('words for a signal that names an Object property', () => {
 
   it('writes a pad control of toString as itself', () => {
     expect(signalText({ kind: 'pad', control: 'toString' as never })).toBe('Xbox toString');
+  });
+});
+
+describe('the subject of a check', () => {
+  it('is the action, the actions listed together, or the stick a sentence starts with', () => {
+    expect(
+      [
+        "Boost isn't on a button.",
+        'Boost and Frame shift drive are both on J in Ship: one press does both.',
+        'Boost, Galaxy map and Hardpoints are all on J: one press does them all.',
+        'The left stick sends nothing.',
+      ].map((m) => splitSubject(m, game)),
+    ).toEqual([
+      { subject: 'Boost', rest: " isn't on a button." },
+      {
+        subject: 'Boost and Frame shift drive',
+        rest: ' are both on J in Ship: one press does both.',
+      },
+      {
+        subject: 'Boost, Galaxy map and Hardpoints',
+        rest: ' are all on J: one press does them all.',
+      },
+      { subject: 'The left stick', rest: ' sends nothing.' },
+    ]);
+  });
+
+  it('is none for a sentence that starts with no action or stick', () => {
+    const mixed =
+      'This scheme mixes an Xbox controller with keyboard and mouse. Some games stutter switching between the two.';
+    expect(splitSubject(mixed, game)).toEqual({ subject: null, rest: mixed });
+  });
+
+  it('takes the longest name, not a shorter one it begins with, and only a whole word', () => {
+    const named = {
+      ...game,
+      actions: [
+        ...game.actions,
+        {
+          id: 'boost2',
+          name: 'Boost hard',
+          mode: 'ship',
+          role: 'movement' as const,
+          required: false,
+        },
+      ],
+    };
+    expect([
+      splitSubject("Boost hard isn't on a button.", named).subject,
+      splitSubject('Boosting is fun.', named).subject,
+    ]).toEqual(['Boost hard', null]);
+  });
+});
+
+describe('the tab a change of devices opens', () => {
+  const azerons = { azerons: 'both', keyboard: false, mouse: false, controller: false } as const;
+
+  it('is the device just added', () => {
+    expect([
+      gainedTab(azerons, { ...azerons, keyboard: true, mouse: true }),
+      gainedTab(azerons, { ...azerons, controller: true }),
+      gainedTab(
+        { ...azerons, azerons: 'none', controller: true },
+        { ...azerons, controller: true },
+      ),
+    ]).toEqual(['keyboard', 'controller', 'azerons']);
+  });
+
+  it('is none for a device taken away, or Left + mouse (the mouse is drawn beside the unit)', () => {
+    expect([
+      gainedTab({ ...azerons, keyboard: true, mouse: true }, azerons),
+      gainedTab(azerons, { ...azerons, azerons: 'left', mouse: true }),
+    ]).toEqual([undefined, undefined]);
   });
 });
 

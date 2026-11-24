@@ -326,7 +326,7 @@ test.describe('the other screens never scroll the window', () => {
   test('the Game screen with every Helldivers 2 action listed', async ({ helm }) => {
     const { page } = helm;
     await contentSize(helm, 1280, 900);
-    await page.getByRole('button', { name: /^Edit game: HELLDIVERS/ }).click();
+    await page.getByRole('button', { name: 'Edit actions: Helldivers 2' }).click();
     await expect(page.getByRole('textbox', { name: 'Reload, name' })).toBeVisible();
     const scroll = await windowScrolls(page);
     expect(scroll.scrolls, JSON.stringify(scroll)).toBe(false);
