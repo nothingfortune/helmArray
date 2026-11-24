@@ -22,6 +22,7 @@ export function gameKeysPreset(game: Game): Scheme {
     behaviour: {},
     ledger: {},
     accepted: [],
+    keyLabels: {},
   };
 }
 

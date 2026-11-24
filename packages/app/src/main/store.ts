@@ -117,7 +117,8 @@ export function isScheme(value: unknown): value is Scheme {
     isRecord(value['map']) &&
     isRecord(value['behaviour']) &&
     isRecord(value['ledger']) &&
-    Array.isArray(value['accepted'])
+    Array.isArray(value['accepted']) &&
+    (value['keyLabels'] === undefined || isRecord(value['keyLabels']))
   );
 }
 
