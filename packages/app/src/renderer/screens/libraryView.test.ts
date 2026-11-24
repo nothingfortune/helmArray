@@ -346,6 +346,22 @@ describe('the card of what is current', () => {
   });
 });
 
+describe('the card, for a unit last written with a game since deleted', () => {
+  it('never takes a game added later under the same id for it, and names it as it was', () => {
+    const fresh = entry({ schemes: [KEYS], activeSchemeId: KEYS.id });
+    const deleted = holds(XBOX, 100, { gameDeleted: true, gameName: 'Helldivers 2' });
+    const card = currentCard([fresh], {
+      activeGameId: 'helldivers2',
+      onUnits: units(deleted, holds(KEYS, 50)),
+    });
+    expect([card?.applied, card?.scheme, card?.detail]).toEqual([
+      true,
+      KEYS,
+      'Applied · Keys · Left unit: Helldivers 2 · Xbox controller',
+    ]);
+  });
+});
+
 describe('the card names, for each unit, the scheme last written to it', () => {
   // Two games with two setups each. A run of applies (of whatever devices each setup has at the
   // time: both Azerons, the left one, none) and edits to the setups' devices that are not applied.

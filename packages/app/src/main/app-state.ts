@@ -185,6 +185,8 @@ export function holdsOf(write: UnitWrite | null, unit: HeldUnit | undefined): Un
     schemeId: write.schemeId,
     gameId: write.gameId,
     schemeName: write.schemeName,
+    ...(write.gameName !== undefined && { gameName: write.gameName }),
+    ...(write.gameDeleted === true && { gameDeleted: true as const }),
     devices: { ...write.devices },
     output: write.output,
     at: write.at,

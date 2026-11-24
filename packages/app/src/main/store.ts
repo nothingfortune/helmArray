@@ -61,6 +61,22 @@ import {
 import type { GameEntry, Preset } from '../shared/api';
 import { MAX_ID_LENGTH, isSafeId } from '../shared/ids';
 
+/**
+ * Everything the store keeps, by kind, and what deleting a game added by hand does to what it
+ * keeps for that game. Every kind is listed (a new kind is a type error here until it is), and
+ * `deleteGame` does exactly this for each, so no data kept per game can be forgotten and inherited
+ * by a game added later under the same id.
+ */
+export const ON_GAME_DELETED: Readonly<Record<StoredKind, string>> = {
+  game: 'removed: its file',
+  scheme: 'removed: every scheme of the game',
+  applied: 'removed: the plan applied for each of its schemes, and what the game held',
+  settings: 'removed: no longer the active game, and no scheme picked for it',
+  sheets: 'removed: its baseline (the bindings the game held)',
+  units:
+    'kept as history, marked: what each unit was last written with is still true, but the record is marked as of a deleted game, so a game added later under the id is never taken for it',
+};
+
 /** A file the store could not use, in a sentence the person can act on. */
 export interface StoreProblem {
   /** The file, relative to the data folder, with forward slashes: `schemes/x.json`. */
@@ -568,20 +584,54 @@ export class DataStore {
         );
       }
     });
-    // A game added by hand is gone, and its schemes with it: a game added later under its id must
-    // not take them over. Nothing may stay picked for it. A built-in game stays, with its schemes.
-    const done = builtIn
-      ? run
-      : run.then(() => this.dropSchemes(gameId)).then(() => this.forget(gameId));
+    // A game added by hand is gone, and everything kept for it (`ON_GAME_DELETED`): a game added
+    // later under its id must not take any of it over. A built-in game stays, with all of it.
+    const done = builtIn ? run : run.then(() => this.dropGameData(gameId));
     return this.track(done);
   }
 
-  /** Deletes every scheme of a game, and what the game holds once they are gone. */
+  /** What deleting a game added by hand does to each kind kept for it: see `ON_GAME_DELETED`. */
+  private readonly onGameDeleted: Record<StoredKind, (gameId: string) => Promise<void>> = {
+    // Removed by `deleteGame` itself, before the rest.
+    game: () => Promise.resolve(),
+    // Each scheme's applied plan goes with it (`deleteScheme`).
+    scheme: (gameId) => this.dropSchemes(gameId),
+    applied: (gameId) =>
+      this.enqueue(() => rm(join(this.root, 'applied', `${heldId(gameId)}.json`), { force: true })),
+    settings: (gameId) => this.forget(gameId),
+    sheets: (gameId) =>
+      this.changeBaselines((baselines) => ({
+        games: baselines.games.filter((g) => g.gameId !== gameId),
+      })),
+    units: (gameId) => this.markDeleted(gameId),
+  };
+
+  /** Everything kept for a game added by hand, in the order of `ON_GAME_DELETED`. */
+  private async dropGameData(gameId: string): Promise<void> {
+    for (const kind of Object.keys(ON_GAME_DELETED) as StoredKind[]) {
+      await this.onGameDeleted[kind](gameId);
+    }
+  }
+
+  /** Deletes every scheme of a game (and each one's applied plan). */
   private async dropSchemes(gameId: string): Promise<void> {
     for (const scheme of await this.listSchemes(gameId)) await this.deleteScheme(scheme.id);
-    await this.enqueue(() =>
-      rm(join(this.root, 'applied', `${heldId(gameId)}.json`), { force: true }),
-    );
+  }
+
+  /** Marks each unit's record of a deleted game as history (`UnitWrite.gameDeleted`). */
+  private markDeleted(gameId: string): Promise<void> {
+    const run = this.unitsTurn.then(async () => {
+      const held = await this.unitsHeld();
+      const mark = (write: UnitsHeld['left']) =>
+        write !== null && write.gameId === gameId && write.gameDeleted !== true
+          ? { ...write, gameDeleted: true as const }
+          : write;
+      const next = { left: mark(held.left), right: mark(held.right) };
+      if (next.left === held.left && next.right === held.right) return;
+      await this.put('units', 'units.json', next);
+    });
+    this.unitsTurn = run.catch(() => undefined);
+    return run;
   }
 
   /** Drops a game from the settings: no longer the active game, and no scheme picked for it. */

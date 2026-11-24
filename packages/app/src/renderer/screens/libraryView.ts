@@ -147,7 +147,8 @@ const HAND_WORD = { left: 'Left unit', right: 'Right unit' } as const;
 /**
  * The "On your Azerons now" card, from the units' own record: each unit's last write (state
  * `onUnits`), never a scheme's current fields, which may have been edited since. It shows the
- * latest of the two writes; when the other unit holds another scheme (the right one, after a left
+ * latest of the two writes of a game still in the Library (a game deleted since is only noted, by
+ * its name as applied); when the other unit holds another scheme (the right one, after a left
  * Azeron + mouse apply), the line says so, and a unit read as running something else says that.
  * With no unit ever written it is the active game's active scheme, worded as not applied yet. Null
  * when there is neither.
@@ -164,15 +165,20 @@ export function currentCard(
     left: state?.onUnits.left?.schemeId ?? null,
     right: state?.onUnits.right?.schemeId ?? null,
   };
-  const latest = holds.reduce<(typeof holds)[number] | null>(
-    (best, h) => (best === null || h.at > best.at ? h : best),
-    null,
-  );
   const named = (h: (typeof holds)[number]) => {
-    const entry = entries.find((e) => e.gameId === h.gameId);
+    // A game deleted since is history: a game added later under its id is never taken for it.
+    const entry = h.gameDeleted === true ? undefined : entries.find((e) => e.gameId === h.gameId);
     const scheme = entry?.schemes.find((s) => s.id === h.schemeId) ?? null;
-    return { entry, scheme, title: `${entry?.name ?? 'A game'} · ${scheme?.name ?? h.schemeName}` };
+    const game = entry?.name ?? h.gameName ?? 'A game';
+    return { entry, scheme, title: `${game} · ${scheme?.name ?? h.schemeName}` };
   };
+  // The latest write of a game still in the Library; a write of a game since deleted is only noted.
+  const latest = holds
+    .filter((h) => named(h).entry !== undefined)
+    .reduce<(typeof holds)[number] | null>(
+      (best, h) => (best === null || h.at > best.at ? h : best),
+      null,
+    );
   if (latest !== null) {
     const shown = named(latest);
     const notes = [`Applied · ${setupWords(latest)}`];

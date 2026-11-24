@@ -489,6 +489,7 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
             schemeId,
             gameId: game.id,
             schemeName: scheme.name,
+            gameName: game.name,
             devices: { ...scheme.devices },
             output: scheme.output,
             at: (deps.now ?? Date.now)(),

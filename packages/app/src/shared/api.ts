@@ -135,6 +135,10 @@ export interface UnitHolds {
   gameId: string;
   /** The scheme's name when it was applied. */
   schemeName: string;
+  /** The game's name when it was applied, when the record has it. */
+  gameName?: string;
+  /** The game was deleted since: history, never the game of the same id added later. */
+  gameDeleted?: true;
   /** What that setup played with when it was applied. */
   devices: Scheme['devices'];
   output: Scheme['output'];

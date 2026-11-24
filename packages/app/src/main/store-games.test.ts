@@ -5,10 +5,10 @@
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { BUILT_IN_DEVICES, resolve } from '@helmarray/core';
+import { BUILT_IN_DEVICES, MIGRATIONS, resolve } from '@helmarray/core';
 import type { Game } from '@helmarray/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AUTOSAVE_MS, DataStore } from './store';
+import { AUTOSAVE_MS, DataStore, ON_GAME_DELETED } from './store';
 import type { StoreProblem } from './store';
 
 const SKIFF: Game = {
@@ -369,5 +369,75 @@ describe('deleting the active game', () => {
     await data.setActive('skiff', scheme.id);
     await data.deleteGame('skiff');
     expect(data.active()).toEqual({ gameId: 'skiff', schemeId: scheme.id });
+  });
+});
+
+// Everything the store keeps per game is listed in one place (`ON_GAME_DELETED`), so a new kind of
+// per-game data can't be forgotten when a game added by hand is deleted, and a game added later
+// under its id never inherits any of it.
+describe('everything kept per game goes with a game added by hand', () => {
+  /** Every file under the data folder, with its text. A file keyed by the game names it in its
+   * name (a scheme's id starts with the game's) or in its text. */
+  async function files(dir = root, prefix = ''): Promise<[string, string][]> {
+    const out: [string, string][] = [];
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      const name = `${prefix}${entry.name}`;
+      if (entry.isDirectory()) out.push(...(await files(join(dir, entry.name), `${name}/`)));
+      else out.push([name, await readFile(join(dir, entry.name), 'utf8')]);
+    }
+    return out;
+  }
+
+  it('lists what deleting a game does for every kind the store keeps', () => {
+    expect(Object.keys(ON_GAME_DELETED).sort()).toEqual(Object.keys(MIGRATIONS).sort());
+  });
+
+  it('leaves nothing keyed by its id on disk but the units’ history, marked as of a deleted game', async () => {
+    const { data } = await openStore();
+    data.saveGame(ROVER);
+    await data.flush();
+    const scheme = await data.createSchemeFromPreset('rover', 'keys');
+    const plan = resolve(scheme, ROVER, BUILT_IN_DEVICES);
+    await data.setActive('rover', scheme.id);
+    await data.saveApplied(scheme.id, plan);
+    await data.settleBaseline('rover', plan.gameBindings);
+    await data.recordApply(
+      plan,
+      [
+        { hand: 'left', status: 'applied' },
+        { hand: 'right', status: 'applied' },
+      ],
+      {
+        schemeId: scheme.id,
+        gameId: 'rover',
+        schemeName: scheme.name,
+        devices: scheme.devices,
+        output: scheme.output,
+        at: 1,
+      },
+    );
+    await data.flush();
+    // Every kind was written for it: the guard below sees each one.
+    const keyed = ([f, text]: [string, string]) => f.includes('rover') || text.includes('rover');
+    const before = (await files()).filter(keyed).map(([f]) => f);
+    expect(before.sort()).toEqual(
+      [
+        'games/rover.json',
+        `schemes/${scheme.id}.json`,
+        `applied/${scheme.id}.json`,
+        'settings.json',
+        'sheets.json',
+        'units.json',
+      ].sort(),
+    );
+
+    await data.deleteGame('rover');
+    await data.flush();
+    const left = (await files()).filter(keyed);
+    // units.json is history: what each unit was last written with, which is still true. It is kept,
+    // marked as of a deleted game, so a game added later under the id is never taken for it.
+    expect(left.map(([f]) => f)).toEqual(['units.json']);
+    const units = JSON.parse(left[0]?.[1] ?? '{}') as Record<string, { gameDeleted?: boolean }>;
+    expect([units['left']?.gameDeleted, units['right']?.gameDeleted]).toEqual([true, true]);
   });
 });
