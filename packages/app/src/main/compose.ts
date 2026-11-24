@@ -179,6 +179,7 @@ export async function composeServices(options: ComposeOptions): Promise<Services
     azeronAppRunning: azeronOpen,
     saveApplied: (schemeId, plan) => data.saveApplied(schemeId, plan),
     recordUnits: (plan, outcomes, who) => data.recordApply(plan, outcomes, who),
+    unitsHeld: () => data.unitsHeld(),
     saveScheme: (scheme) => data.saveScheme(scheme),
     setActive: (gameId, schemeId) => data.setActive(gameId, schemeId),
     // The game holds its baseline: what it ships, moved only by Done (never by an apply alone,

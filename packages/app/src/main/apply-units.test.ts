@@ -623,7 +623,7 @@ describe('applying to the units', () => {
       const preview = previewUnits(plan, await state.held(), { name: NAME });
       expect(preview.anyChange).toBe(true);
       expect(preview.left.write).toBeNull();
-      expect(preview.left.deletes).toEqual([{ slot: 0, name: 'Old' }]);
+      expect(preview.left.deletes).toEqual([{ slot: 0, name: 'Old', ownCopy: false, game: null }]);
       expect(preview.changes).toEqual(['Delete slot 0 ("Old") from the left unit.']);
 
       const result = await applyUnits(plan, state.deps);
@@ -650,7 +650,7 @@ describe('applying to the units', () => {
   });
 
   describe('a unit at its slot limit', () => {
-    it('writes over a slot it is not running, preferring one with our name, and never the running one', async () => {
+    it('writes over the lowest slot it is not running, and never the running one', async () => {
       const [left, right] = twoUnits({
         limit: 3,
         slots: { 0: { name: 'Default' }, 1: { name: NAME }, 2: { name: 'Old' } },
@@ -664,8 +664,8 @@ describe('applying to the units', () => {
         overwrites: { slot: 1, name: NAME },
       });
       expect(preview.left.deletes).toEqual([
-        { slot: 0, name: 'Default' },
-        { slot: 2, name: 'Old' },
+        { slot: 0, name: 'Default', ownCopy: false, game: null },
+        { slot: 2, name: 'Old', ownCopy: false, game: null },
       ]);
       expect(preview.changes[0]).toBe(
         'Write the layout over slot 1 ("Skiff") on the left unit (it has no free slot) and switch to it.',
@@ -755,8 +755,8 @@ describe('previewing the units', () => {
     expect(preview.anyChange).toBe(true);
     expect(preview.left.write).toEqual({ slot: 1, name: NAME, overwrites: null });
     expect(preview.left.deletes).toEqual([
-      { slot: 0, name: 'Default' },
-      { slot: 2, name: 'Old' },
+      { slot: 0, name: 'Default', ownCopy: false, game: null },
+      { slot: 2, name: 'Old', ownCopy: false, game: null },
     ]);
     expect(preview.changes).toEqual([
       'Write the layout into a new slot 1 ("Skiff") on the left unit and switch to it.',
@@ -884,12 +884,12 @@ describe('the verdict for the sync pill', () => {
 describe('choosing a slot', () => {
   const slot = (n: number, name = '') => ({ slot: n, name, settings: null, records: [] });
   it('takes the lowest free slot, which after a deletion is the gap', () => {
-    expect(chooseSlot([slot(0), slot(2)], 0, 6, NAME)).toEqual({
+    expect(chooseSlot([slot(0), slot(2)], 0, 6)).toEqual({
       ok: true,
       slot: 1,
       overwrites: null,
     });
-    expect(chooseSlot([slot(0), slot(1)], 1, 6, NAME)).toEqual({
+    expect(chooseSlot([slot(0), slot(1)], 1, 6)).toEqual({
       ok: true,
       slot: 2,
       overwrites: null,
@@ -897,7 +897,7 @@ describe('choosing a slot', () => {
   });
   it('never offers the slot being run', () => {
     for (const running of [0, 1, 2]) {
-      const choice = chooseSlot([slot(0, NAME), slot(1, NAME), slot(2, NAME)], running, 3, NAME);
+      const choice = chooseSlot([slot(0), slot(1, NAME), slot(2, NAME)], running, 3);
       expect(choice).toMatchObject({ ok: true });
       expect(choice.ok && choice.slot).not.toBe(running);
     }
@@ -950,17 +950,17 @@ describe('the slot name, character by character', () => {
 
 describe('choosing a slot, in the order a person would', () => {
   it('takes the lowest-numbered slot it is not running when none has our name, whatever order they came in', () => {
-    const choice = chooseSlot([slotOf(2, 'B'), slotOf(0, 'A'), slotOf(1, 'C')], 1, 3, NAME);
+    const choice = chooseSlot([slotOf(2, 'B'), slotOf(0, 'A'), slotOf(1, 'C')], 1, 3);
     expect(choice).toMatchObject({ ok: true, slot: 0 });
   });
 
-  it('prefers the slot with our name over a lower one without', () => {
-    const choice = chooseSlot([slotOf(0, 'A'), slotOf(1, NAME), slotOf(2, 'B')], 2, 3, NAME);
-    expect(choice).toMatchObject({ ok: true, slot: 1 });
+  it('takes the lowest it is not running whatever the names: a name says nothing of whose it is', () => {
+    const choice = chooseSlot([slotOf(0, 'A'), slotOf(1, NAME), slotOf(2, 'B')], 2, 3);
+    expect(choice).toMatchObject({ ok: true, slot: 0 });
   });
 
   it('says there is nowhere to write, for one slot and for several', () => {
-    expect([chooseSlot([slotOf(0)], 0, 1, NAME), chooseSlot([slotOf(0)], 0, 0, NAME)]).toEqual([
+    expect([chooseSlot([slotOf(0)], 0, 1), chooseSlot([slotOf(0)], 0, 0)]).toEqual([
       {
         ok: false,
         reason:

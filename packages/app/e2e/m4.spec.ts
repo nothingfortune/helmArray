@@ -81,14 +81,20 @@ test.describe('the M4 screens', () => {
     await expect(drawer(page).getByLabel('What is ready')).toContainText(
       'The Azeron app is closed.',
     );
-    // Each unit lists its buttons in the game's words, and its other layouts going in one line.
+    // Each unit lists its buttons in the game's words, and each layout of the person's it removes:
+    // nothing wrote them that helmArray knows of, so each is said by its name.
     await expect(drawer(page).getByLabel('Left Azeron')).toContainText('Index 3 · Interact');
     await expect(drawer(page).getByLabel('Right Azeron')).toContainText('Thumb upper · Menu');
-    await expect(drawer(page).getByLabel('Right Azeron')).toContainText(
-      'Your other layouts on this unit are removed.',
-    );
+    await expect(drawer(page).getByLabel('Right Azeron').locator('.kind-housekeeping')).toHaveText([
+      'Your layout “Default” is removed.',
+      'Your layout “Old layout” is removed.',
+    ]);
     await applyInDrawer(page).click();
     await expect(drawer(page).getByLabel('Result')).toContainText('Both units now run the layout.');
+    // The result says so too.
+    await expect(drawer(page).getByLabel('Result')).toContainText(
+      'The right unit runs the layout; your layout “Default” and your layout “Old layout” were removed.',
+    );
     await drawer(page).getByRole('button', { name: 'Close' }).click();
 
     // What the fake units hold: the scheme as the only slot, and it is the one they run.

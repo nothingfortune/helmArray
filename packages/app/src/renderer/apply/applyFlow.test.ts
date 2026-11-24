@@ -42,8 +42,8 @@ const unit = (over: Partial<ApplyUnitChange> = {}): ApplyUnitChange => ({
   ],
   write: { slot: 1, name: 'Main', overwrites: null },
   deletes: [
-    { slot: 0, name: 'Default' },
-    { slot: 2, name: '' },
+    { slot: 0, name: 'Default', ownCopy: false, game: null },
+    { slot: 2, name: '', ownCopy: false, game: null },
   ],
   changes: [],
   problem: null,
@@ -411,7 +411,8 @@ describe('what changes on a unit', () => {
         { kind: 'button', text: 'Middle 1 · Reload' },
         { kind: 'button', text: 'Index 5 · Silent running · new' },
         { kind: 'button', text: 'D-pad ↑ · cleared' },
-        { kind: 'housekeeping', text: 'Your other layouts on this unit are removed.' },
+        { kind: 'housekeeping', text: 'Your layout “Default” is removed.' },
+        { kind: 'housekeeping', text: 'A layout with no name is removed.' },
       ],
     });
   });
@@ -451,36 +452,22 @@ describe('what changes on a unit', () => {
     expect(lines.map((l) => l.text)).toEqual(['Stick · Xbox left stick', 'Stick · Mouse movement']);
   });
 
-  it('says the other layouts go in one line, also when one is written over', () => {
-    const section = unitSection(
-      unit({ write: { slot: 3, name: 'Main', overwrites: { slot: 3, name: 'Old' } }, deletes: [] }),
-      false,
-    );
-    expect(section.lines.filter((l) => l.kind === 'housekeeping')).toEqual([
-      { kind: 'housekeeping', text: 'Your other layouts on this unit are removed.' },
-    ]);
-  });
-
-  it("says nothing of a layout it replaces when that is this scheme's own earlier copy", () => {
-    const again = unit({
-      buttons: [button()],
-      write: { slot: 2, name: 'Main', overwrites: null },
-      deletes: [{ slot: 1, name: 'Main' }],
-    });
-    expect(unitSection(again, false).lines.map((l) => l.kind)).toEqual(['button']);
-  });
-
   it('says a unit already holding the layout has no change, or no button change', () => {
     const same = unit({ differs: false, inputsChanged: 0, buttons: [], write: null, deletes: [] });
     expect(unitSection(same, false)).toMatchObject({
       summary: 'No change',
       lines: [{ kind: 'same', text: 'It already holds this layout.' }],
     });
-    expect(unitSection({ ...same, deletes: [{ slot: 4, name: 'Spare' }] }, false)).toEqual({
+    expect(
+      unitSection(
+        { ...same, deletes: [{ slot: 4, name: 'Spare', ownCopy: false, game: null }] },
+        false,
+      ),
+    ).toEqual({
       hand: 'left',
       title: 'Left Azeron',
       summary: 'No button changes',
-      lines: [{ kind: 'housekeeping', text: 'Your other layouts on this unit are removed.' }],
+      lines: [{ kind: 'housekeeping', text: 'Your layout “Spare” is removed.' }],
     });
   });
 
@@ -616,5 +603,51 @@ describe('when to look again', () => {
   it('looks again when a unit is told which hand it is', () => {
     const asked = state({ question: { kind: 'press', prompt: 'Unplug your left Azeron.' } });
     expect(previews([asked, state()])).toBe(1);
+  });
+});
+
+// What main says of each layout Apply removes (by identity: `layoutIdentity`), and the line the
+// drawer gives it. Every one that isn't the scheme's own earlier copy is said, whatever its name.
+describe('the layouts a unit loses, said', () => {
+  const removing = (deletes: ApplyUnitChange['deletes']) =>
+    unitSection(unit({ buttons: [], deletes }), false)
+      .lines.filter((l) => l.kind === 'housekeeping')
+      .map((l) => l.text);
+
+  it.each([
+    ['its own earlier copy', { name: 'Main', ownCopy: true, game: 'Skiff' }, []],
+    [
+      'another scheme of the same game, same name',
+      { name: 'Main', ownCopy: false, game: 'Skiff' },
+      ['Your layout “Main” from Skiff is removed.'],
+    ],
+    [
+      'another game, same name',
+      { name: 'Xbox controller', ownCopy: false, game: 'Everspace 2' },
+      ['Your layout “Xbox controller” from Everspace 2 is removed.'],
+    ],
+    [
+      'no record, or one the unit does not agree with',
+      { name: 'Main', ownCopy: false, game: null },
+      ['Your layout “Main” is removed.'],
+    ],
+    [
+      'a layout with no name',
+      { name: '', ownCopy: false, game: null },
+      ['A layout with no name is removed.'],
+    ],
+  ] as const)('%s', (_, layout, lines) => {
+    expect(removing([{ slot: 1, ...layout }])).toEqual(lines);
+  });
+
+  it('says a layout written over, which the unit was not running, by its name', () => {
+    const over = unit({
+      buttons: [],
+      write: { slot: 3, name: 'Main', overwrites: { slot: 3, name: 'Old' } },
+      deletes: [],
+    });
+    expect(unitSection(over, false).lines.map((l) => l.text)).toEqual([
+      'Your layout “Old” is removed.',
+    ]);
   });
 });

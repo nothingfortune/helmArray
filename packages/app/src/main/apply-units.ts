@@ -27,7 +27,7 @@ import {
 } from '@helmarray/azeron';
 import type { UnitRecord } from '@helmarray/azeron';
 import type { Hand, Plan, UnitProfile } from '@helmarray/core';
-import type { ApplyButtonChange } from '../shared/api';
+import type { ApplyButtonChange, RemovedLayout } from '../shared/api';
 import type { UnitOps } from './gated-session';
 import { CYBORG2_LEFT, CYBORG2_RIGHT, handsOf, unitOf } from '@helmarray/core';
 
@@ -53,7 +53,15 @@ export interface UnitsOptions {
   name?: string;
   /** The game's name for an action, for the buttons a preview lists. Its id without it. */
   actionName?(mode: string, action: string): string;
+  /**
+   * What is known of a layout on this hand's unit (see `RemovedLayout`): by identity, never by
+   * name. Without it no layout is taken for the scheme's own earlier copy.
+   */
+  layoutOf?(hand: Hand, slot: { slot: number; name: string }): Omit<RemovedLayout, 'slot' | 'name'>;
 }
+
+/** Nothing known of a layout: not this scheme's, of no known game. */
+const UNKNOWN_LAYOUT = { ownCopy: false, game: null } as const;
 
 const handName = (hand: Hand) => (hand === 'left' ? 'left' : 'right');
 const slotLabel = (slot: Pick<StoredSlot, 'slot' | 'name'>) =>
@@ -89,21 +97,21 @@ export type SlotChoice =
  * Which slot the layout goes into.
  *  1. The lowest free slot, when the unit has one: nothing it holds is touched, so a failure
  *     leaves everything as it was. (Reusing one of ours would risk the slot being run.)
- *  2. When every slot is in use: a slot the unit is NOT running, preferring one that already has
- *     our name, else the lowest-numbered. The slot is deleted afterwards anyway; it is named in
- *     the preview as written over.
+ *  2. When every slot is in use: the lowest-numbered slot the unit is NOT running. A name says
+ *     nothing of whose a layout is (every game's preset is "Xbox controller", and a unit keeps 19
+ *     characters of one), so none is preferred by name. The slot is deleted afterwards anyway;
+ *     the preview names it as written over.
  *  3. Never the slot the unit runs. If that is the only slot there is no other place: refused.
  */
 export function chooseSlot(
   slots: readonly StoredSlot[],
   running: number,
   limit: number,
-  name: string,
 ): SlotChoice {
   const free = lowestFree(slots, limit);
   if (free !== undefined) return { ok: true, slot: free, overwrites: null };
   const others = slots.filter((s) => s.slot !== running).sort((a, b) => a.slot - b.slot);
-  const pick = others.find((s) => s.name === name) ?? others[0];
+  const pick = others[0];
   if (!pick) {
     return {
       ok: false,
@@ -132,7 +140,7 @@ export interface UnitPreview {
   /** The slot that gets written, or null when the unit already holds the layout. */
   write: { slot: number; name: string; overwrites: { slot: number; name: string } | null } | null;
   /** Slots that go, by name, so the drawer can say what is lost. */
-  deletes: { slot: number; name: string }[];
+  deletes: RemovedLayout[];
   /** The above in plain words, one line each. */
   changes: string[];
   /** Why Apply can't do this unit at all, in one sentence; null when it can. */
@@ -234,6 +242,7 @@ function previewUnit(
   held: HeldUnit | undefined,
   name: string,
   actionName: (mode: string, action: string) => string,
+  layoutOf: NonNullable<UnitsOptions['layoutOf']>,
 ): UnitPreview {
   const base: UnitPreview = {
     hand,
@@ -268,7 +277,7 @@ function previewUnit(
   let write: UnitPreview['write'] = null;
   const changes: string[] = [];
   if (differs) {
-    const choice = chooseSlot(held.slots, held.running, held.slotLimit, name);
+    const choice = chooseSlot(held.slots, held.running, held.slotLimit);
     if (!choice.ok) return { ...base, differs, inputsChanged, buttons, problem: choice.reason };
     target = choice.slot;
     write = {
@@ -286,7 +295,7 @@ function previewUnit(
   }
   const deletes = held.slots
     .filter((s) => s.slot !== target)
-    .map((s) => ({ slot: s.slot, name: s.name }));
+    .map((s) => ({ slot: s.slot, name: s.name, ...layoutOf(hand, s) }));
   if (deletes.length > 0) {
     changes.push(`Delete ${deletes.map((s) => slotLabel(s)).join(', ')} from the ${unit} unit.`);
   }
@@ -301,8 +310,9 @@ export function previewUnits(
 ): UnitsPreview {
   const name = unitSlotName(options.name);
   const actionName = options.actionName ?? ((_mode: string, action: string) => action);
-  const left = previewUnit(plan, 'left', held.left, name, actionName);
-  const right = previewUnit(plan, 'right', held.right, name, actionName);
+  const layoutOf = options.layoutOf ?? (() => UNKNOWN_LAYOUT);
+  const left = previewUnit(plan, 'left', held.left, name, actionName, layoutOf);
+  const right = previewUnit(plan, 'right', held.right, name, actionName, layoutOf);
   // A unit the setup doesn't use has nothing to do, so it adds no line, no change and no problem.
   const units = [left, right];
   return {
@@ -365,6 +375,12 @@ export interface UnitsDeps {
   unit(hand: Hand): { session: UnitOps; deviceId: number } | undefined;
   /** The slot's name on the unit. */
   name?: string;
+  /**
+   * What a good apply says of the layouts it removed from a unit, as a clause ("your layout
+   * “Main” from Rover was removed"), or null when nothing of the person's went (the scheme's own
+   * earlier copy). Without it: "its other 2 layouts were removed".
+   */
+  removed?(hand: Hand, gone: readonly { slot: number; name: string }[]): string | null;
   trace?(line: string): void;
 }
 
@@ -470,7 +486,7 @@ async function applyUnit(
     if (isClean(verdict)) {
       trace(`already holds the layout in slot ${slot}`);
     } else {
-      const choice = chooseSlot(slots, running, identity.slotLimit, name);
+      const choice = chooseSlot(slots, running, identity.slotLimit);
       if (!choice.ok) return stop(choice.reason);
       slot = choice.slot;
       const into = choice.overwrites ? slotLabel(choice.overwrites) : `slot ${slot}`;
@@ -600,14 +616,20 @@ async function applyUnit(
     const wrote = outcome.wrote;
     const n = outcome.deleted.length;
     outcome.status = wrote ? 'applied' : 'unchanged';
-    // In the person's words: their layouts, not the unit's numbered slots.
+    // In the person's words: their layouts, not the unit's numbered slots, and nothing said of
+    // the scheme's own earlier copy (told by identity, by whoever knows it).
     const removed =
-      n === 1 ? 'its other layout was removed' : `its other ${n} layouts were removed`;
+      n === 0
+        ? null
+        : deps.removed !== undefined
+          ? deps.removed(hand, outcome.deleted)
+          : n === 1
+            ? 'its other layout was removed'
+            : `its other ${n} layouts were removed`;
+    const said = removed === null ? '' : `; ${removed}`;
     outcome.message = wrote
-      ? `The ${unit} unit runs the layout${n > 0 ? `; ${removed}` : ''}.`
-      : n > 0
-        ? `The ${unit} unit already held the layout; ${removed}.`
-        : `The ${unit} unit already held the layout.`;
+      ? `The ${unit} unit runs the layout${said}.`
+      : `The ${unit} unit already held the layout${said}.`;
     return outcome;
   } catch (error) {
     if (!(error instanceof Stop)) throw error;

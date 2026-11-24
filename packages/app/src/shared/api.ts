@@ -195,6 +195,22 @@ export interface ApplyButtonChange {
   nowEmpty: boolean;
 }
 
+/**
+ * A layout Apply removes from a unit, and what is known of it. Whether it is this scheme's own
+ * earlier copy is told from the units' record (the scheme last written to the unit) and the unit
+ * read as running it, never from its name: names repeat across games ("Xbox controller") and a
+ * unit keeps 19 characters of one.
+ */
+export interface RemovedLayout {
+  slot: number;
+  /** Its name on the unit; may be empty. */
+  name: string;
+  /** This scheme's own earlier copy, by the record and the read: nothing of the person's is lost. */
+  ownCopy: boolean;
+  /** The game the record says it is of, when the unit is read as running it; else null. */
+  game: string | null;
+}
+
 /** What Apply would do to one unit. */
 export interface ApplyUnitChange {
   hand: Hand;
@@ -217,7 +233,7 @@ export interface ApplyUnitChange {
   /** The slot written, or null when the unit already holds the layout. */
   write: { slot: number; name: string; overwrites: { slot: number; name: string } | null } | null;
   /** The slots deleted afterwards, each by name (empty when the unit has no other). */
-  deletes: { slot: number; name: string }[];
+  deletes: RemovedLayout[];
   /** The above in words, one line each. */
   changes: string[];
   /** Why this unit can't be done at all, in one sentence, or null. */

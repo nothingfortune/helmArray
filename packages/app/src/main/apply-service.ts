@@ -22,7 +22,7 @@
 // Nothing here throws at a caller: every refusal and failure comes back as a sentence.
 // Pure: the store, the units and the running programs are handed in.
 
-import type { ApplyWho, Game, Hand, Plan, Scheme } from '@helmarray/core';
+import type { ApplyWho, Game, Hand, Plan, Scheme, UnitsHeld } from '@helmarray/core';
 import { handsOf, pendingRows } from '@helmarray/core';
 import type {
   ApplyGame,
@@ -33,8 +33,8 @@ import type {
   ApplyUnitResult,
   ReadyCheck,
 } from '../shared/api';
-import { NO_UNIT_SENTENCE, applyUnits, previewUnits } from './apply-units';
-import type { UnitsDeps } from './apply-units';
+import { NO_UNIT_SENTENCE, applyUnits, previewUnits, verifyProfile } from './apply-units';
+import type { HeldUnits, UnitsDeps, UnitsOptions } from './apply-units';
 import { heldUnits } from './app-state';
 import type { DevicesSnapshot, HoldTools } from './devices';
 import type { UnitOps } from './gated-session';
@@ -86,6 +86,11 @@ export interface ApplyServiceDeps {
     outcomes: readonly { hand: Hand; status: string }[],
     who: ApplyWho,
   ): Promise<void>;
+  /**
+   * What each unit was last written with (units.json): the identity of the layout it runs. Without
+   * it no layout Apply removes is taken for the scheme's own earlier copy, so every one is said.
+   */
+  unitsHeld?(): Promise<UnitsHeld>;
   /** The clock, for when an apply was. Defaults to `Date.now`. */
   now?(): number;
   /** An apply ended, however it ended: the state is to be worked out again. */
@@ -127,6 +132,45 @@ const emptyUnit = (hand: Hand, problem: string | null, used = true): ApplyUnitCh
   changes: [],
   problem,
 });
+
+/** What is known of the layouts on a unit, for what Apply removes: see `RemovedLayout`. */
+type LayoutOf = NonNullable<UnitsOptions['layoutOf']>;
+
+/**
+ * Identity, never a name: a layout is this scheme's own earlier copy only when the units' record
+ * says this scheme was last written to that unit, and the unit, read now, runs that very layout in
+ * this slot. The record's game is known of the slot the unit runs when the read agrees with it;
+ * of any other slot nothing is known but its name.
+ */
+export function layoutIdentity(
+  schemeId: string,
+  held: HeldUnits,
+  record: UnitsHeld | null,
+  gameName: (gameId: string) => string | null,
+): LayoutOf {
+  return (hand, slot) => {
+    const unit = held[hand];
+    const write = record?.[hand] ?? null;
+    if (unit === undefined || write === null || slot.slot !== unit.running) {
+      return { ownCopy: false, game: null };
+    }
+    const verdict = verifyProfile(write.profile, unit);
+    const runs =
+      verdict !== null && verdict.differences.length === 0 && verdict.unchecked.length === 0;
+    if (!runs) return { ownCopy: false, game: null };
+    return { ownCopy: write.schemeId === schemeId, game: gameName(write.gameId) };
+  };
+}
+
+/** What a good apply says of the layouts it removed: each that wasn't the scheme's own copy. */
+export function removedWords(
+  gone: readonly { name: string; game: string | null }[],
+): string | null {
+  if (gone.length === 0) return null;
+  const one = ({ name, game }: { name: string; game: string | null }) =>
+    `${name === '' ? 'a layout with no name' : `your layout “${name}”`}${game === null ? '' : ` from ${game}`}`;
+  return `${gone.map(one).join(' and ')} ${gone.length === 1 ? 'was' : 'were'} removed`;
+}
 
 export function createApplyService(deps: ApplyServiceDeps): ApplyService {
   let running = false;
@@ -184,6 +228,23 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
       }
       return { ok: true, kind: 'unit', text: `The ${word} Azeron is connected.` };
     });
+  };
+
+  /** What is known of the layouts on the units, by identity (`layoutIdentity`). */
+  const identityOf = async (schemeId: string, held: HeldUnits): Promise<LayoutOf> => {
+    let record: UnitsHeld | null = null;
+    try {
+      record = (await deps.unitsHeld?.()) ?? null;
+    } catch (error) {
+      trace(`couldn't read what the units were last written with: ${messageOf(error)}`);
+    }
+    const names = new Map<string, string>();
+    for (const write of [record?.left, record?.right]) {
+      if (!write || names.has(write.gameId)) continue;
+      const known = await deps.plans.getGame(write.gameId).catch(() => undefined);
+      if (known) names.set(write.gameId, known.name);
+    }
+    return layoutIdentity(schemeId, held, record, (id) => names.get(id) ?? null);
   };
 
   /** What blocks, and what doesn't, as checks. Errors the player accepted don't block. */
@@ -289,6 +350,7 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
     const { game } = resolved;
     const units = previewUnits(resolved.plan, held, {
       name: resolved.scheme.name,
+      layoutOf: await identityOf(schemeId, held),
       actionName: (mode, action) =>
         game.actions.find((a) => a.mode === mode && a.id === action)?.name ?? action,
     });
@@ -393,7 +455,16 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
       const snapshot = deps.devices.snapshot();
       const ids = snapshot.units.flatMap((u) => (u.identity ? [u.identity.deviceId] : []));
       const hands = handsFor(ids, deps.hands);
+      // Whose each layout is, as the units are now, before anything is written.
+      const layoutOf = await identityOf(schemeId, heldUnits(snapshot, hands));
       const unitDeps: UnitsDeps = {
+        removed: (hand, gone) =>
+          removedWords(
+            gone.flatMap((slot) => {
+              const known = layoutOf(hand, slot);
+              return known.ownCopy ? [] : [{ name: slot.name, game: known.game }];
+            }),
+          ),
         azeronAppRunning: () => deps.azeronAppRunning(),
         unit: (hand) => {
           const id = hands.units.find((u) => u.hand === hand)?.id;

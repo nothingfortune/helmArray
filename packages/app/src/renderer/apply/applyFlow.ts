@@ -196,7 +196,14 @@ export function buttonLine(button: ApplyButtonChange): string {
   return button.wasEmpty ? `${where} · ${what} · new` : `${where} · ${what}`;
 }
 
-const HOUSEKEEPING = 'Your other layouts on this unit are removed.';
+/**
+ * A layout Apply removes that isn't this scheme's own earlier copy, by name and, when the units'
+ * record says, its game: "Your layout “Xbox controller” from Helldivers 2 is removed."
+ */
+export function removedLine(layout: { name: string; game: string | null }): string {
+  const what = layout.name === '' ? 'A layout with no name' : `Your layout “${layout.name}”`;
+  return `${what}${layout.game === null ? '' : ` from ${layout.game}`} is removed.`;
+}
 
 export function unitSection(unit: ApplyUnitChange, azeronOpen: boolean): UnitSection {
   const title = unit.hand === 'left' ? 'Left Azeron' : 'Right Azeron';
@@ -206,12 +213,14 @@ export function unitSection(unit: ApplyUnitChange, azeronOpen: boolean): UnitSec
   }
   if (!unit.connected) return { ...base, summary: 'Not connected', lines: [] };
   const lines: UnitLine[] = unit.buttons.map((b) => ({ kind: 'button', text: buttonLine(b) }));
-  // What happens to the unit's slots is the unit's business: one muted line says what is lost,
-  // unless all that goes is this scheme's own earlier copy (it has the name being written).
-  const gone = [...unit.deletes, ...(unit.write?.overwrites ? [unit.write.overwrites] : [])];
-  if (gone.some((slot) => slot.name !== unit.write?.name)) {
-    lines.push({ kind: 'housekeeping', text: HOUSEKEEPING });
-  }
+  // Every layout that goes and isn't this scheme's own earlier copy (by identity, from main, never
+  // by name) is said, muted, one line each. A layout written over is never the scheme's own: the
+  // unit doesn't run it.
+  const gone = [
+    ...unit.deletes.filter((layout) => !layout.ownCopy),
+    ...(unit.write?.overwrites ? [{ ...unit.write.overwrites, game: null }] : []),
+  ];
+  for (const layout of gone) lines.push({ kind: 'housekeeping', text: removedLine(layout) });
   if (unit.problem !== null) lines.push({ kind: 'problem', text: unit.problem });
   if (!unit.write && unit.deletes.length === 0 && unit.problem === null) {
     lines.push({ kind: 'same', text: 'It already holds this layout.' });
