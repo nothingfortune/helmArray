@@ -35,6 +35,13 @@ read through it.
 - Where the game has no file the app can write, the game's half of Apply is a **bind sheet**:
   what to set in the game's own menu.
 
+## Game data (the owner, 2026-11-20 and 2026-11-24)
+
+The repo doesn't have to hold every game. **The app lets you add a game's data**: its modes, its
+actions, and what each action is bound to by default on the keyboard and on a controller. Games
+that ship with helmArray (Helldivers 2 today) and games whose files we can harvest (M5) are a
+head start, never the only way in. Your data lives in your app folder, beside your setups.
+
 ## Decided
 
 - **Desktop app.** Owns its data. No git, no files to hand-edit, no code, no AI needed.
@@ -116,7 +123,10 @@ themselves. Nothing from the previous UI is kept.
 | ------------------------------------------------------------------------------- | ---- |
 | Game library from your installed Steam games, with their cover art              | v1   |
 | Add any other game by hand                                                      | v1   |
-| A game's actions: name, role, required                                          | v1   |
+| **A game's data is added in the app, by you:** its modes, its actions (name, role, required) and each action's default key and controller button | v1 |
+| Set a default by pressing it: a key, a mouse button or a controller button, while the app has focus | v1 |
+| Every game helmArray knows is editable; your edits are kept as your copy, with "back to helmArray's" | v1 |
+| A Steam game with no data says *Set up*, not *Not supported yet*                | v1   |
 | Modes within a game (Elite: ship, SRV, on foot); actions belong to modes        | v1   |
 | Write the game's own binding file where we know its format                      | v1   |
 | … Unreal `Input.ini` (Everspace 2), Elite `.binds`                              | v1   |

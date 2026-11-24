@@ -222,6 +222,10 @@ open Play view, quit.
 - **Undo** in the editor is in memory, per scheme. Edits autosave; Apply is separate.
 - **Export / import:** one `.helm` file (JSON) per scheme, its game included.
 - Built-in presets and game action lists ship read-only inside the app; using one copies it.
+- **A game's data is yours to add and edit.** `games/<id>.json` holds a game you added, or your
+  copy of a built-in or harvested game (same id; yours wins, and *back to helmArray's* deletes
+  your copy). Editing a game never changes the setups made from it: a setup names actions by id,
+  and an action you delete shows as a finding in the setups that used it.
 
 ## Trust (the app always tells the truth)
 
