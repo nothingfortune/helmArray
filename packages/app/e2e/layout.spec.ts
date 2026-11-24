@@ -129,6 +129,8 @@ for (const [width, height] of SIZES) {
       await expect(page.getByLabel('Key label')).toBeVisible();
       // The side panel scrolls in its own column, to the end of the action list.
       const side = page.getByRole('complementary', { name: 'Button and actions' });
+      // Nothing in it is wider than it: it scrolls down, never across.
+      expect(await side.evaluate((el) => el.scrollWidth - el.clientWidth)).toBe(0);
       await side.evaluate((el) => el.scrollTo(0, el.scrollHeight));
       const scroll = await windowScrolls(page);
       expect(scroll.scrolls, JSON.stringify(scroll)).toBe(false);
