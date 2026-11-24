@@ -19,9 +19,11 @@ import {
   isStick,
   isTextEntry,
   drop,
+  followLabels,
   redo,
   renameScheme,
   setDevices,
+  setKeyLabel,
   setLatch,
   setOutput,
   setPadControl,
@@ -191,8 +193,9 @@ function EditorBody({
       () => setSaveFailed(true),
     );
   }, []);
+  // Every edit carries the key labels along: a label goes with its action (followLabels).
   const edit = useCallback(
-    (fn: (s: Scheme) => Scheme) => change((h) => commit(h, fn(h.present))),
+    (fn: (s: Scheme) => Scheme) => change((h) => commit(h, followLabels(h.present, fn(h.present)))),
     [change],
   );
 
@@ -466,6 +469,9 @@ function EditorBody({
                   onLatch={(on) => edit((s) => setLatch(s, view.panel?.control ?? '', on))}
                   onPad={(pad) =>
                     edit((s) => setPadControl(s, view.panel?.control ?? '', pad, game))
+                  }
+                  onKeyLabel={(text) =>
+                    edit((s) => setKeyLabel(s, mode, view.panel?.control ?? '', text))
                   }
                 />
               )}

@@ -12,6 +12,7 @@ import type { DropAction } from '../devices/drag';
 import { Unit } from '../unit/Unit';
 import type { UnitProps } from '../unit/Unit';
 import {
+  KEY_LABEL_LIMIT,
   NAME_LIMIT,
   chooseAzerons,
   chooseController,
@@ -107,6 +108,7 @@ export function Panel({
   onTurbo,
   onLatch,
   onPad,
+  onKeyLabel,
 }: {
   panel: PanelView;
   onClose(): void;
@@ -116,6 +118,8 @@ export function Panel({
   onTurbo(on: boolean): void;
   onLatch(on: boolean): void;
   onPad(pad: PadControl): void;
+  /** The key label typed, when the field is left or Enter is pressed. */
+  onKeyLabel(text: string): void;
 }) {
   return (
     <div className="ed-panel">
@@ -192,6 +196,15 @@ export function Panel({
               </div>
             ))}
           </div>
+          {panel.keyLabel !== null && (
+            <KeyLabelField
+              // A new control, or a label changed elsewhere (an undo), starts the field afresh.
+              key={`${panel.control}|${panel.keyLabel.value}`}
+              value={panel.keyLabel.value}
+              placeholder={panel.keyLabel.placeholder}
+              onSave={onKeyLabel}
+            />
+          )}
           {panel.behaviour && (
             <div className="ed-group">
               <span className="ed-lbl">Behaviour</span>
@@ -245,6 +258,50 @@ export function Panel({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * "Key label", as the canvas draws it under Press: the player's short word for the key, shown on
+ * it only when the action's name won't fit. Saved when the field is left or Enter is pressed.
+ */
+export function KeyLabelField({
+  value,
+  placeholder,
+  onSave,
+}: {
+  value: string;
+  placeholder: string;
+  onSave(text: string): void;
+}) {
+  const [text, setText] = useState(value);
+  return (
+    <form
+      className="ed-group"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSave(text);
+      }}
+    >
+      <label className="ed-lbl" htmlFor="ed-key-label">
+        Key label
+      </label>
+      <span className="ed-field">
+        <input
+          id="ed-key-label"
+          type="text"
+          value={text}
+          placeholder={placeholder}
+          maxLength={KEY_LABEL_LIMIT}
+          aria-describedby="ed-key-label-hint"
+          onChange={(e) => setText(e.target.value)}
+          onBlur={() => onSave(text)}
+        />
+      </span>
+      <span className="ed-note" id="ed-key-label-hint">
+        Shown on the key only when the game&apos;s word won&apos;t fit at a readable size.
+      </span>
+    </form>
   );
 }
 

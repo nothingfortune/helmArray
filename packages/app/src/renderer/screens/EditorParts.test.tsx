@@ -48,6 +48,7 @@ const panel = (scheme: Scheme, selected: string, tab?: DeviceTabId) => {
       onTurbo={none}
       onLatch={none}
       onPad={none}
+      onKeyLabel={none}
     />,
   );
 };
@@ -271,5 +272,24 @@ describe('the header’s parts', () => {
         renderToStaticMarkup(<BackLink onBack={none} />),
       ].map((html) => html.startsWith('<button')),
     ).toEqual([true, true]);
+  });
+});
+
+describe('the key label field', () => {
+  const labelled: Scheme = { ...keysScheme(), keyLabels: { ship: { 'L.middle_1': 'FSD' } } };
+
+  it('is under Press for a button with an action: its label, the name as the hint, and what it is for', () => {
+    const html = panel(labelled, 'L.middle_1');
+    expect([
+      html.includes('<label class="ed-lbl" for="ed-key-label">Key label</label>'),
+      html.includes('value="FSD"'),
+      html.includes('placeholder="Frame shift drive"'),
+      html.includes('aria-describedby="ed-key-label-hint"'),
+      html.indexOf('Key label') > html.indexOf('>Press<'),
+    ]).toEqual([true, true, true, true, true]);
+  });
+
+  it('is not there for an empty button', () => {
+    expect(panel(labelled, 'L.index_4')).not.toContain('Key label');
   });
 });

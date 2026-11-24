@@ -704,3 +704,52 @@ describe('words for a signal that names an Object property', () => {
     expect(signalText({ kind: 'pad', control: 'toString' as never })).toBe('Xbox toString');
   });
 });
+
+describe('key labels', () => {
+  const labelled: Scheme = {
+    ...keysScheme(),
+    devices: { azerons: 'both', keyboard: true, mouse: true, controller: false },
+    map: {
+      ship: {
+        'L.middle_1': { tap: 'fsd' },
+        'key.J': { tap: 'galaxy' },
+        'mouse.left': { tap: 'fire' },
+      },
+      srv: { 'L.middle_1': { tap: 'jump' } },
+    },
+    keyLabels: { ship: { 'L.middle_1': 'FSD', 'key.J': 'Map' } },
+  };
+
+  it('go with the keys they are set on, in their mode only', () => {
+    const ship = view(labelled);
+    expect([
+      ship.left.keys['L.middle_1']?.short,
+      ship.fixed['key.J']?.short,
+      view(labelled, 'srv').left.keys['L.middle_1']?.short,
+    ]).toEqual(['FSD', 'Map', undefined]);
+  });
+
+  it('leave a key with none as it was', () => {
+    expect(view(keysScheme()).left.keys['L.index_1']).not.toHaveProperty('short');
+  });
+
+  it('are offered in the side panel for a unit button or a key with an action, the name as a hint', () => {
+    expect([
+      view(labelled, 'ship', 'L.middle_1').panel?.keyLabel,
+      view(labelled, 'ship', 'key.J').panel?.keyLabel,
+      view(labelled, 'srv', 'L.middle_1').panel?.keyLabel,
+    ]).toEqual([
+      { value: 'FSD', placeholder: 'Frame shift drive' },
+      { value: 'Map', placeholder: 'Galaxy map' },
+      { value: '', placeholder: 'Jump' },
+    ]);
+  });
+
+  it('are not offered for an empty button, the stick, or a mouse button (its row has room)', () => {
+    expect([
+      view(labelled, 'ship', 'L.index_4').panel?.keyLabel,
+      view(labelled, 'ship', 'L.stick').panel?.keyLabel,
+      view(labelled, 'ship', 'mouse.left').panel?.keyLabel,
+    ]).toEqual([null, null, null]);
+  });
+});
