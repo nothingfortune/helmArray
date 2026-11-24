@@ -58,6 +58,12 @@ export interface UnitsOptions {
 const handName = (hand: Hand) => (hand === 'left' ? 'left' : 'right');
 const slotLabel = (slot: Pick<StoredSlot, 'slot' | 'name'>) =>
   slot.name === '' ? `slot ${slot.slot}` : `slot ${slot.slot} ("${slot.name}")`;
+/**
+ * A slot in the person's words: a layout, by the name it has on the unit. The numbers are the
+ * unit's business, and the log's.
+ */
+const layoutLabel = (slot: Pick<StoredSlot, 'name'>) =>
+  slot.name === '' ? 'a layout with no name' : `the layout "${slot.name}"`;
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 const isClean = (verdict: Verdict) =>
@@ -471,7 +477,7 @@ async function applyUnit(
       // A slot written over has lost what it held, whatever happens next: say so.
       const overwritten = (clause: string) =>
         choice.overwrites
-          ? `${clause} and what it held before${choice.overwrites.name === '' ? '' : ` ("${choice.overwrites.name}")`} is gone`
+          ? `${clause}, and the layout${choice.overwrites.name === '' ? '' : ` "${choice.overwrites.name}"`} it replaced is gone`
           : clause;
       trace(`writing the layout into ${into}`);
 
@@ -485,12 +491,14 @@ async function applyUnit(
           return stop(messageOf(error));
         }
         if (now === slot) {
-          return stop(`it now runs ${into}, which was about to be written over`);
+          return stop(
+            `it now runs ${layoutLabel(choice.overwrites)}, which was about to be written over`,
+          );
         }
       }
       left = choice.overwrites
-        ? `${into} may be part-written, and the unit still runs slot ${running} with its other slots as they were`
-        : `a new slot ${slot} may be part-written, and the unit still runs slot ${running} with its other slots as they were`;
+        ? `${layoutLabel(choice.overwrites)} may be part-written, and the unit still runs what it ran before, with its other layouts as they were`
+        : 'a new layout may be part-written, and the unit still runs what it ran before, with its other layouts as they were';
       let result;
       try {
         result = await session.write(slot, name, records, deviceId);
@@ -511,12 +519,16 @@ async function applyUnit(
           ...result.differences.map((d) => d.id),
           ...result.unchecked.map((u) => u.id),
         ]).size;
-        left = `${overwritten(`slot ${slot} is not in use`)}, the unit still runs slot ${running}, and nothing was deleted`;
+        // Which inputs, and how, is for the log; the person is told what it means.
+        trace(
+          `slot ${slot} read back differently: ${count} input${count === 1 ? '' : 's'}${first ? `, first: input ${first.id} ${first.what}` : ''}`,
+        );
+        left = `${overwritten('the new layout is not in use')}, the unit still runs what it ran before, and nothing was removed`;
         return stop(
-          `slot ${slot} read back differently from the layout (${count} input${count === 1 ? '' : 's'}${first ? `, first: input ${first.id} ${first.what}` : ''})`,
+          `the new layout read back differently from what was written (${count} button${count === 1 ? '' : 's'})`,
         );
       }
-      left = `${overwritten(`slot ${slot} holds the layout`)}, the unit still runs slot ${running}, and nothing was deleted`;
+      left = `${overwritten('the new layout is in place')}, the unit still runs what it ran before, and nothing was removed`;
       await guard();
       try {
         await session.switchTo(slot);
@@ -524,7 +536,7 @@ async function applyUnit(
         return stop(messageOf(error));
       }
       outcome.switched = true;
-      left = `the unit runs the layout in slot ${slot}, and the slots it had before are still there`;
+      left = 'the unit runs the new layout, and the layouts it had before are still there';
     }
     outcome.slot = slot;
 
@@ -538,8 +550,8 @@ async function applyUnit(
       return stop(messageOf(error));
     }
     for (const [index, other] of others.entries()) {
-      const remaining = others.slice(index).map(slotLabel);
-      left = `the unit runs the layout in slot ${slot}, and ${remaining.join(' and ')} ${remaining.length === 1 ? 'is' : 'are'} still there`;
+      const remaining = others.slice(index).map(layoutLabel);
+      left = `the unit runs the new layout, and ${remaining.join(' and ')} ${remaining.length === 1 ? 'is' : 'are'} still there`;
       await guard();
       // Every deletion rests on the unit running the layout: asked again each time, because the
       // button can move it, and a slot is then deleted on a false premise.
@@ -550,20 +562,21 @@ async function applyUnit(
         return stop(messageOf(error));
       }
       if (now !== slot) {
-        return stop(`it now runs slot ${now}, not slot ${slot} where the layout is`);
+        trace(`runs slot ${now}, not slot ${slot}: not deleting`);
+        return stop('it now runs another layout, not the new one');
       }
       try {
         await session.deleteSlot(other.slot);
       } catch (error) {
         return stop(
-          `${slotLabel(other)} could not be deleted (${withoutPeriod(messageOf(error))})`,
+          `${layoutLabel(other)} could not be removed (${withoutPeriod(messageOf(error))})`,
         );
       }
       outcome.deleted.push({ slot: other.slot, name: other.name });
     }
 
     // Read every slot back and compare what the unit runs with the plan.
-    left = 'the other slots are deleted';
+    left = 'the other layouts are removed';
     await guard();
     let finalVerdict: Verdict;
     try {
@@ -571,8 +584,11 @@ async function applyUnit(
       const running = await session.runningSlot();
       finalVerdict = verify(records, after.find((s) => s.slot === running)?.records ?? []);
       outcome.verdict = finalVerdict;
-      left = `the unit runs slot ${running} and the other slots are deleted`;
-      if (running !== slot) return stop(`it is not running slot ${slot}, where the layout is`);
+      left = `the unit runs ${running === slot ? 'the new layout' : 'another layout'} and the other layouts are removed`;
+      if (running !== slot) {
+        trace(`runs slot ${running}, not slot ${slot}, after the clean-up`);
+        return stop('it is not running the new layout');
+      }
     } catch (error) {
       if (error instanceof Stop) throw error;
       return stop(messageOf(error));

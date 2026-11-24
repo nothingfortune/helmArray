@@ -194,7 +194,7 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
     azeronChanged: (processes) => {
       azeronKnown = true;
       writeBlock = processes.block?.reason ?? null;
-      // Units about to vanish because the service is stopped are not an unplug.
+      // Units let go because the service is paused (or stopped) are not an unplug.
       finder.update(null, blocked(), []);
       void gate.azeronRunning(processes.azeronRunning);
       void refresh();

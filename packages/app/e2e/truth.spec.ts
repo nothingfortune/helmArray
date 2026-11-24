@@ -115,10 +115,12 @@ test.describe('one drag is one change', () => {
     await expect(page.getByLabel('On your Azerons now')).toContainText('1 change not applied');
   });
 
-  test('Keys, Controller and back count the same: nothing is lost on the way', async ({ helm }) => {
+  test('Keys, Controller and back count the same with nothing applied yet', async ({ helm }) => {
     const { page } = helm;
     await startFrom(page, 'Xbox controller');
-    // Nothing applied yet: each action the scheme puts on a button.
+    // Nothing applied yet: each action the scheme puts on a button. (The preset's middle 2 sends
+    // Xbox Y with no action on it, and the round trip drops that: it was counted as a 16th change,
+    // and no longer is. After an apply the same round trip is one change, middle 2 cleared.)
     await expect(pill(page)).toHaveText('15 changes not applied');
     await azeronsSend(page).getByRole('button', { name: 'Keys' }).click();
     await expect(pill(page)).toHaveText('15 changes not applied');
@@ -175,4 +177,25 @@ test('a game with actions and no scheme says No scheme yet, not Not set up', asy
   await expect(page.locator('.games-head .hint')).toHaveText('3 games · 0 with a scheme');
   await expect(tile.getByRole('button', { name: 'Edit actions: Quiet Skies' })).toBeVisible();
   expect(await seriousViolations(page)).toEqual([]);
+});
+
+test('the schemes popover opens a scheme, beside its tile, not over it', async ({ helm }) => {
+  const { page } = helm;
+  await startFrom(page, 'Xbox controller');
+  await page.getByRole('button', { name: 'Library' }).click();
+  await page.getByRole('button', { name: 'Helldivers 2 schemes' }).click();
+  const popover = page.getByRole('dialog', { name: 'Helldivers 2 schemes' });
+  await expect(popover).toContainText('Open a scheme');
+  const cover = await page
+    .locator('.tile', { hasText: 'Helldivers 2' })
+    .locator('.cover')
+    .boundingBox();
+  const box = await popover.boundingBox();
+  if (cover === null || box === null) throw new Error('the cover and the popover are both drawn');
+  const overlaps =
+    box.x < cover.x + cover.width &&
+    cover.x < box.x + box.width &&
+    box.y < cover.y + cover.height &&
+    cover.y < box.y + box.height;
+  expect(overlaps).toBe(false);
 });

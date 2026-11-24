@@ -40,18 +40,27 @@ function SearchIcon() {
   );
 }
 
-/** A portrait or header image, or the dashed placeholder when there is none (or it won't load). */
-function Art({ entry, kind }: { entry: LibraryEntry; kind: 'portrait' | 'header' }) {
+/**
+ * A portrait or header image, or the dashed placeholder when there is none (or it won't load).
+ * `inButton`: the art is inside the tile's button, whose name is the game's: there a portrait's
+ * "No cover" is drawn (CSS), not text the name doesn't hold. Elsewhere it is text.
+ */
+function Art({
+  entry,
+  kind,
+  inButton = false,
+}: {
+  entry: LibraryEntry;
+  kind: 'portrait' | 'header';
+  inButton?: boolean;
+}) {
   const [failed, setFailed] = useState(false);
   const there = kind === 'portrait' ? entry.hasCover : entry.hasHeader;
   if (entry.appId === null || !there || failed) {
-    // A portrait's "No cover" is drawn (CSS), not text: inside the tile's button it would be words
-    // the button's name doesn't hold, and the name already says which game it is.
-    return kind === 'portrait' ? (
-      <span className="art-none" data-placeholder="No cover" aria-hidden="true" />
-    ) : (
-      <span className="art-none">{entry.name}</span>
-    );
+    if (kind === 'portrait' && inButton) {
+      return <span className="art-none" data-placeholder="No cover" aria-hidden="true" />;
+    }
+    return <span className="art-none">{kind === 'portrait' ? 'No cover' : entry.name}</span>;
   }
   return (
     <img className="art" src={coverUrl(entry.appId, kind)} alt="" onError={() => setFailed(true)} />
@@ -108,11 +117,12 @@ function Tile({
   onOpenGame: OpenGame;
 }) {
   const status = statusLine(entry, onUnits);
-  const body = (
+  const cover = (inButton: boolean) => (
     <span className={`cover${entry.hasCover ? '' : ' cover-empty'}`}>
-      <Art entry={entry} kind="portrait" />
+      <Art entry={entry} kind="portrait" inButton={inButton} />
     </span>
   );
+  const body = cover(true);
   const caption = (
     <>
       <div className="game-name">{entry.name}</div>
@@ -127,7 +137,7 @@ function Tile({
   if (needsSetUp(entry)) {
     return (
       <li className="tile unsupported">
-        {body}
+        {cover(false)}
         <div className="game-name">{entry.name}</div>
         <button
           type="button"
