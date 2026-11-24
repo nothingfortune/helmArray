@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { ControlId, Hand, Press, Role } from '@helmarray/core';
 import { fitLabel } from './label';
+import type { LabelFit } from './label';
 import { roleVars } from './role';
 import { dragFrom, dropHandlers } from '../devices/drag';
 import type { DropAction } from '../devices/drag';
@@ -22,6 +23,8 @@ export interface UnitKey {
   action?: string;
   /** The press that action is on (a button with only a long press shows that). Defaults to tap. */
   press?: Press;
+  /** The key's short label: drawn instead of `label` only when `label` won't fit (label.ts). */
+  short?: string;
 }
 
 /** What the stick's four directions send, shown as chips around it. */
@@ -62,6 +65,22 @@ const DIRECTION_WORD: Record<StickDirection, string> = {
 };
 
 const px = (n: number): string => `${n}px`;
+
+/**
+ * The style of a fitted label: its size and, when it is drawn narrower to fit (`squeeze`), a box
+ * as wide as the unsqueezed text needs, scaled into the `width` it has. `origin` is where it stays.
+ */
+export function labelStyle(fit: LabelFit, width: number, origin: string): CSSProperties {
+  if (fit.squeeze >= 1) return { fontSize: px(fit.fontSize) };
+  return {
+    fontSize: px(fit.fontSize),
+    flex: 'none',
+    display: 'inline-block',
+    width: px(width / fit.squeeze),
+    transform: `scaleX(${fit.squeeze})`,
+    transformOrigin: origin,
+  };
+}
 const place = (p: { x: number; y: number; w: number; h: number }): CSSProperties => ({
   left: px(p.x),
   top: px(p.y),
@@ -118,12 +137,11 @@ export function Unit({
     const isPress = k.shape === 'press';
     const text = assigned ? action.label : isPress ? 'Press' : k.name;
     const pad = isPress ? 0 : k.flat ? 8 : 10;
-    const fit = fitLabel(
-      text,
-      k.w - (k.flat ? 17 : 16),
-      k.h - pad,
-      isPress ? { sizes: [11, 10, 9] } : {},
-    );
+    const width = k.w - (k.flat ? 17 : 16);
+    const fit = fitLabel(text, width, k.h - pad, {
+      ...(isPress ? { sizes: [11, 10] } : {}),
+      short: action?.short,
+    });
     const classes = [
       'uk',
       `shape-${k.shape}`,
@@ -161,8 +179,8 @@ export function Unit({
         {...drops(k.id)}
         {...drags(k.id, action)}
       >
-        <span className="ul" style={{ fontSize: px(fit.fontSize) }}>
-          {text}
+        <span className="ul" style={labelStyle(fit, width, isPress ? 'center' : 'left center')}>
+          {fit.text}
         </span>
         {assigned && !isPress ? <span className="ud" aria-hidden="true" /> : null}
       </button>
@@ -172,17 +190,19 @@ export function Unit({
   const renderChip = (c: ChipPlace) => {
     const word = stick?.[c.direction];
     const fit = fitLabel(word || DIRECTION_WORD[c.direction], c.w - 8, c.h - 2, {
-      sizes: [12, 11, 10, 9],
+      sizes: [12, 11, 10],
       lineHeight: 1.1,
     });
     return (
       <span
         key={c.direction}
         className={`sl ${word ? 'is-assigned' : 'is-empty'}`}
-        style={{ ...place(c), ...roleVars(stick?.role), fontSize: px(fit.fontSize) }}
+        style={{ ...place(c), ...roleVars(stick?.role) }}
         aria-hidden="true"
       >
-        {word || DIRECTION_WORD[c.direction]}
+        <span className="sl-t" style={labelStyle(fit, c.w - 8, 'center')}>
+          {fit.text}
+        </span>
       </span>
     );
   };

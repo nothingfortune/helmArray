@@ -40,6 +40,8 @@ export function controlFor(state: ControlState, id: ControlId, canTake: boolean,
   ];
   return {
     label: action?.label ?? null,
+    /** The key's short label, for a key too small for the action's name. */
+    short: action?.short,
     said: `${after}${conflict ? ', conflict' : ''}`,
     attrs: {
       type: 'button' as const,
