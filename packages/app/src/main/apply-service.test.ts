@@ -123,6 +123,7 @@ async function rig(
   const saveApplied = vi.fn(over.saveApplied ?? (() => Promise.resolve()));
   const setActive = vi.fn(over.setActive ?? (() => Promise.resolve()));
   const settled = vi.fn(over.settled);
+  const recordUnits = vi.fn(() => Promise.resolve());
   // The store, as far as Apply sees it: the scheme as saved, which a save replaces.
   const store = { scheme: over.scheme ?? scheme };
   const saveScheme = vi.fn(
@@ -143,6 +144,8 @@ async function rig(
     setActive,
     saveScheme,
     settled,
+    recordUnits,
+    now: () => 1234,
     ...(over.trace ? { trace: over.trace } : {}),
     ...(over.gameHolds ? { gameHolds: over.gameHolds } : {}),
   });
@@ -157,6 +160,7 @@ async function rig(
     saveScheme,
     store,
     settled,
+    recordUnits,
     reports,
     left: units.get('left-path') as FakeUnit,
     right: units.get('right-path'),
@@ -886,6 +890,27 @@ describe('Apply for a setup that uses some of the units, or none', () => {
     });
   });
 
+  it('notes that the left unit, and only it, now holds the scheme', async () => {
+    r = await rig({ scheme: leftOnly });
+    await r.service.apply(leftOnly.id, fp(leftOnly));
+    expect(
+      r.recordUnits.mock.calls.map((call: unknown[]) => {
+        const [plan, outcomes, who] = call as [
+          { units: Record<string, unknown> },
+          { hand: string; status: string }[],
+          { schemeId: string; at: number; devices: unknown },
+        ];
+        return [
+          Object.keys(plan.units),
+          outcomes.map((o) => [o.hand, o.status]),
+          who.schemeId,
+          who.at,
+          who.devices,
+        ];
+      }),
+    ).toEqual([[['left'], [['left', 'applied']], leftOnly.id, 1234, leftOnly.devices]]);
+  });
+
   it('needs no unit, and not the Azeron app closed, for a setup with no Azeron', async () => {
     r = await rig({ scheme: noUnit, azeron: () => Promise.resolve(true) });
     const preview = await r.service.preview(noUnit.id);
@@ -899,10 +924,16 @@ describe('Apply for a setup that uses some of the units, or none', () => {
     r = await rig({ scheme: noUnit, azeron: () => Promise.resolve(true) });
     const before = r.reports();
     const result = await r.service.apply(noUnit.id, fp(noUnit));
-    expect([result, r.reports() - before, r.saveApplied.mock.calls.length]).toEqual([
+    expect([
+      result,
+      r.reports() - before,
+      r.saveApplied.mock.calls.length,
+      r.recordUnits.mock.calls.length,
+    ]).toEqual([
       { ok: true, message: 'Applied. This scheme uses no Azeron, so none was written.', units: [] },
       0,
       1,
+      0,
     ]);
   });
 });

@@ -6,6 +6,7 @@
 //   games/<id>.json     a game added by hand (built-in games ship inside the app)
 //   schemes/<id>.json   one scheme
 //   settings.json       the active game, and the active scheme of each game
+//   units.json          what each unit was last written with: which scheme, of which game, when
 //   applied/<id>.json   the plan last applied for scheme <id>; `<game>.held.json`, what a game
 //                       holds after the scheme applied to it last was deleted
 //
@@ -20,8 +21,18 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import type { AppSettings, Game, Plan, Scheme, StoredKind, StoredKinds } from '@helmarray/core';
-import { AZERON_USES } from '@helmarray/core';
+import type {
+  AppSettings,
+  ApplyWho,
+  Game,
+  Hand,
+  Plan,
+  Scheme,
+  StoredKind,
+  StoredKinds,
+  UnitsHeld,
+} from '@helmarray/core';
+import { AZERON_USES, NOTHING_HELD, recordApply } from '@helmarray/core';
 import {
   DEFAULT_SETTINGS,
   copyScheme,
@@ -138,11 +149,27 @@ const isPlan = (value: unknown): value is Plan =>
   isRecord(value['ledger']) &&
   Array.isArray(value['findings']);
 
+/** One unit's last write: absent, or a scheme, its game, when, and the profile written. */
+const isUnitWrite = (value: unknown) =>
+  value === null ||
+  (isRecord(value) &&
+    typeof value['schemeId'] === 'string' &&
+    typeof value['gameId'] === 'string' &&
+    typeof value['schemeName'] === 'string' &&
+    isDevices(value['devices']) &&
+    (value['output'] === 'pad' || value['output'] === 'keys') &&
+    typeof value['at'] === 'number' &&
+    isRecord(value['profile']));
+
+const isUnitsHeld = (value: unknown): value is UnitsHeld =>
+  isRecord(value) && isUnitWrite(value['left']) && isUnitWrite(value['right']);
+
 const CHECKS: { [K in StoredKind]: (value: unknown) => value is StoredKinds[K] } = {
   scheme: isScheme,
   game: isGame,
   settings: isSettings,
   applied: isPlan,
+  units: isUnitsHeld,
 };
 
 const THING: Record<StoredKind, string> = {
@@ -150,6 +177,7 @@ const THING: Record<StoredKind, string> = {
   game: 'game',
   settings: 'settings file',
   applied: 'applied plan',
+  units: 'record of what the units hold',
 };
 
 // --- reading and writing files --------------------------------------------------------------
@@ -254,6 +282,7 @@ export class DataStore {
   /** Schemes edited and not yet safely on disk: what a read of them must give back. */
   /** The settings are changed one call at a time. */
   private settingsTurn: Promise<unknown> = Promise.resolve();
+  private unitsTurn: Promise<unknown> = Promise.resolve();
   private createTurn: Promise<unknown> = Promise.resolve();
   /** Changes still under way, for `flush()` to wait for. */
   private readonly ops = new Set<Promise<void>>();
@@ -679,5 +708,30 @@ export class DataStore {
       if (best === null || at > best.at) best = { schemeId: id, at };
     }
     return best;
+  }
+
+  // What the units hold -------------------------------------------------------------------------
+
+  /** What each unit was last written with. Nothing when no unit ever was, or it can't be read. */
+  async unitsHeld(): Promise<UnitsHeld> {
+    const found = await this.read('units', 'units.json');
+    return found.status === 'ok' ? found.value : { ...NOTHING_HELD };
+  }
+
+  /**
+   * After an apply: each unit of the plan that came out holding it now holds this scheme; every
+   * other unit keeps its last write (`recordApply`). One change at a time, in the order asked.
+   */
+  recordApply(
+    plan: Pick<Plan, 'units'>,
+    outcomes: readonly { hand: Hand; status: string }[],
+    who: ApplyWho,
+  ): Promise<void> {
+    const run = this.unitsTurn.then(async () => {
+      const next = recordApply(await this.unitsHeld(), plan, outcomes, who);
+      await this.put('units', 'units.json', next);
+    });
+    this.unitsTurn = run.catch(() => undefined);
+    return this.track(run);
   }
 }

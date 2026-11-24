@@ -15,9 +15,6 @@ export interface StatusLine {
 
 type SetupRef = Pick<LibrarySchemeRef, 'output' | 'devices'>;
 
-/** Whether a setup puts anything on the Azerons. */
-export const usesAzerons = (scheme: SetupRef): boolean => scheme.devices.azerons !== 'none';
-
 /**
  * What a setup plays with, in the canvas's few words: "Controller" or "Keys" for both Azerons (what
  * they send), "Left Azeron + mouse", and for a setup with no Azeron its devices.
@@ -60,13 +57,22 @@ const setupLabel = (entry: LibraryEntry, scheme: LibrarySchemeRef): string =>
 
 const changesWord = (n: number) => (n === 1 ? '1 change' : `${n} changes`);
 
+/** The schemes the units hold by their record and don't read as differing: for "On the units". */
+export function heldSchemes(state: Pick<AppState, 'onUnits'> | null): Set<string> {
+  return new Set(
+    [state?.onUnits.left, state?.onUnits.right].flatMap((h) =>
+      h === null || h === undefined || h.check === 'differs' ? [] : [h.schemeId],
+    ),
+  );
+}
+
 /**
- * One line under a cover, in the canvas's words, about the setup the game holds: "On the units"
- * for the game the Azerons hold now (`onUnits`, the current card's game), "Ready" for one applied
- * and unchanged since, "2 changes" for one edited since. A game never applied says which setup is
- * picked, not applied yet.
+ * One line under a cover, in the canvas's words, about the setup the game holds (its applied
+ * plan): "On the units" when a unit holds that very setup by its own record (`onUnits`, from
+ * `heldSchemes`), "Ready" for one applied and unchanged since, "2 changes" for one edited since. A
+ * game never applied says which setup is picked, not applied yet.
  */
-export function statusLine(entry: LibraryEntry, onUnits: string | null): StatusLine {
+export function statusLine(entry: LibraryEntry, onUnits: ReadonlySet<string>): StatusLine {
   if (entry.gameId === null) return { text: 'Not supported yet', tone: 'unsupported' };
   const count = entry.schemes.length;
   if (count === 0) return { text: 'Not set up', tone: 'plain' };
@@ -75,8 +81,7 @@ export function statusLine(entry: LibraryEntry, onUnits: string | null): StatusL
     const label = setupLabel(entry, applied);
     if (entry.applied.changes > 0)
       return { text: `${changesWord(entry.applied.changes)} · ${label}`, tone: 'warning' };
-    if (entry.gameId === onUnits && usesAzerons(applied))
-      return { text: `On the units · ${label}`, tone: 'units' };
+    if (onUnits.has(applied.id)) return { text: `On the units · ${label}`, tone: 'units' };
     return { text: `Ready · ${label}`, tone: 'ok' };
   }
   const picked = activeScheme(entry);
@@ -111,36 +116,66 @@ export interface CurrentCard {
   entry: LibraryEntry;
   /** The scheme shown: the one applied last, else the game's active one; null when neither. */
   scheme: LibrarySchemeRef | null;
+  /** The title: the game and the scheme's name (as applied, should the scheme be gone since). */
+  title: string;
   /** The shown scheme is what was applied to the units (not merely the one picked). */
   applied: boolean;
   /** The line under the title: whether it is applied and what it sends, or what to do next. */
   detail: string;
+  /** The scheme each unit was last written with, by id; null for a unit never written. */
+  held: { left: string | null; right: string | null };
 }
 
+type HoldsState = Pick<AppState, 'activeGameId' | 'onUnits'>;
+
+const HAND_WORD = { left: 'Left unit', right: 'Right unit' } as const;
+
 /**
- * The "On your Azerons now" card. Once a setup using the Azerons has been applied it is that, the
- * most recent such apply over all games, whichever scheme is picked since: the units hold what was
- * applied. A setup with no Azeron wrote nothing to them, so it is never the card. Until then it is
- * the active game's active scheme, worded as not applied yet. Null when there is neither.
+ * The "On your Azerons now" card, from the units' own record: each unit's last write (state
+ * `onUnits`), never a scheme's current fields, which may have been edited since. It shows the
+ * latest of the two writes; when the other unit holds another scheme (the right one, after a left
+ * Azeron + mouse apply), the line says so, and a unit read as running something else says that.
+ * With no unit ever written it is the active game's active scheme, worded as not applied yet. Null
+ * when there is neither.
  */
 export function currentCard(
   entries: readonly LibraryEntry[],
-  state: Pick<AppState, 'activeGameId'> | null,
+  state: HoldsState | null,
 ): CurrentCard | null {
-  let latest: { entry: LibraryEntry; scheme: LibrarySchemeRef; at: number } | null = null;
-  for (const entry of entries) {
-    const scheme = appliedScheme(entry);
-    if (entry.applied === null || scheme === null || !usesAzerons(scheme)) continue;
-    if (latest === null || entry.applied.at > latest.at)
-      latest = { entry, scheme, at: entry.applied.at };
-  }
+  const holds = (['left', 'right'] as const).flatMap((hand) => {
+    const h = state?.onUnits[hand] ?? null;
+    return h === null ? [] : [{ hand, ...h }];
+  });
+  const held = {
+    left: state?.onUnits.left?.schemeId ?? null,
+    right: state?.onUnits.right?.schemeId ?? null,
+  };
+  const latest = holds.reduce<(typeof holds)[number] | null>(
+    (best, h) => (best === null || h.at > best.at ? h : best),
+    null,
+  );
+  const named = (h: (typeof holds)[number]) => {
+    const entry = entries.find((e) => e.gameId === h.gameId);
+    const scheme = entry?.schemes.find((s) => s.id === h.schemeId) ?? null;
+    return { entry, scheme, title: `${entry?.name ?? 'A game'} · ${scheme?.name ?? h.schemeName}` };
+  };
   if (latest !== null) {
-    return {
-      entry: latest.entry,
-      scheme: latest.scheme,
-      applied: true,
-      detail: `Applied · ${setupWords(latest.scheme)}`,
-    };
+    const shown = named(latest);
+    const notes = [`Applied · ${setupWords(latest)}`];
+    for (const h of holds) {
+      if (h.schemeId !== latest.schemeId) notes.push(`${HAND_WORD[h.hand]}: ${named(h).title}`);
+      if (h.check === 'differs') notes.push(`${HAND_WORD[h.hand]} differs`);
+    }
+    if (shown.entry !== undefined) {
+      return {
+        entry: shown.entry,
+        scheme: shown.scheme,
+        title: shown.title,
+        applied: true,
+        detail: notes.join(' · '),
+        held,
+      };
+    }
   }
 
   const gameId = state?.activeGameId ?? null;
@@ -152,7 +187,9 @@ export function currentCard(
   return {
     entry,
     scheme,
+    title: scheme === null ? entry.name : `${entry.name} · ${scheme.name}`,
     applied: false,
     detail: scheme === null ? 'No scheme picked' : `Not applied yet · ${setupWords(scheme)}`,
+    held,
   };
 }

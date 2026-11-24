@@ -466,6 +466,7 @@ describe('when to look again', () => {
     question: null,
     activeGameId: null,
     activeSchemeId: null,
+    onUnits: { left: null, right: null },
     ...over,
   });
 

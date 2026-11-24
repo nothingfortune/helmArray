@@ -1,5 +1,24 @@
 import { describe, expect, it } from 'vitest';
-import { composeAppState, pendingAsk } from './app-state';
+import {
+  FakeUnit,
+  UnitSession,
+  encodeRecord,
+  storedFromWritten,
+  unitRecords,
+} from '@helmarray/azeron';
+import {
+  AZERONS_ONLY,
+  BUILT_IN_DEVICES,
+  CYBORG2_LEFT,
+  gameKeysPreset,
+  helldivers2,
+  resolve,
+  unitOf,
+  xboxControllerPreset,
+} from '@helmarray/core';
+import type { UnitProfile, UnitWrite } from '@helmarray/core';
+import type { HeldUnit } from './apply-units';
+import { composeAppState, holdsOf, pendingAsk } from './app-state';
 import type { DevicesSnapshot, UnitSnapshot } from './devices';
 import { handsFor } from './hands';
 import type { HandStore } from './hands';
@@ -39,6 +58,7 @@ describe('the app state', () => {
       question: null,
       activeGameId: null,
       activeSchemeId: null,
+      onUnits: { left: null, right: null },
     });
   });
 
@@ -208,5 +228,70 @@ describe('the app state', () => {
       const state = compose([unit('a', LEFT)], { [LEFT]: 'left' });
       expect(state.sync).toEqual({ label: 'Right unit not connected', tone: 'warning' });
     });
+  });
+});
+
+describe('what a unit holds', () => {
+  const profile = (scheme = xboxControllerPreset(helldivers2)): UnitProfile =>
+    unitOf(resolve(scheme, helldivers2, BUILT_IN_DEVICES), 'left');
+  const write = (p: UnitProfile): UnitWrite => ({
+    schemeId: 'hd2-xbox',
+    gameId: 'helldivers2',
+    schemeName: 'Xbox controller',
+    devices: { ...AZERONS_ONLY },
+    output: 'pad',
+    at: 7,
+    profile: p,
+  });
+  /** The left unit as a real read of it says, running slot 1 with `p` written in it. */
+  async function running(p: UnitProfile): Promise<HeldUnit> {
+    const records = unitRecords(p, CYBORG2_LEFT).map((r) => storedFromWritten(encodeRecord(1, r)));
+    const session = new UnitSession(
+      new FakeUnit({ deviceId: LEFT, slots: { 1: { name: 'Main', records } }, running: 1 }),
+    );
+    const identity = await session.identify();
+    return {
+      deviceId: LEFT,
+      running: 1,
+      slotLimit: identity.slotLimit,
+      slots: await session.readSlots(),
+    };
+  }
+
+  it('is its last write, held, when the unit read runs that layout', async () => {
+    expect(holdsOf(write(profile()), await running(profile()))).toEqual({
+      schemeId: 'hd2-xbox',
+      gameId: 'helldivers2',
+      schemeName: 'Xbox controller',
+      devices: AZERONS_ONLY,
+      output: 'pad',
+      at: 7,
+      check: 'holds',
+    });
+  });
+
+  it('differs when the unit read runs something else', async () => {
+    const other = profile({
+      ...gameKeysPreset(helldivers2),
+      map: { default: { 'L.index_1': { tap: 'reload' } } },
+    });
+    expect(holdsOf(write(profile()), await running(other))?.check).toBe('differs');
+  });
+
+  it('is unknown, the last write only, for a unit not read; nothing for one never written', async () => {
+    expect([
+      holdsOf(write(profile()), undefined)?.check,
+      holdsOf(null, await running(profile())),
+    ]).toEqual(['unknown', null]);
+  });
+
+  it('goes into the state for each hand from the record handed in', () => {
+    const state = composeAppState({
+      devices: { units: [] },
+      hands: handsFor([], known({})),
+      writeBlock: null,
+      held: { left: write(profile()), right: null },
+    });
+    expect([state.onUnits.left?.check, state.onUnits.right]).toEqual(['unknown', null]);
   });
 });

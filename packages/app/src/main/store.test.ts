@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  AZERONS_ONLY,
   BUILT_IN_DEVICES,
   currentVersion,
   resolve,
@@ -1004,6 +1005,49 @@ describe('deleting a scheme', () => {
     const { data } = await openStore();
     await expect(data.deleteScheme('missing')).rejects.toThrow('There is no such scheme.');
     await expect(data.deleteScheme('../x')).rejects.toThrow('There is no such scheme.');
+  });
+});
+
+describe('what the units hold', () => {
+  const who = (schemeId: string, at: number) => ({
+    schemeId,
+    gameId: 'skiff',
+    schemeName: schemeId,
+    devices: { ...AZERONS_ONLY },
+    output: 'pad' as const,
+    at,
+  });
+  const planOf = () => resolve(xboxControllerPreset(SKIFF), SKIFF, BUILT_IN_DEVICES);
+  const both = [
+    { hand: 'left' as const, status: 'applied' },
+    { hand: 'right' as const, status: 'applied' },
+  ];
+
+  it('is nothing before any unit was written', async () => {
+    const { data } = await openStore();
+    expect(await data.unitsHeld()).toEqual({ left: null, right: null });
+  });
+
+  it('keeps each unit’s last write, across a restart: a left-only apply leaves the right one', async () => {
+    const { data } = await openStore();
+    const plan = planOf();
+    await data.recordApply(plan, both, who('a', 1));
+    await data.recordApply(
+      { units: { left: unitOf(plan, 'left') } },
+      [{ hand: 'left', status: 'applied' }],
+      who('b', 2),
+    );
+    const again = await (await openStore()).data.unitsHeld();
+    expect([again.left?.schemeId, again.right?.schemeId, again.right?.at]).toEqual(['b', 'a', 1]);
+  });
+
+  it('is nothing, reported, when its file is damaged', async () => {
+    await writeRaw(['units.json'], '{');
+    const { data, problems } = await openStore();
+    expect([await data.unitsHeld(), problems.map((p) => p.file)]).toEqual([
+      { left: null, right: null },
+      ['units.json'],
+    ]);
   });
 });
 

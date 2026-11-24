@@ -10,6 +10,7 @@ import {
   setDevices,
   setOutput,
 } from '../../packages/app/src/renderer/screens/editor-model';
+import { currentCard } from '../../packages/app/src/renderer/screens/libraryView';
 import { isWrite } from './support/fake-hid';
 import { HELLDIVERS2, World, holding } from './support/world';
 
@@ -193,5 +194,57 @@ describe('a setup of the keyboard and mouse only', () => {
       world.right.commands().slice(sentBefore.right).filter(isWrite),
       result.units,
     ]).toEqual([true, [], [], []]);
+  });
+});
+
+describe('a left Azeron + mouse setup applied after both units were written', () => {
+  let world: World;
+  let both: Scheme;
+  let left: Scheme;
+  let card: ReturnType<typeof currentCard>;
+
+  beforeAll(async () => {
+    world = await World.create();
+    await world.boot();
+    both = await world.createScheme('xbox');
+    await world.helm.setActive(HELLDIVERS2, both.id);
+    expect((await world.previewAndApply(both.id)).result.ok).toBe(true);
+    left = await world.helm.copyScheme(both.id);
+    left = await world.edit(left.id, (s, game) =>
+      setDevices(s, { azerons: 'left', keyboard: false, mouse: true, controller: false }, game),
+    );
+    await world.helm.setActive(HELLDIVERS2, left.id);
+    expect((await world.previewAndApply(left.id)).result.ok).toBe(true);
+    // The scheme applied first is then edited to drop its Azerons, and not applied.
+    await world.edit(both.id, (s, game) =>
+      setDevices(s, { azerons: 'none', keyboard: true, mouse: true, controller: false }, game),
+    );
+    await world.idle();
+    card = currentCard(await world.helm.listLibrary(), world.state);
+  });
+
+  afterAll(async () => {
+    await world.dispose();
+  });
+
+  it('the state says what each unit holds: the left the copy, the right the first', () => {
+    expect([
+      world.state.onUnits.left?.schemeId,
+      world.state.onUnits.right?.schemeId,
+      world.state.onUnits.left?.check,
+      world.state.onUnits.right?.check,
+    ]).toEqual([left.id, both.id, 'holds', 'holds']);
+  });
+
+  it('the right unit still holds the first scheme, as written: one slot, of its name', () => {
+    expect(holding(world.right).slots).toEqual({ 1: 'Xbox controller' });
+  });
+
+  it('the card names the latest write, and the right unit’s other scheme', () => {
+    expect([card?.title, card?.detail, card?.held]).toEqual([
+      'HELLDIVERS 2 · Xbox controller copy',
+      'Applied · Left Azeron + mouse · Right unit: HELLDIVERS 2 · Xbox controller',
+      { left: left.id, right: both.id },
+    ]);
   });
 });

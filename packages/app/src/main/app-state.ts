@@ -2,11 +2,12 @@
 // in and what each says, which hand each is, whether writing is blocked, and the sync pill.
 // Pure: every input is handed in, so tests build them by hand.
 
-import type { AppState, DeviceChip, HandQuestion as ApiQuestion } from '../shared/api';
-import type { Hand } from '@helmarray/core';
+import type { AppState, DeviceChip, HandQuestion as ApiQuestion, UnitHolds } from '../shared/api';
+import type { Hand, UnitWrite, UnitsHeld } from '@helmarray/core';
 import type { ActivePlans } from './active-plans';
 import { NO_PLANS } from './active-plans';
-import { verifyUnits } from './apply-units';
+import { verifyProfile, verifyUnits } from './apply-units';
+import type { HeldUnit } from './apply-units';
 import type { HeldUnits } from './apply-units';
 import type { DevicesSnapshot, UnitSnapshot } from './devices';
 import type { HandQuestion, HandsResult } from './hands';
@@ -99,6 +100,8 @@ export interface AppStateInput {
    * has nothing to compare, and says so.
    */
   plans?: ActivePlans | undefined;
+  /** What each unit was last written with (units.json). Without it no unit is said to hold anything. */
+  held?: UnitsHeld | undefined;
   /**
    * The time now (ms since 1970). With it, a unit read longer ago than `MAX_READING_AGE_MS` counts
    * as not read: the pill says it has not checked. Without it, no reading is too old.
@@ -116,16 +119,12 @@ export function composeAppState(input: AppStateInput): AppState {
   const there = (hand: 'left' | 'right') => chips.some((chip) => chip.hand === hand);
   // Read from the units, never from what the app last did: each unit's running slot against the
   // plan last applied for the active scheme, and the scheme as it is now against that same plan.
-  const verdicts = plans.applied
-    ? verifyUnits(
-        plans.applied,
-        heldUnits(
-          devices,
-          hands,
-          input.now === undefined ? undefined : { now: input.now, maxAgeMs: MAX_READING_AGE_MS },
-        ),
-      )
-    : { left: null, right: null };
+  const read = heldUnits(
+    devices,
+    hands,
+    input.now === undefined ? undefined : { now: input.now, maxAgeMs: MAX_READING_AGE_MS },
+  );
+  const verdicts = plans.applied ? verifyUnits(plans.applied, read) : { left: null, right: null };
   // The units the setup uses: those of the plan applied, else of the scheme as it is now. With
   // neither there is no setup to go by, and both are judged.
   const setupPlan = plans.applied ?? plans.current;
@@ -146,5 +145,33 @@ export function composeAppState(input: AppStateInput): AppState {
     question: questionOf(pendingAsk(devices, hands)),
     activeGameId: active?.gameId ?? null,
     activeSchemeId: active?.schemeId ?? null,
+    onUnits: {
+      left: holdsOf(input.held?.left ?? null, read.left),
+      right: holdsOf(input.held?.right ?? null, read.right),
+    },
+  };
+}
+
+/**
+ * What a unit holds: its last write, checked against what the unit reports now. A unit not read
+ * (unplugged, not yet asked, the Azeron app open) is `unknown`: the last write is all there is.
+ */
+export function holdsOf(write: UnitWrite | null, unit: HeldUnit | undefined): UnitHolds | null {
+  if (write === null) return null;
+  const verdict = verifyProfile(write.profile, unit);
+  const check =
+    verdict === null
+      ? 'unknown'
+      : verdict.differences.length === 0 && verdict.unchecked.length === 0
+        ? 'holds'
+        : 'differs';
+  return {
+    schemeId: write.schemeId,
+    gameId: write.gameId,
+    schemeName: write.schemeName,
+    devices: { ...write.devices },
+    output: write.output,
+    at: write.at,
+    check,
   };
 }

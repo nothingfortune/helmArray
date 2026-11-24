@@ -5,6 +5,8 @@ import type {
   Hand,
   ModeId,
   Press,
+  Scheme,
+  SetupDevices,
   Signal,
   StickBehaviour,
 } from './model';
@@ -101,4 +103,54 @@ export interface Plan {
   bindSheet: BindSheetRow[];
   ledger: Ledger;
   findings: Finding[];
+}
+
+/**
+ * The apply that last wrote one unit: which scheme, of which game, what that setup played with,
+ * when, and the unit's half of the plan it was written with, to compare with what the unit holds.
+ * Kept per unit (units.json): a left-only apply leaves the right unit's last write in place, and a
+ * setup with no Azeron writes neither.
+ */
+export interface UnitWrite {
+  schemeId: string;
+  gameId: string;
+  /** The scheme's name when it was applied: it may be renamed or deleted since. */
+  schemeName: string;
+  devices: SetupDevices;
+  output: Scheme['output'];
+  /** Milliseconds since 1970. */
+  at: number;
+  profile: UnitProfile;
+}
+
+/** What each unit was last written with; null for a unit helmArray has never written. */
+export interface UnitsHeld {
+  left: UnitWrite | null;
+  right: UnitWrite | null;
+}
+
+export const NOTHING_HELD: Readonly<UnitsHeld> = { left: null, right: null };
+
+/** Who an apply was: the scheme, its game, what it played with, and when. */
+export type ApplyWho = Omit<UnitWrite, 'profile'>;
+
+/**
+ * What the units hold after an apply: each unit the plan has, and that came out holding it
+ * (written, or found holding it already), now holds this scheme. Every other unit keeps its last
+ * write: one the setup doesn't use (the right one, for left Azeron + mouse), one that failed, and
+ * both for a setup with no Azeron.
+ */
+export function recordApply(
+  held: UnitsHeld,
+  plan: Pick<Plan, 'units'>,
+  outcomes: readonly { hand: Hand; status: string }[],
+  who: ApplyWho,
+): UnitsHeld {
+  const next: UnitsHeld = { left: held.left, right: held.right };
+  for (const { hand, status } of outcomes) {
+    const profile = plan.units[hand];
+    if (profile === undefined || (status !== 'applied' && status !== 'unchanged')) continue;
+    next[hand] = { ...who, profile };
+  }
+  return next;
 }

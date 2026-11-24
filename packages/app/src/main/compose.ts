@@ -156,6 +156,7 @@ export async function composeServices(options: ComposeOptions): Promise<Services
     gate,
     readLog: (lines) => log.recent(lines),
     active: () => data.active(),
+    unitsHeld: () => data.unitsHeld(),
     plans: createActivePlans({
       ...plans,
       active: () => data.active(),
@@ -173,6 +174,7 @@ export async function composeServices(options: ComposeOptions): Promise<Services
     hands,
     azeronAppRunning: azeronOpen,
     saveApplied: (schemeId, plan) => data.saveApplied(schemeId, plan),
+    recordUnits: (plan, outcomes, who) => data.recordApply(plan, outcomes, who),
     saveScheme: (scheme) => data.saveScheme(scheme),
     setActive: (gameId, schemeId) => data.setActive(gameId, schemeId),
     // The game holds the bindings of the setup applied to it last, of any of its schemes.

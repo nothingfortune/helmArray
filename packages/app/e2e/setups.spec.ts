@@ -135,6 +135,24 @@ test.describe('setups', () => {
     await expect(page.getByText(/sends nothing/)).toHaveCount(0);
   });
 
+  test('the card still names what the units hold after that scheme is edited to drop its Azerons', async ({
+    helm,
+  }) => {
+    const { page } = helm;
+    await startFrom(page, 'Xbox controller');
+    await applyAndWait(page, 'Both units now run the layout.');
+    await drawer(page).getByRole('button', { name: 'Close' }).click();
+    // Edited, not applied: the units still hold the controller layout.
+    await chooseDevice(page, 'Keyboard and mouse');
+    await chooseDevice(page, 'None');
+    await expect(deviceTab(page, 'Azerons')).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'Library' }).click();
+    const card = page.getByLabel('On your Azerons now');
+    await expect(card).toContainText('HELLDIVERS™ 2 · Xbox controller');
+    await expect(card).toContainText('Applied · Controller');
+  });
+
   test('a left Azeron + mouse setup writes the left unit only', async ({ helm }) => {
     const { page } = helm;
     await startFrom(page, 'Xbox controller');

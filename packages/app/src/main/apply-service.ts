@@ -22,7 +22,7 @@
 // Nothing here throws at a caller: every refusal and failure comes back as a sentence.
 // Pure: the store, the units and the running programs are handed in.
 
-import type { Game, GameBinding, Hand, Plan, Scheme } from '@helmarray/core';
+import type { ApplyWho, Game, GameBinding, Hand, Plan, Scheme } from '@helmarray/core';
 import { gameRowsChanged, handsOf } from '@helmarray/core';
 import type {
   ApplyGame,
@@ -77,6 +77,17 @@ export interface ApplyServiceDeps {
    * when none was; without it, the game is taken to hold what it ships.
    */
   gameHolds?(gameId: string): Promise<Plan | null>;
+  /**
+   * Notes what each unit now holds, after the units are written: every unit that came out holding
+   * the plan holds this scheme (`recordApply`). Called whatever came of the others.
+   */
+  recordUnits?(
+    plan: Plan,
+    outcomes: readonly { hand: Hand; status: string }[],
+    who: ApplyWho,
+  ): Promise<void>;
+  /** The clock, for when an apply was. Defaults to `Date.now`. */
+  now?(): number;
   /** An apply ended, however it ended: the state is to be worked out again. */
   settled?(): void | Promise<void>;
   trace?(line: string): void;
@@ -384,6 +395,19 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
         } finally {
           // Whatever came of it, what the units hold now is read, before the hold is let go.
           await tools.refresh();
+        }
+        // Each unit that now holds the plan holds this scheme, whatever became of the other.
+        try {
+          await deps.recordUnits?.(plan, result.units, {
+            schemeId,
+            gameId: game.id,
+            schemeName: scheme.name,
+            devices: { ...scheme.devices },
+            output: scheme.output,
+            at: (deps.now ?? Date.now)(),
+          });
+        } catch (error) {
+          trace(`couldn't note what the units hold: ${messageOf(error)}`);
         }
         const problem = result.ok ? await remember(schemeId, game.id, plan, fingerprint) : null;
         return { result, problem };

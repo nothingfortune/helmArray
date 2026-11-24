@@ -9,6 +9,7 @@ import {
   currentCard,
   defaultChoices,
   filterEntries,
+  heldSchemes,
   setupWords,
   statusLine,
   summary,
@@ -70,8 +71,8 @@ function Tile({
   send,
 }: {
   entry: LibraryEntry;
-  /** The game the Azerons hold now. */
-  onUnits: string | null;
+  /** The schemes the units hold, by their record. */
+  onUnits: ReadonlySet<string>;
   flow: FlowState;
   send: Send;
 }) {
@@ -213,6 +214,7 @@ export function Library({
 
   const entries = library.entries ?? [];
   const card = currentCard(entries, state);
+  const held = heldSchemes(state);
   const shown = filterEntries(entries, query);
   const editing = card?.scheme ?? null;
 
@@ -229,13 +231,7 @@ export function Library({
         <div className="current-body">
           <div className="current-text">
             <span className="eyebrow">On your Azerons now</span>
-            <span className="current-title">
-              {card
-                ? card.scheme
-                  ? `${card.entry.name} · ${card.scheme.name}`
-                  : card.entry.name
-                : 'Nothing yet'}
-            </span>
+            <span className="current-title">{card ? card.title : 'Nothing yet'}</span>
             <span className="hint">{card ? card.detail : 'Pick a game below to start.'}</span>
           </div>
           {card !== null && editing !== null && (
@@ -304,7 +300,7 @@ export function Library({
             <Tile
               key={`${entry.appId ?? ''}/${entry.gameId ?? ''}/${entry.name}`}
               entry={entry}
-              onUnits={card?.applied === true ? card.entry.gameId : null}
+              onUnits={held}
               flow={flow}
               send={send}
             />

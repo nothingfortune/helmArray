@@ -13,6 +13,7 @@ const STATE: AppState = {
   question: null,
   activeGameId: null,
   activeSchemeId: null,
+  onUnits: { left: null, right: null },
 };
 
 const GAME: Game = {

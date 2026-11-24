@@ -1159,7 +1159,7 @@ describe('controller output: what every control shows is what the game does', ()
     let x = seed;
     const next = (n: number) => {
       x = (x * 1103515245 + 12345) % 2147483648;
-      return x % n;
+      return Math.floor(x / 65536) % n;
     };
     for (let i = 0; i < count; i++) {
       // Mostly drags, clears and moves; now and then a button's Xbox control is chosen, or what
@@ -1514,7 +1514,7 @@ describe('a switch of output or devices keeps what every control shows', () => {
     let x = seed;
     const next = (n: number) => {
       x = (x * 1103515245 + 12345) % 2147483648;
-      return x % n;
+      return Math.floor(x / 65536) % n;
     };
     const actions = g.actions.map((a) => a.id);
     let scheme: Scheme = xboxControllerPreset(g);
