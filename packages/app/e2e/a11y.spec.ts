@@ -84,6 +84,32 @@ test.describe('axe: no serious or critical violations', () => {
     expect(await seriousViolations(page)).toEqual([]);
   });
 
+  test('the Editor, with a key label set on a button', async ({ helm }) => {
+    const { page } = helm;
+    await startFrom(page, 'Xbox controller');
+    await leftUnit(page)
+      .getByRole('button', { name: /^Interact, / })
+      .click();
+    await page.getByLabel('Key label').fill('Use');
+    await page.getByLabel('Key label').press('Enter');
+    await expect(page.getByLabel('Key label')).toHaveValue('Use');
+    expect(await seriousViolations(page)).toEqual([]);
+  });
+
+  test('the Editor, with the side panel shut by the Inspector button', async ({ helm }) => {
+    const { page } = helm;
+    await startFrom(page, 'Xbox controller');
+    await leftUnit(page)
+      .getByRole('button', { name: /^Interact, / })
+      .click();
+    await page.getByRole('button', { name: 'Inspector' }).click();
+    await expect(page.getByRole('button', { name: 'Inspector' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+    expect(await seriousViolations(page)).toEqual([]);
+  });
+
   test('the Editor, with the side panel open on an empty button', async ({ helm }) => {
     const { page } = helm;
     await startFrom(page, 'Xbox controller');
