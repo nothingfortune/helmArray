@@ -68,11 +68,16 @@ themselves. Nothing from the previous UI is kept.
 | #   | Journey                                                        | Target                       |
 | --- | -------------------------------------------------------------- | ---------------------------- |
 | J0  | First run: plug in both Azerons, app knows left from right     | 0 clicks after plugging in   |
-| J1  | Pick a game, pick a default, play                              | 2 clicks                     |
+| J1  | Pick a game, pick a default, play                              | 3 clicks (see below)         |
 | J2  | Put an action on a button and get it onto the units / the game | drag, then Apply (1 click)   |
 | J3  | Switch to another game                                         | 1 click; later automatic     |
 | J4  | One button, different jobs per game mode (Elite: ship / foot)  | J2 with a mode tab           |
 | J5  | While playing: see both Azerons with each button's action, lit as pressed | Play view, 1 click to open |
+
+J1 was 2 clicks. The owner, 2026-11-24: a default picked with nothing left to fix opens the
+Apply drawer straight away, and the drawer's own Apply stays, because Apply always says what it
+will touch. So J1 is the game, the default, and Apply in the drawer. With something to fix, the
+editor opens instead.
 
 ## Features
 

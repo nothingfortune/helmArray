@@ -4,6 +4,7 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './helm';
 import {
+  contentSize,
   drawer,
   helldiversTile,
   leftUnit,
@@ -176,3 +177,59 @@ test.describe('the grouped checks and the recent games: keyboard and axe', () =>
     expect(unseen(stops)).toEqual([]);
   });
 });
+
+/** Helldivers 2's Editor with the other game, set up and given a scheme, in its recent games. */
+async function withARecentGame(page: Page) {
+  await startFrom(page, 'Xbox controller');
+  await page.getByRole('button', { name: 'Library' }).click();
+  await page.getByRole('button', { name: /^Set up / }).click();
+  const field = page.getByRole('textbox', { name: 'New action' });
+  await field.fill('Jump');
+  await field.press('Enter');
+  await page.keyboard.press('Space');
+  await page
+    .getByRole('group', { name: 'New scheme from' })
+    .getByRole('button', { name: 'Xbox controller' })
+    .click();
+  await drawer(page).getByRole('button', { name: 'Cancel' }).click();
+  await page
+    .getByRole('navigation', { name: 'Recent games' })
+    .getByRole('button', { name: /HELLDIVERS|Helldivers 2/ })
+    .click();
+  await expect(page.getByRole('heading', { name: 'Helldivers 2' })).toBeVisible();
+  await expect(
+    page.getByRole('navigation', { name: 'Recent games' }).getByRole('button'),
+  ).toHaveCount(1);
+}
+
+for (const [width, height] of [
+  [1280, 900],
+  [1280, 720],
+] as const) {
+  test(`the recent games fit the Editor's bar at ${width} x ${height}: one row, no scroll`, async ({
+    helm,
+  }) => {
+    const { page } = helm;
+    await contentSize(helm, width, height);
+    await withARecentGame(page);
+    const layout = await page.evaluate(() => {
+      const bar = document.querySelector('.ed-bar') as HTMLElement;
+      // One row: no child starts below where the first one ends.
+      const boxes = [...bar.children]
+        .map((c) => c.getBoundingClientRect())
+        .filter((b) => b.height > 0);
+      const firstBottom = Math.min(...boxes.map((b) => b.bottom));
+      const units = [...document.querySelectorAll('.unit')].map((u) => {
+        const r = u.getBoundingClientRect();
+        return r.top >= 0 && r.bottom <= window.innerHeight + 1;
+      });
+      const root = document.scrollingElement as HTMLElement;
+      return {
+        rows: boxes.some((b) => b.top >= firstBottom) ? 2 : 1,
+        scrolls: root.scrollHeight > root.clientHeight || root.scrollWidth > root.clientWidth,
+        unitsInView: units,
+      };
+    });
+    expect(layout).toEqual({ rows: 1, scrolls: false, unitsInView: [true, true] });
+  });
+}

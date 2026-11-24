@@ -435,20 +435,15 @@ describe('fixes', () => {
   });
 
   it('offers nothing where the player must choose', () => {
+    // A required action on no button had no fix here until the audit asked for one ("Put it on
+    // a button", fixes.test.ts): only the collision stays the player's call.
     const scheme = keysScheme();
-    const missing = {
-      rule: 'missing-required',
-      severity: 'error',
-      action: 'fsd',
-      message: 'x',
-    } as const;
     const collision = {
       rule: 'key-collision',
       severity: 'error',
       control: 'L.stick',
       message: 'x',
     } as const;
-    expect(fixFor(missing, scheme, game, plan(scheme))).toBeUndefined();
     expect(fixFor(collision, scheme, game, plan(scheme))).toBeUndefined();
   });
 });
