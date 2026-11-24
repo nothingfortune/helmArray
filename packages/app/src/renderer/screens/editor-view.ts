@@ -181,6 +181,10 @@ export interface FindingRow {
   /** Stable across edits, so a list does not flicker. */
   key: string;
   finding: Finding;
+  /** What the sentence is about ("Move forward"), drawn bold; null when it opens with no name. */
+  subject: string | null;
+  /** The rest of the sentence after the subject: the whole of it when there is none. */
+  rest: string;
   /** True when the player may keep it: only the checks can be kept. */
   canKeep: boolean;
   fix?: Fix;
@@ -338,6 +342,15 @@ export function deviceTabs(devices: SetupDevices): DeviceTab[] {
   else if (setup.mouse && !mouseBesideLeft(devices)) tabs.push({ id: 'keyboard', label: 'Mouse' });
   if (setup.controller) tabs.push({ id: 'controller', label: 'Controller' });
   return tabs;
+}
+
+/**
+ * The tab a change of devices brings: the first the setup didn't have before, so a device just
+ * added is shown without another click. Undefined when it brings none (a device taken away).
+ */
+export function gainedTab(before: SetupDevices, after: SetupDevices): DeviceTabId | undefined {
+  const had = new Set(deviceTabs(before).map((t) => t.id));
+  return deviceTabs(after).find((t) => !had.has(t.id))?.id;
 }
 
 /** A left Azeron + mouse setup: the mouse is drawn where the right unit would be. */
@@ -697,6 +710,7 @@ export function editorView(input: EditorViewInput): EditorView {
     const row: FindingRow = {
       key: count === 0 ? base : `${base}#${count}`,
       finding,
+      ...splitSubject(finding.message, game),
       canKeep: isAcceptable(finding),
     };
     if (finding.accepted !== undefined) row.kept = finding.accepted;
@@ -759,4 +773,36 @@ export function editorView(input: EditorViewInput): EditorView {
     findings: rows.filter((r) => r.kept === undefined).sort(bySeverity),
     kept: rows.filter((r) => r.kept !== undefined),
   };
+}
+
+const STICK_SUBJECTS = ['The left stick', 'The right stick'];
+
+/**
+ * A check's sentence, its subject apart: the action it opens with (the longest name of the game's
+ * that is a whole word there), with the others listed beside it ("Boost, Map and Fire"), or the
+ * stick it is about. The checks are worded subject first; one that isn't has no subject.
+ */
+export function splitSubject(
+  message: string,
+  game: Game,
+): { subject: string | null; rest: string } {
+  const names = [...new Set(game.actions.map((a) => a.name).filter((n) => n !== ''))].sort(
+    (a, b) => b.length - a.length,
+  );
+  /** The name `text` opens with, as a whole word, or undefined. */
+  const opening = (text: string, among: readonly string[]) =>
+    among.find((name) => text.startsWith(name) && /^(?:$|[\s,.:'])/.test(text.slice(name.length)));
+  const stick = opening(message, STICK_SUBJECTS);
+  if (stick !== undefined) return { subject: stick, rest: message.slice(stick.length) };
+  const first = opening(message, names);
+  if (first === undefined) return { subject: null, rest: message };
+  let end = first.length;
+  for (;;) {
+    const joint = /^(, | and )/.exec(message.slice(end))?.[0];
+    if (joint === undefined) break;
+    const next = opening(message.slice(end + joint.length), names);
+    if (next === undefined) break;
+    end += joint.length + next.length;
+  }
+  return { subject: message.slice(0, end), rest: message.slice(end) };
 }

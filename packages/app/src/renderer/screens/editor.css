@@ -483,6 +483,11 @@
   gap: var(--space-8);
   font-size: var(--size-label);
 }
+.ed-confirm-buttons {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: var(--space-8);
+}
 .ed-danger {
   background: var(--color-error-bg);
   color: var(--color-error-text);

@@ -636,12 +636,12 @@ describe('Apply as the windows ask for it', () => {
       expect(preview.checks).toContainEqual({
         ok: false,
         kind: 'scheme',
-        text: 'Fire is needed to play Ship, and it is on no button.',
+        text: "Fire isn't on a button.",
       });
       const reports = r.reports();
       const result = await r.service.apply(unplaced.id, fp(unplaced));
       expect(result.ok).toBe(false);
-      expect(result.message).toBe('Fire is needed to play Ship, and it is on no button.');
+      expect(result.message).toBe("Fire isn't on a button.");
       expect(r.saveApplied).not.toHaveBeenCalled();
       expect(r.reports()).toBe(reports);
     });
