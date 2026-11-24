@@ -5,12 +5,12 @@
 import type { Action, ActionId, Game, ModeId, PadControl, Signal } from '@helmarray/core';
 import { gameProblem } from '@helmarray/core';
 import type { HelmApi, Preset } from '../../shared/api';
-import { canUndo, redo, startHistory, undo } from './editor-model';
+import { canRedo, canUndo, redo, startHistory, undo } from './editor-model';
 import type { History } from './editor-model';
 import {
   actionsIn,
   addAction,
-  addMode,
+  addNextMode,
   canStartFrom,
   deleteMode,
   newGame,
@@ -135,6 +135,10 @@ export class GameEditor {
     return canUndo(this.current.history);
   }
 
+  get canRedo(): boolean {
+    return canRedo(this.current.history);
+  }
+
   /** For `useSyncExternalStore`. */
   readonly subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
@@ -218,7 +222,7 @@ export class GameEditor {
 
   /** Adds a mode named for its place (*Mode 2*) and shows it. Gives its id back. */
   readonly addMode = (): ModeId => {
-    const added = addMode(this.game, `Mode ${this.game.modes.length + 1}`, this.reserved);
+    const added = addNextMode(this.game, this.reserved);
     this.edit(() => added.game);
     this.set({ mode: added.id });
     return added.id;

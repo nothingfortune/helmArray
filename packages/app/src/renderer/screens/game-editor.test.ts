@@ -167,6 +167,17 @@ describe('undo and redo', () => {
     expect(editor.game.name).toBe('A');
   });
 
+  it('says whether there is something to redo', () => {
+    const { editor } = open();
+    const before = editor.canRedo;
+    editor.edit((g) => renameGame(g, 'A'));
+    const edited = editor.canRedo;
+    editor.undo();
+    const undone = editor.canRedo;
+    editor.redo();
+    expect([before, edited, undone, editor.canRedo]).toEqual([false, false, true, false]);
+  });
+
   it('does nothing with nothing to undo or redo', () => {
     const { editor, calls } = open();
     editor.undo();
@@ -184,6 +195,17 @@ describe('the mode shown', () => {
     const { editor } = open();
     const id = editor.addMode();
     expect([editor.mode, editor.game.modes.at(-1)]).toEqual([id, { id: 'mode_2', name: 'Mode 2' }]);
+  });
+
+  it('names the first mode when a second is added, both in one step to undo', () => {
+    const { editor } = open();
+    editor.addMode();
+    const added = editor.game.modes.map((m) => m.name);
+    editor.undo();
+    expect([added, editor.game.modes]).toEqual([
+      ['Mode 1', 'Mode 2'],
+      [{ id: 'default', name: 'Default' }],
+    ]);
   });
 
   it('moves to another mode when the one shown is deleted', () => {

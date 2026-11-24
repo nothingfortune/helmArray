@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Scheme } from '@helmarray/core';
+import type { Game, Scheme } from '@helmarray/core';
 import { assign, acceptFinding, clear, setLatch } from './editor-model';
 import { assignable, deviceTabs, editorView, shownTab, signalText } from './editor-view';
 import { game, keysScheme, padGame, padScheme, plan } from './editor-fixture';
@@ -82,6 +82,21 @@ describe('unit keys', () => {
       action: 'gone',
       press: 'tap',
     });
+  });
+
+  it('draws an action with no role yet neutral: no role, so no role colour', () => {
+    const unrolled: Game = {
+      ...game,
+      actions: game.actions.map((a) => {
+        if (a.id !== 'boost') return a;
+        const copy = { ...a };
+        delete copy.role;
+        return copy;
+      }),
+    };
+    const scheme = keysScheme();
+    const v = editorView({ scheme, game: unrolled, plan: plan(scheme, unrolled), mode: 'ship' });
+    expect(v.left.keys['L.index_1']).toEqual({ label: 'Boost', action: 'boost', press: 'tap' });
   });
 
   it('labels a key-mode stick by the actions its keys reach, else by the key', () => {

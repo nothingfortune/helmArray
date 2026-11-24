@@ -134,6 +134,9 @@ function editSpy() {
   const edit: Edit = (fn, field) => void calls.push({ field, result: fn(game) });
   return { edit, calls };
 }
+/** Fire as just added: no role yet. */
+const unrolled = { ...fireAction };
+delete unrolled.role;
 const actionOf = (g: Game | undefined, id: string) => g?.actions.find((a) => a.id === id);
 
 function row(over: Partial<ActionRowProps> = {}) {
@@ -185,6 +188,29 @@ describe('an action row', () => {
       'name:jump',
       'Leap',
     ]);
+  });
+
+  it('shows an action with no role yet as such: a muted "Role", and a neutral dot', () => {
+    const html = renderToStaticMarkup(row({ action: unrolled }).node);
+    expect([
+      html.includes('class="gm-role unset"'),
+      html.includes('<option value="" disabled="" selected="">Role</option>'),
+      html.includes('gm-role-dot role-none'),
+    ]).toEqual([true, true, true]);
+  });
+
+  it('shows a role chosen in the text colour, and its own dot', () => {
+    const html = renderToStaticMarkup(row().node);
+    expect([html.includes('class="gm-role"'), html.includes('gm-role-dot role-movement')]).toEqual([
+      true,
+      true,
+    ]);
+  });
+
+  it('gives a role to an action that has none', () => {
+    const { node, calls } = row({ action: unrolled });
+    fire(named(node, 'Fire, role'), 'onChange', { target: { value: 'combat' } });
+    expect(actionOf(calls[0]?.result, 'fire')?.role).toBe('combat');
   });
 
   it('sets the role and required', () => {
@@ -304,6 +330,11 @@ describe('an action row', () => {
     ]).toEqual([true, true, true]);
   });
 
+  it('says so under the row when no controller is connected', () => {
+    const html = renderToStaticMarkup(row({ waiting: 'pad', noPad: true }).node);
+    expect(html).toContain('No controller connected. Pick Jump&#x27;s button:');
+  });
+
   it('moves up and down, and deletes, from More', () => {
     const { node, calls } = row({ action: fireAction, first: false, last: true });
     fire(named(node, 'Move up'), 'onClick');
@@ -342,32 +373,86 @@ describe('an action row', () => {
 });
 
 describe('the wait strip', () => {
-  const strip = (part: 'key' | 'pad') => {
+  const strip = (part: 'key' | 'pad', noPad = false, action = jump) => {
     const onPick = vi.fn();
     const onCancel = vi.fn();
     return {
-      node: <WaitStrip action={jump} part={part} onPick={onPick} onCancel={onCancel} />,
+      node: (
+        <WaitStrip action={action} part={part} noPad={noPad} onPick={onPick} onCancel={onCancel} />
+      ),
       onPick,
       onCancel,
     };
   };
-
-  it('picks a key from the list', () => {
-    const s = strip('key');
-    fire(named(s.node, "Keys a press can't set"), 'onChange', { target: { value: 'Esc' } });
-    expect(s.onPick.mock.calls).toEqual([[{ kind: 'key', code: 'Esc' }]]);
+  /** The list as an event's target: what it shows, and whether a key moved it. */
+  const list = (value: string, keyed = false) => {
+    const el = target();
+    if (keyed) el.setAttribute('data-keyed');
+    return { ...el, value };
+  };
+  const form = (node: ReactNode) => elements(node).find((e) => e.type === 'form') as El;
+  const formWith = (value: string) => ({
+    elements: { namedItem: (name: string) => (name === 'pick' ? { value } : null) },
   });
 
-  it('picks a controller button from the list', () => {
+  it('picks a key from the list with the mouse', () => {
+    const s = strip('key');
+    const el = list('Tab');
+    fire(named(s.node, "Keys a press can't set"), 'onChange', { currentTarget: el });
+    expect(s.onPick.mock.calls).toEqual([[{ kind: 'key', code: 'Tab' }]]);
+  });
+
+  it('picks a controller button from the list with the mouse', () => {
     const s = strip('pad');
-    fire(named(s.node, 'Controller buttons'), 'onChange', { target: { value: 'RB' } });
+    fire(named(s.node, 'Controller buttons'), 'onChange', { currentTarget: list('RB') });
     expect(s.onPick.mock.calls).toEqual([['RB']]);
   });
 
-  it('picks nothing for the empty first line', () => {
+  it('only moves through the list with the keys: Enter picks', () => {
     const s = strip('pad');
-    fire(named(s.node, 'Controller buttons'), 'onChange', { target: { value: '' } });
-    expect(s.onPick.mock.calls).toEqual([]);
+    const select = named(s.node, 'Controller buttons');
+    const el = list('B');
+    fire(select, 'onKeyDown', { key: 'ArrowDown', currentTarget: el });
+    fire(select, 'onChange', { currentTarget: el });
+    const picked = [...s.onPick.mock.calls];
+    const { preventDefault } = fire(select, 'onKeyDown', { key: 'Enter', currentTarget: el });
+    expect([picked, s.onPick.mock.calls, preventDefault.mock.calls.length]).toEqual([
+      [],
+      [['B']],
+      1,
+    ]);
+  });
+
+  it('takes the mouse again after the keys: a press on the list forgets them', () => {
+    const s = strip('pad');
+    const select = named(s.node, 'Controller buttons');
+    const el = list('X', true);
+    fire(select, 'onMouseDown', { currentTarget: el });
+    fire(select, 'onChange', { currentTarget: el });
+    expect(s.onPick.mock.calls).toEqual([['X']]);
+  });
+
+  it('sets what the list shows with Set: the default needs one click', () => {
+    const s = strip('pad');
+    const { preventDefault } = fire(form(s.node), 'onSubmit', { currentTarget: formWith('A') });
+    expect([s.onPick.mock.calls, preventDefault.mock.calls.length]).toEqual([[['A']], 1]);
+  });
+
+  it('starts the list on a sensible choice: Esc for a key, A for a button, else the one set', () => {
+    const lb = { ...jump, native: { pad: 'LB' as const } };
+    const shown = (node: ReactNode, name: string) => named(node, name).props['defaultValue'];
+    expect([
+      shown(strip('key').node, "Keys a press can't set"),
+      shown(strip('pad', false, fireAction).node, 'Controller buttons'),
+      shown(strip('pad', false, lb).node, 'Controller buttons'),
+    ]).toEqual(['Esc', 'A', 'LB']);
+  });
+
+  it('names the list as a choice', () => {
+    expect([
+      renderToStaticMarkup(strip('key').node).includes('Or pick a key:'),
+      renderToStaticMarkup(strip('pad').node).includes('Or pick a button:'),
+    ]).toEqual([true, true]);
   });
 
   it('cancels', () => {
@@ -378,11 +463,24 @@ describe('the wait strip', () => {
 
   it('lists every Xbox control for a controller, in words', () => {
     const html = renderToStaticMarkup(strip('pad').node);
+    expect([html.includes('Left stick up'), html.includes('D-pad down')]).toEqual([true, true]);
+  });
+
+  it('asks for a pick, not a press, with no controller connected', () => {
+    const html = renderToStaticMarkup(strip('pad', true).node);
     expect([
-      html.includes('Left stick up'),
-      html.includes('D-pad down'),
-      html.includes('No controller? Pick'),
-    ]).toEqual([true, true, true]);
+      html.includes('No controller connected. Pick Jump&#x27;s button:'),
+      html.includes('on the controller'),
+      html.includes('Or pick'),
+    ]).toEqual([true, false, false]);
+  });
+
+  it('asks for a press while a controller is connected', () => {
+    const html = renderToStaticMarkup(strip('pad').node);
+    expect([
+      html.includes('Press Jump&#x27;s button on the controller. Esc cancels.'),
+      html.includes('No controller connected'),
+    ]).toEqual([true, false]);
   });
 });
 
@@ -398,9 +496,11 @@ describe('the title bar', () => {
       confirming: false,
       busy: false,
       starts: ['xbox', 'keys'],
+      canRedo: false,
       edit: spy.edit,
       onBack: vi.fn(),
       onUndo: vi.fn(),
+      onRedo: vi.fn(),
       onConfirm: vi.fn(),
       onDrop: vi.fn(),
       onStart: vi.fn(),
@@ -415,10 +515,30 @@ describe('the title bar', () => {
       'Library',
       'Game name',
       'Undo',
+      'Redo',
       'Delete game',
       'Xbox controller',
       "Game's own keys",
     ]);
+  });
+
+  it('makes the first way on the one primary button: the next step from here', () => {
+    const buttons = elements(bar().node).filter((e) => e.type === 'button');
+    const primary = buttons.filter((e) =>
+      String(e.props['className']).split(' ').includes('primary'),
+    );
+    expect(primary.map(textOf)).toEqual(['Xbox controller']);
+  });
+
+  it('turns Redo on when there is something to redo, and redoes', () => {
+    const off = bar();
+    const on = bar({ canRedo: true });
+    fire(named(on.node, 'Redo'), 'onClick');
+    expect([
+      named(off.node, 'Redo').props['disabled'],
+      named(on.node, 'Redo').props['disabled'],
+      vi.mocked(on.props.onRedo).mock.calls.length,
+    ]).toEqual([true, false, 1]);
   });
 
   it('offers Back to helmArray’s for your copy of a built-in game, and nothing to delete', () => {
@@ -426,6 +546,7 @@ describe('the title bar', () => {
       'Library',
       'Game name',
       'Undo',
+      'Redo',
       "Back to helmArray's",
     ]);
   });
@@ -435,8 +556,8 @@ describe('the title bar', () => {
       names(bar({ builtIn: true, starts: [] }).node),
       names(bar({ saved: false, starts: [] }).node),
     ]).toEqual([
-      ['Library', 'Game name', 'Undo'],
-      ['Library', 'Game name', 'Undo'],
+      ['Library', 'Game name', 'Undo', 'Redo'],
+      ['Library', 'Game name', 'Undo', 'Redo'],
     ]);
   });
 
@@ -477,7 +598,7 @@ describe('the title bar', () => {
       vi.mocked(first.props.onConfirm).mock.calls,
       vi.mocked(asking.props.onDrop).mock.calls.length,
       vi.mocked(asking.props.onConfirm).mock.calls,
-      renderToStaticMarkup(asking.node).includes('Delete Rover and its schemes?'),
+      renderToStaticMarkup(asking.node).includes('Delete this game and its schemes?'),
     ]).toEqual([[[true]], 1, [[false]], true]);
   });
 
@@ -540,8 +661,23 @@ describe('the modes', () => {
     expect([onMode.mock.calls, onAddMode.mock.calls.length]).toEqual([[['drive']], 1]);
   });
 
+  it('shows no tab for a game with one mode, only Add mode', () => {
+    const one = { ...game, modes: [{ id: 'foot', name: 'On foot' }] };
+    const node = <ModeTabs game={one} mode="foot" onMode={vi.fn()} onAddMode={vi.fn()} />;
+    expect([names(node), renderToStaticMarkup(node).includes('role="tablist"')]).toEqual([
+      ['Add mode'],
+      false,
+    ]);
+  });
+
   it('calls a mode with no name "Unnamed" on its tab', () => {
-    const unnamed = { ...game, modes: [{ id: 'foot', name: '' }] };
+    const unnamed = {
+      ...game,
+      modes: [
+        { id: 'foot', name: '' },
+        { id: 'drive', name: 'Driving' },
+      ],
+    };
     expect(
       renderToStaticMarkup(
         <ModeTabs game={unnamed} mode="foot" onMode={vi.fn()} onAddMode={vi.fn()} />,
@@ -572,11 +708,13 @@ describe('the modes', () => {
     ]);
   });
 
-  it('offers no moving or deleting for a game with one mode', () => {
+  it('shows nothing of the mode for a game with one: no name to type, no moving or deleting', () => {
     const one = { ...game, modes: [{ id: 'foot', name: 'On foot' }] };
     expect(
-      names(<ModeHead game={one} mode="foot" edit={vi.fn()} onDeleteMode={vi.fn()} />),
-    ).toEqual(['Mode name']);
+      renderToStaticMarkup(
+        <ModeHead game={one} mode="foot" edit={vi.fn()} onDeleteMode={vi.fn()} />,
+      ),
+    ).toBe('');
   });
 });
 

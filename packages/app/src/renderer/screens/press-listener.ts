@@ -27,6 +27,11 @@ export interface PressEnv {
 export interface PressHandlers {
   press(value: Signal | PadControl): void;
   cancel(): void;
+  /**
+   * While a controller button is waited for: whether a controller that can be read is connected.
+   * Said at once, then each time it changes.
+   */
+  controller(connected: boolean): void;
 }
 
 type KeyEvent = Event & { code: string; repeat: boolean; shiftKey: boolean };
@@ -34,11 +39,15 @@ type KeyEvent = Event & { code: string; repeat: boolean; shiftKey: boolean };
 /** The object form: Node's EventTarget, which the tests use, removes only that one by it. */
 const CAPTURE = { capture: true } as const;
 
+/** A pad with the standard layout is there: the only kind whose buttons can be named. */
+const hasController = (pads: readonly (PadSnapshot | null)[]) =>
+  pads.some((pad) => pad !== null && pad.mapping === 'standard');
+
 /**
  * Listens while a press is waited for. A key: the next key pressed (Esc cancels, Tab goes to the
  * list of keys a press can't set). A controller button: the first pressed since the wait began
- * (Esc cancels; every other key works as usual). A mouse press outside the waiting field and its
- * list cancels either. Returns the way to stop.
+ * (Esc cancels; every other key works as usual), saying whether a controller is connected at all.
+ * A mouse press outside the waiting field and its list cancels either. Returns the way to stop.
  */
 export function listenForPress(part: 'key' | 'pad', env: PressEnv, on: PressHandlers): () => void {
   const onKey = (event: Event) => {
@@ -78,9 +87,19 @@ export function listenForPress(part: 'key' | 'pad', env: PressEnv, on: PressHand
   if (part === 'pad') {
     // Each frame is compared with the one before it: only a hold unbroken since the wait began is
     // ignored, so a button held then, let go and pressed again counts.
-    let before = padsHeld(env.pads());
+    // With none connected the pads are still read every frame: one plugged in is noticed, and the
+    // press it is found by (the Gamepad API shows a pad only once a button on it is pressed) counts.
+    const first = env.pads();
+    let before = padsHeld(first);
+    let connected = hasController(first);
+    on.controller(connected);
     const poll = () => {
-      const now = padsHeld(env.pads());
+      const pads = env.pads();
+      if (hasController(pads) !== connected) {
+        connected = !connected;
+        on.controller(connected);
+      }
+      const now = padsHeld(pads);
       const pressed = newPadPress(before, now);
       before = now;
       if (pressed !== null) {

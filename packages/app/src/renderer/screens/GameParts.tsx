@@ -20,6 +20,7 @@ import {
   renameMode,
   setDefaultKey,
   setDefaultPad,
+  showsModes,
   updateAction,
 } from './game-model';
 
@@ -68,6 +69,7 @@ export interface TitleBarProps {
   edited: boolean;
   saved: boolean;
   canUndo: boolean;
+  canRedo: boolean;
   confirming: boolean;
   busy: boolean;
   starts: readonly Preset[];
@@ -75,6 +77,7 @@ export interface TitleBarProps {
   edit: Edit;
   onBack(): void;
   onUndo(): void;
+  onRedo(): void;
   onConfirm(asking: boolean): void;
   onDrop(): void;
   onStart(preset: Preset): void;
@@ -82,13 +85,18 @@ export interface TitleBarProps {
   onNameDone(): void;
 }
 
-/** The bar: back, the game's name (edited in place), undo, drop or delete, and *New scheme from*. */
+/**
+ * The bar: back, the game's name (edited in place), undo and redo, drop or delete, and *New scheme
+ * from*, whose first choice is the screen's one primary button: the next step once there is an
+ * action. Asking before a delete takes the place of the button that asked, so the bar never moves.
+ */
 export function TitleBar({
   game,
   builtIn,
   edited,
   saved,
   canUndo,
+  canRedo,
   confirming,
   busy,
   starts,
@@ -96,6 +104,7 @@ export function TitleBar({
   edit,
   onBack,
   onUndo,
+  onRedo,
   onConfirm,
   onDrop,
   onStart,
@@ -123,7 +132,6 @@ export function TitleBar({
         />
         <span className="gm-note">{titleNote(builtIn, edited, saved)}</span>
       </div>
-      <div className="gm-spacer" />
       <button
         type="button"
         className="btn icon"
@@ -134,6 +142,18 @@ export function TitleBar({
       >
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
           <path d="M5 4L2 7l3 3M2 7h7.5a4 4 0 010 8H7" stroke="currentColor" strokeWidth="1.7" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        className="btn icon"
+        aria-label="Redo"
+        title="Redo (Ctrl+Shift+Z)"
+        disabled={!canRedo}
+        onClick={onRedo}
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M11 4l3 3-3 3M14 7H6.5a4 4 0 000 8H9" stroke="currentColor" strokeWidth="1.7" />
         </svg>
       </button>
       {builtIn && edited && !confirming && (
@@ -148,7 +168,7 @@ export function TitleBar({
       )}
       {confirming && (
         <div className="gm-confirm" role="group" aria-label="Are you sure?">
-          <span>{builtIn ? 'Drop your edits?' : `Delete ${game.name} and its schemes?`}</span>
+          <span>{builtIn ? 'Drop your edits?' : 'Delete this game and its schemes?'}</span>
           <button type="button" className="btn gm-danger-solid" disabled={busy} onClick={onDrop}>
             {builtIn ? "Back to helmArray's" : 'Delete'}
           </button>
@@ -160,11 +180,11 @@ export function TitleBar({
       {starts.length > 0 && (
         <div className="gm-start" role="group" aria-label="New scheme from">
           <span className="gm-start-label">New scheme from</span>
-          {starts.map((preset) => (
+          {starts.map((preset, i) => (
             <button
               key={preset}
               type="button"
-              className="btn"
+              className={i === 0 ? 'btn primary' : 'btn'}
               disabled={busy}
               onClick={() => onStart(preset)}
             >
@@ -192,7 +212,10 @@ export function Notices({ lines }: { lines: readonly (string | null)[] }) {
   );
 }
 
-/** The mode tabs, each with its count of actions, and *Add mode*. */
+/**
+ * The mode tabs, each with its count of actions, and *Add mode*. A game with one mode shows no tab:
+ * only *Add mode*.
+ */
 export function ModeTabs({
   game,
   mode,
@@ -206,21 +229,23 @@ export function ModeTabs({
 }) {
   return (
     <div className="gm-modes">
-      <div className="gm-tabs" role="tablist" aria-label="Modes">
-        {game.modes.map((m) => (
-          <button
-            key={m.id}
-            type="button"
-            role="tab"
-            aria-selected={m.id === mode}
-            className="gm-tab"
-            onClick={() => onMode(m.id)}
-          >
-            {m.name.trim() === '' ? 'Unnamed' : m.name}
-            <span className="gm-count">{actionsIn(game, m.id).length}</span>
-          </button>
-        ))}
-      </div>
+      {showsModes(game) && (
+        <div className="gm-tabs" role="tablist" aria-label="Modes">
+          {game.modes.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              role="tab"
+              aria-selected={m.id === mode}
+              className="gm-tab"
+              onClick={() => onMode(m.id)}
+            >
+              {m.name.trim() === '' ? 'Unnamed' : m.name}
+              <span className="gm-count">{actionsIn(game, m.id).length}</span>
+            </button>
+          ))}
+        </div>
+      )}
       <button type="button" className="btn ghost small" onClick={onAddMode}>
         Add mode
       </button>
@@ -228,7 +253,7 @@ export function ModeTabs({
   );
 }
 
-/** The mode's name, and with more than one mode, moving and deleting it. */
+/** The mode's name, moving and deleting it: nothing for a game with one mode. */
 export function ModeHead({
   game,
   mode,
@@ -242,6 +267,7 @@ export function ModeHead({
   edit: Edit;
   onDeleteMode(mode: ModeId): void;
 }) {
+  if (!showsModes(game)) return null;
   const current = game.modes.find((m) => m.id === mode);
   return (
     <div className="gm-mode-head">
@@ -257,33 +283,31 @@ export function ModeHead({
           }}
         />
       </label>
-      {game.modes.length > 1 && (
-        <div className="gm-mode-tools">
-          <button
-            type="button"
-            className="btn ghost small"
-            disabled={game.modes[0]?.id === mode}
-            onClick={() => edit((g) => moveMode(g, mode, -1))}
-          >
-            Move left
-          </button>
-          <button
-            type="button"
-            className="btn ghost small"
-            disabled={game.modes.at(-1)?.id === mode}
-            onClick={() => edit((g) => moveMode(g, mode, 1))}
-          >
-            Move right
-          </button>
-          <button
-            type="button"
-            className="btn ghost small gm-danger"
-            onClick={() => onDeleteMode(mode)}
-          >
-            Delete mode
-          </button>
-        </div>
-      )}
+      <div className="gm-mode-tools">
+        <button
+          type="button"
+          className="btn ghost small"
+          disabled={game.modes[0]?.id === mode}
+          onClick={() => edit((g) => moveMode(g, mode, -1))}
+        >
+          Move left
+        </button>
+        <button
+          type="button"
+          className="btn ghost small"
+          disabled={game.modes.at(-1)?.id === mode}
+          onClick={() => edit((g) => moveMode(g, mode, 1))}
+        >
+          Move right
+        </button>
+        <button
+          type="button"
+          className="btn ghost small gm-danger"
+          onClick={() => onDeleteMode(mode)}
+        >
+          Delete mode
+        </button>
+      </div>
     </div>
   );
 }
@@ -376,44 +400,81 @@ export function PressField({
   );
 }
 
+/** Marks the list once a key has moved through it: its change is then a look, not a pick. */
+const KEYED = 'data-keyed';
+
+/** What the list starts on: the one set now if the list has it, else Esc for a key, A for a pad. */
+function firstChoice(action: Action, part: 'key' | 'pad'): string {
+  if (part === 'pad') return action.native?.pad ?? 'A';
+  const key = action.native?.key;
+  return key?.kind === 'key' && CANT_PRESS.includes(key.code) && key.mods === undefined
+    ? key.code
+    : 'Esc';
+}
+
 /**
  * Under a row while it waits: what to press, the list of what a press can't set (for a key: Tab,
- * Esc, the Windows keys, Print Screen; for a controller with none plugged in: every button), and
- * Cancel.
+ * Esc, the Windows keys, Print Screen; for a controller: every button), and Cancel. With no
+ * controller connected it asks for a pick instead of a press that can't come.
+ *
+ * The list starts on a sensible choice, which *Set* (or Enter) takes in one step. Picked with the
+ * mouse, a choice is set at once. Moved through with the keys, it is only shown until Enter: on
+ * Windows the arrows change a closed list, and each change would otherwise be set.
  */
 export function WaitStrip({
   action,
   part,
+  noPad,
   onPick,
   onCancel,
 }: {
   action: Action;
   part: 'key' | 'pad';
+  /** Waiting for a controller button, and no controller is connected. */
+  noPad: boolean;
   onPick(value: Signal | PadControl): void;
   onCancel(): void;
 }) {
   const name = nameOf(action);
+  const asking = part === 'pad' && noPad;
+  const pick = (value: string) =>
+    onPick(part === 'key' ? ({ kind: 'key', code: value } as Signal) : (value as PadControl));
   return (
-    <div className="gm-wait" data-wait-zone data-wait-strip>
+    <form
+      className="gm-wait"
+      data-wait-zone
+      data-wait-strip
+      onSubmit={(e) => {
+        e.preventDefault();
+        const list = e.currentTarget.elements.namedItem('pick') as HTMLSelectElement | null;
+        if (list !== null) pick(list.value);
+      }}
+    >
       <span className="gm-wait-text" role="status">
-        {part === 'key'
-          ? `Press ${name}'s key or mouse button. Esc cancels.`
-          : `Press ${name}'s button on the controller. Esc cancels.`}
+        {asking
+          ? `No controller connected. Pick ${name}'s button:`
+          : part === 'key'
+            ? `Press ${name}'s key or mouse button. Esc cancels.`
+            : `Press ${name}'s button on the controller. Esc cancels.`}
       </span>
       <label className="gm-pick">
-        <span>{part === 'key' ? 'Or pick' : 'No controller? Pick'}</span>
+        {!asking && <span>{part === 'key' ? 'Or pick a key:' : 'Or pick a button:'}</span>}
         <select
+          name="pick"
           aria-label={part === 'key' ? "Keys a press can't set" : 'Controller buttons'}
-          value=""
+          defaultValue={firstChoice(action, part)}
+          onMouseDown={(e) => e.currentTarget.removeAttribute(KEYED)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              pick(e.currentTarget.value);
+            } else if (e.key !== 'Tab' && e.key !== 'Escape')
+              e.currentTarget.setAttribute(KEYED, '');
+          }}
           onChange={(e) => {
-            const value = e.target.value;
-            if (value === '') return;
-            onPick(
-              part === 'key' ? ({ kind: 'key', code: value } as Signal) : (value as PadControl),
-            );
+            if (!e.currentTarget.hasAttribute(KEYED)) pick(e.currentTarget.value);
           }}
         >
-          <option value="">…</option>
           {(part === 'key' ? CANT_PRESS : PAD_CONTROLS).map((v) => (
             <option key={v} value={v}>
               {part === 'key'
@@ -423,10 +484,13 @@ export function WaitStrip({
           ))}
         </select>
       </label>
+      <button type="submit" className="btn small">
+        Set
+      </button>
       <button type="button" className="btn ghost small" onClick={onCancel}>
         Cancel
       </button>
-    </div>
+    </form>
   );
 }
 
@@ -436,6 +500,8 @@ export interface ActionRowProps {
   last: boolean;
   /** What this row waits for a press of, or null. */
   waiting: Waiting['part'] | null;
+  /** No controller is connected (said only while a controller button is waited for). */
+  noPad?: boolean;
   edit: Edit;
   onWait(waiting: Waiting): void;
   onPress(value: Signal | PadControl): void;
@@ -448,6 +514,7 @@ export function ActionRow({
   first,
   last,
   waiting,
+  noPad = false,
   edit,
   onWait,
   onPress,
@@ -468,7 +535,7 @@ export function ActionRow({
         }}
       >
         <td>
-          <span className={`gm-role-dot role-${action.role}`} aria-hidden="true" />
+          <span className={`gm-role-dot role-${action.role ?? 'none'}`} aria-hidden="true" />
           <input
             className="gm-action-name"
             aria-label={`${name}, name`}
@@ -481,14 +548,18 @@ export function ActionRow({
         </td>
         <td>
           <select
-            className="gm-role"
+            className={action.role === undefined ? 'gm-role unset' : 'gm-role'}
             aria-label={`${name}, role`}
-            value={action.role}
+            value={action.role ?? ''}
             onChange={(e) => {
               const role = e.target.value as Role;
               edit((g) => updateAction(g, id, { role }));
             }}
           >
+            {/* No role yet: a placeholder, never a guess. Once chosen, a role is changed, not cleared. */}
+            <option value="" disabled>
+              Role
+            </option>
             {ROLES.map((role) => (
               <option key={role} value={role}>
                 {ROLE_WORDS[role]}
@@ -578,7 +649,14 @@ export function ActionRow({
       {waiting !== null && (
         <tr className="gm-wait-row">
           <td colSpan={6}>
-            <WaitStrip action={action} part={waiting} onPick={onPress} onCancel={onCancel} />
+            <WaitStrip
+              key={waiting}
+              action={action}
+              part={waiting}
+              noPad={noPad}
+              onPick={onPress}
+              onCancel={onCancel}
+            />
           </td>
         </tr>
       )}
@@ -590,6 +668,7 @@ export function ActionRow({
 export function ActionTable({
   rows,
   waiting,
+  noPad = false,
   edit,
   onWait,
   onPress,
@@ -597,6 +676,8 @@ export function ActionTable({
 }: {
   rows: readonly Action[];
   waiting: Waiting | null;
+  /** No controller is connected, while one's button is waited for. */
+  noPad?: boolean;
   edit: Edit;
   onWait(waiting: Waiting): void;
   onPress(value: Signal | PadControl): void;
@@ -631,6 +712,7 @@ export function ActionTable({
             first={i === 0}
             last={i === rows.length - 1}
             waiting={waiting?.action === action.id ? waiting.part : null}
+            noPad={noPad}
             edit={edit}
             onWait={onWait}
             onPress={onPress}

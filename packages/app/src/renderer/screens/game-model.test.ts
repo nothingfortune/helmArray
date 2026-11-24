@@ -5,6 +5,7 @@ import {
   actionsIn,
   addAction,
   addMode,
+  addNextMode,
   canStartFrom,
   deleteAction,
   deleteMode,
@@ -18,6 +19,7 @@ import {
   renameMode,
   setDefaultKey,
   setDefaultPad,
+  showsModes,
   updateAction,
 } from './game-model';
 import { startHistory, undo } from './editor-model';
@@ -92,20 +94,20 @@ describe('addAction', () => {
     ]);
   });
 
-  it('starts it not required, with no defaults, and the role of the action above it', () => {
+  it('starts it not required, with no defaults and no role: the role is yours to choose', () => {
     const { game, id } = addAction(two, 'foot', 'Crawl');
     expect(game.actions.find((a) => a.id === id)).toEqual({
       id: 'crawl',
       name: 'Crawl',
       mode: 'foot',
-      role: 'movement',
       required: false,
     });
   });
 
-  it('starts the first action of a mode as an ability', () => {
+  it('gives no role to the first action of a mode either, and the game can still be saved', () => {
     const { game, id } = addAction(newGame('Rover', []), 'default', 'Jump');
-    expect(game.actions.find((a) => a.id === id)?.role).toBe('ability');
+    const added = game.actions.find((a) => a.id === id);
+    expect([added !== undefined && 'role' in added, gameProblem(game)]).toEqual([false, null]);
   });
 
   it('gives a second action of the same name its own id', () => {
@@ -142,6 +144,13 @@ describe('updateAction', () => {
   it('leaves the game as it was for an action it doesn’t have', () => {
     expect(updateAction(two, 'nobody', { name: 'X' })).toBe(two);
   });
+
+  it('gives a role to an action that had none', () => {
+    const { game, id } = addAction(two, 'foot', 'Crawl');
+    expect(
+      updateAction(game, id, { role: 'movement' }).actions.find((a) => a.id === id)?.role,
+    ).toBe('movement');
+  });
 });
 
 describe('the defaults', () => {
@@ -169,6 +178,14 @@ describe('the defaults', () => {
     const keyed = setDefaultKey(two, 'jump', { kind: 'mouse', button: 'left' });
     const cleared = setDefaultKey(keyed, 'jump', null);
     expect(cleared.actions.find((a) => a.id === 'jump')).toEqual(two.actions[0]);
+  });
+
+  it('keeps an action with no role without one when its defaults change', () => {
+    const { game, id } = addAction(two, 'foot', 'Crawl');
+    const keyed = setDefaultKey(game, id, { kind: 'key', code: 'C' });
+    const cleared = setDefaultKey(keyed, id, null);
+    const roles = [keyed, cleared].map((g) => 'role' in (g.actions.find((a) => a.id === id) ?? {}));
+    expect(roles).toEqual([false, false]);
   });
 
   it('copies the signal it is given', () => {
@@ -244,6 +261,35 @@ describe('the modes', () => {
   it('never deletes the last mode: a game has at least one', () => {
     const one = deleteMode(two, 'foot');
     expect(deleteMode(one, 'drive')).toBe(one);
+  });
+});
+
+describe('the modes shown', () => {
+  it('shows none for a game with one mode: there is nothing to tell apart', () => {
+    expect([showsModes(newGame('Rover', [])), showsModes(two)]).toEqual([false, true]);
+  });
+
+  it('names a mode added next for its place', () => {
+    const { game, id } = addNextMode(two);
+    expect(game.modes.find((m) => m.id === id)).toEqual({ id: 'mode_3', name: 'Mode 3' });
+  });
+
+  it('names the first mode too when a second is added, and keeps its id', () => {
+    const { game } = addNextMode(newGame('Rover', []));
+    expect(game.modes).toEqual([
+      { id: 'default', name: 'Mode 1' },
+      { id: 'mode_2', name: 'Mode 2' },
+    ]);
+  });
+
+  it('keeps a first mode’s own name', () => {
+    const named = renameMode(newGame('Rover', []), 'default', 'On foot');
+    expect(addNextMode(named).game.modes.map((m) => m.name)).toEqual(['On foot', 'Mode 2']);
+  });
+
+  it('never gives the new mode an id a saved scheme names', () => {
+    const reserved = { modes: ['mode_2'], actions: [] };
+    expect(addNextMode(newGame('Rover', []), reserved).id).toBe('mode_2_2');
   });
 });
 

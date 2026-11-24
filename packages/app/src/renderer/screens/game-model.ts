@@ -2,16 +2,7 @@
 // each action's defaults. Every one returns a new game and leaves the one it was given alone. The
 // screen checks the result with core's `gameProblem` before it saves it.
 
-import type {
-  Action,
-  ActionId,
-  Game,
-  ModeId,
-  PadControl,
-  Role,
-  Scheme,
-  Signal,
-} from '@helmarray/core';
+import type { Action, ActionId, Game, ModeId, PadControl, Scheme, Signal } from '@helmarray/core';
 import { idFromName, isDataId } from '@helmarray/core';
 import type { GameEntry, Preset } from '../../shared/api';
 import { isSafeId } from '../../shared/ids';
@@ -26,8 +17,6 @@ export type GameTarget =
 
 /** The mode a new game starts with: one is needed, and most games have only one. */
 const FIRST_MODE = { id: 'default', name: 'Default' };
-/** The role of the first action of a mode: the neutral one. Later ones take the one above. */
-const FIRST_ROLE: Role = 'ability';
 
 /**
  * A new game: the name, one mode, no actions yet. Its id is made from the name, unique among
@@ -97,8 +86,8 @@ export function referencedIds(schemes: readonly Scheme[]): Reserved {
 }
 
 /**
- * Adds an action at the end of its mode: its name trimmed, not required, no defaults yet, and the
- * role of the action above it (actions are usually added in groups).
+ * Adds an action at the end of its mode: its name trimmed, not required, and no defaults and no
+ * role yet. The role is chosen, never guessed: a wrong colour reads as a fact.
  */
 export function addAction(
   game: Game,
@@ -112,14 +101,7 @@ export function addAction(
     freeId(game.actions, retiredOf(game).actions, reserved.actions),
     'action',
   );
-  const above = actionsIn(game, mode).at(-1);
-  const action: Action = {
-    id,
-    name: trimmed,
-    mode,
-    role: above?.role ?? FIRST_ROLE,
-    required: false,
-  };
+  const action: Action = { id, name: trimmed, mode, required: false };
   return { game: { ...game, actions: [...game.actions, action] }, id };
 }
 
@@ -147,7 +129,7 @@ function setNative(action: Action, part: 'key' | 'pad', value: Signal | PadContr
     id: action.id,
     name: action.name,
     mode: action.mode,
-    role: action.role,
+    ...(action.role === undefined ? {} : { role: action.role }),
     required: action.required,
   };
   return key === null && pad === null ? rest : { ...rest, native };
@@ -189,6 +171,26 @@ export function addMode(
   const trimmed = name.trim();
   const id = idFromName(trimmed, freeId(game.modes, retiredOf(game).modes, reserved.modes), 'mode');
   return { game: { ...game, modes: [...game.modes, { id, name: trimmed }] }, id };
+}
+
+/**
+ * Whether the modes are shown at all. A game with one mode has nothing to tell apart: it shows no
+ * tab and no mode name until *Add mode*.
+ */
+export const showsModes = (game: Game): boolean => game.modes.length > 1;
+
+/**
+ * *Add mode*: a mode named for its place (*Mode 2*), at the end. A first mode still called by the
+ * name a new game starts with is named *Mode 1* with it, in the same step: until now that name was
+ * never shown, and two tabs need two names.
+ */
+export function addNextMode(game: Game, reserved: Reserved = NONE): { game: Game; id: ModeId } {
+  const first = game.modes[0];
+  const named =
+    game.modes.length === 1 && first !== undefined && first.name === FIRST_MODE.name
+      ? renameMode(game, first.id, 'Mode 1')
+      : game;
+  return addMode(named, `Mode ${game.modes.length + 1}`, reserved);
 }
 
 export const renameMode = (game: Game, id: ModeId, name: string): Game => ({
