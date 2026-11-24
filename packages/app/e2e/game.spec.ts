@@ -25,6 +25,8 @@ const UNKNOWN_ID = 'a_game_nobody_wrote_yet';
 const KEY_SPACE = 0xf02c;
 
 const gameName = (page: Page) => page.getByRole('textbox', { name: 'Game name' });
+/** The checks "Game's own keys" leaves to keep before Apply: each a click. */
+const KEYS_ROUTE_KEEPS = 2;
 
 /** *Set up* on the Steam game helmArray doesn't know: the Game screen, on a new game. */
 async function setUpUnknown(page: Page) {
@@ -123,7 +125,8 @@ test.describe('the Game screen', () => {
     const jump = page.locator('.ed-actions').getByRole('button', { name: 'Jump' });
     await jump.dragTo(leftUnit(page).getByRole('button', { name: 'Empty, index 1' }));
     await expect(leftUnit(page).getByRole('button', { name: 'Jump, index 1' })).toBeVisible();
-    await keepEveryCheck(page);
+    // Game's own keys leaves both sticks sending no keys: two checks to keep, as on Helldivers 2.
+    expect(await keepEveryCheck(page)).toBe(KEYS_ROUTE_KEEPS);
     await page.getByRole('button', { name: 'Apply', exact: true }).click();
     await expect(applyInDrawer(page)).toBeEnabled();
     await applyInDrawer(page).click();
@@ -137,6 +140,50 @@ test.describe('the Game screen', () => {
       "Game's own keys",
       [{ input: expect.any(Number), keys: [KEY_SPACE] }],
     ]);
+  });
+
+  test('J1 by the Xbox controller: Set up, a key and a controller button pressed, the default, Apply', async ({
+    helm,
+  }) => {
+    // Clicks, counted: Set up, the controller field, Xbox controller, Apply, Apply in the drawer.
+    // Everything else is typing and pressing.
+    const { page } = helm;
+    await plugFakePad(page);
+    await setUpUnknown(page); // click 1
+    await addAction(page, 'Jump', 'Space', 'Space');
+    await page.getByRole('button', { name: "Set Jump's controller button" }).click(); // click 2
+    await pressPad(page, { button: 0 });
+    await expect(page.getByRole('button', { name: 'Jump, controller button: A' })).toBeVisible();
+    await page
+      .getByRole('group', { name: 'New scheme from' })
+      .getByRole('button', { name: 'Xbox controller' })
+      .click(); // click 3
+    await expect(page.getByRole('heading', { name: UNKNOWN })).toBeVisible();
+    // The preset puts Jump where the game ships it: nothing to keep.
+    await expect(page.getByRole('button', { name: 'Keep, I know' })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Apply', exact: true }).click(); // click 4
+    await expect(applyInDrawer(page)).toBeEnabled();
+    await applyInDrawer(page).click(); // click 5
+    await expect(drawer(page).getByLabel('Result')).toContainText('Both units now run the layout.');
+    const names = (await helm.units()).map((u) => u.slots.find((s) => s.slot === u.running)?.name);
+    expect(names).toEqual(['Xbox controller', 'Xbox controller']);
+  });
+
+  test('a mouse button is set by pressing it on the waiting field: left, then right', async ({
+    helm,
+  }) => {
+    const { page } = helm;
+    await setUpUnknown(page);
+    await addAction(page, 'Fire', 'KeyF', 'F');
+    await page.getByRole('button', { name: 'Fire, key: F' }).click();
+    await page.getByRole('button', { name: 'Press a key for Fire' }).click();
+    // The click that follows the press doesn't start another wait.
+    await expect(page.getByRole('button', { name: 'Fire, key: Left mouse button' })).toBeVisible();
+    await expect(page.getByRole('status')).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'Fire, key: Left mouse button' }).click();
+    await page.getByRole('button', { name: 'Press a key for Fire' }).click({ button: 'right' });
+    await expect(page.getByRole('button', { name: 'Fire, key: Right mouse button' })).toBeVisible();
   });
 
   test('a controller button is set by pressing it on the controller', async ({ helm }) => {
@@ -204,6 +251,12 @@ test.describe('the Game screen', () => {
     await page.keyboard.type('Ace Combat 7');
     await page.getByRole('textbox', { name: 'New action' }).click();
     await addAction(page, 'Fire', 'Space', 'Space');
+    // Its file is named from the name typed, not from the empty one it opened with.
+    await expect
+      .poll(() =>
+        readFile(join(helm.dataDir, 'games', 'ace_combat_7.json'), 'utf8').catch(() => ''),
+      )
+      .toContain('"name": "Ace Combat 7"');
     await page.getByRole('button', { name: 'Library' }).click();
     await expect(page.getByRole('button', { name: 'Edit game: Ace Combat 7' })).toBeVisible();
   });

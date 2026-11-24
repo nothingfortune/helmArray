@@ -9,6 +9,7 @@ import { PAD_CONTROLS, ROLES } from '@helmarray/core';
 import type { Preset } from '../../shared/api';
 import { CANT_PRESS, mouseSignalOf } from './capture';
 import { padWord, signalText } from './editor-view';
+import { NAME_FIELD } from './game-editor';
 import type { Waiting } from './game-editor';
 import {
   actionsIn,
@@ -77,6 +78,8 @@ export interface TitleBarProps {
   onConfirm(asking: boolean): void;
   onDrop(): void;
   onStart(preset: Preset): void;
+  /** The name is typed: the field is left, or Enter. */
+  onNameDone(): void;
 }
 
 /** The bar: back, the game's name (edited in place), undo, drop or delete, and *New scheme from*. */
@@ -96,6 +99,7 @@ export function TitleBar({
   onConfirm,
   onDrop,
   onStart,
+  onNameDone,
 }: TitleBarProps) {
   return (
     <div className="gm-bar">
@@ -110,7 +114,11 @@ export function TitleBar({
           value={game.name}
           onChange={(e) => {
             const name = e.target.value;
-            edit((g) => renameGame(g, name), 'game-name');
+            edit((g) => renameGame(g, name), NAME_FIELD);
+          }}
+          onBlur={onNameDone}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') onNameDone();
           }}
         />
         <span className="gm-note">{titleNote(builtIn, edited, saved)}</span>
@@ -280,6 +288,9 @@ export function ModeHead({
   );
 }
 
+/** Marks a field whose left press was just taken as its key, until the click that follows. */
+const TAKEN = 'data-taken';
+
 export interface PressFieldProps {
   part: 'key' | 'pad';
   /** The action's name, for the field's own. */
@@ -320,15 +331,24 @@ export function PressField({
         className={`gm-press${text === null ? ' empty' : ''}${waiting ? ' waiting' : ''}`}
         aria-label={label}
         title={waiting ? undefined : `Click, then press the ${what}. Delete clears it.`}
-        onClick={() => {
+        onClick={(e) => {
+          // The click that ends a left press taken as the key is not a new click on the field.
+          if (e.currentTarget.hasAttribute(TAKEN)) {
+            e.currentTarget.removeAttribute(TAKEN);
+            return;
+          }
           if (!waiting) onStart();
         }}
         onMouseDown={(e) => {
           if (!waiting || part !== 'key') return;
           e.preventDefault();
           const signal = mouseSignalOf(e.button);
-          if (signal !== null) onMouse(signal);
+          if (signal === null) return;
+          // Only the left button goes on to a click; the others end in auxclick or the menu.
+          if (e.button === 0) e.currentTarget.setAttribute(TAKEN, '');
+          onMouse(signal);
         }}
+        onMouseLeave={(e) => e.currentTarget.removeAttribute(TAKEN)}
         onContextMenu={(e) => {
           if (waiting) e.preventDefault();
         }}

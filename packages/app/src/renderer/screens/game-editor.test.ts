@@ -40,7 +40,7 @@ function api(over: Partial<EditorApi> = {}) {
 
 const open = (
   game: Game = rover,
-  flags: Partial<{ builtIn: boolean; edited: boolean; saved: boolean }> = {},
+  flags: Partial<{ builtIn: boolean; edited: boolean; saved: boolean; taken: string[] }> = {},
   calls = api(),
 ) => ({
   editor: new GameEditor({ game, builtIn: false, edited: false, saved: true, ...flags }, calls),
@@ -380,5 +380,82 @@ describe('the new-action field', () => {
     editor.type('  ');
     editor.addDraft();
     expect([editor.game.actions.length, editor.state.draft]).toEqual([1, '  ']);
+  });
+});
+
+describe('a new game’s id', () => {
+  /** "Add a game": a game with no name yet, the other games' ids taken. */
+  const added = (taken: string[] = []) => open(newGame('', taken), { saved: false, taken });
+
+  it('is not sent while its name is typed, and is when the typing is done', () => {
+    const { editor, calls } = added();
+    editor.edit((g) => renameGame(g, 'A'), 'game-name');
+    editor.edit((g) => renameGame(g, 'Ac'), 'game-name');
+    const whileTyping = calls.saveGame.mock.calls.length;
+    editor.nameDone();
+    expect([whileTyping, calls.saveGame.mock.calls.map(([g]) => [g.id, g.name])]).toEqual([
+      0,
+      [['ac', 'Ac']],
+    ]);
+  });
+
+  it('is made from its name when first sent, not from the name it opened with', () => {
+    const { editor, calls } = added(['game']);
+    editor.edit((g) => renameGame(g, 'Ace Combat 7'), 'game-name');
+    editor.addAction('Fire');
+    expect([editor.game.id, calls.saveGame.mock.calls.map(([g]) => g.id)]).toEqual([
+      'ace_combat_7',
+      ['ace_combat_7'],
+    ]);
+  });
+
+  it('is never another game’s', () => {
+    const { editor, calls } = added(['ace_combat_7']);
+    editor.edit((g) => renameGame(g, 'Ace Combat 7'), 'game-name');
+    editor.nameDone();
+    expect(calls.saveGame.mock.calls[0]?.[0].id).toBe('ace_combat_7_2');
+  });
+
+  it('stays once sent: a later rename keeps it, and is saved as it is typed', () => {
+    const { editor, calls } = added();
+    editor.edit((g) => renameGame(g, 'Rover'), 'game-name');
+    editor.nameDone();
+    editor.edit((g) => renameGame(g, 'Rover 2'), 'game-name');
+    expect(calls.saveGame.mock.calls.map(([g]) => [g.id, g.name])).toEqual([
+      ['rover', 'Rover'],
+      ['rover', 'Rover 2'],
+    ]);
+  });
+
+  it('is kept by an undo after it was sent', () => {
+    const { editor } = added();
+    editor.edit((g) => renameGame(g, 'Rover'), 'game-name');
+    editor.addAction('Jump');
+    editor.undo();
+    expect([editor.game.id, editor.game.actions.length]).toEqual(['rover', 0]);
+  });
+
+  it('of a game set up from Steam is its name’s, sent with its first action', () => {
+    const { editor, calls } = open(newGame('Everspace 2', ['other'], 1128920), {
+      saved: false,
+      taken: ['other'],
+    });
+    editor.addAction('Boost');
+    expect(calls.saveGame.mock.calls.map(([g]) => [g.id, g.steamAppId])).toEqual([
+      ['everspace_2', 1128920],
+    ]);
+  });
+
+  it('is not touched for a game main has: typing its name saves it, and done does nothing more', () => {
+    const { editor, calls } = open();
+    editor.edit((g) => renameGame(g, 'Rov'), 'game-name');
+    editor.nameDone();
+    expect(calls.saveGame.mock.calls.map(([g]) => [g.id, g.name])).toEqual([['rover', 'Rov']]);
+  });
+
+  it('is not sent while the game has no name', () => {
+    const { editor, calls } = added();
+    editor.nameDone();
+    expect(calls.saveGame.mock.calls).toEqual([]);
   });
 });

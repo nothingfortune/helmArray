@@ -302,3 +302,41 @@ describe('a game file that is wrong inside', () => {
     expect(await listed(data)).toEqual([['skiff', 'Skiff', true, false]]);
   });
 });
+
+describe('deleting the active game', () => {
+  it('leaves no game active when it was a game added by hand, and forgets its scheme', async () => {
+    const { data } = await openStore();
+    data.saveGame(ROVER);
+    const scheme = await data.createSchemeFromPreset('rover', 'keys');
+    await data.setActive('rover', scheme.id);
+    await data.deleteGame('rover');
+    const reopened = await openStore();
+    expect([data.active(), data.activeSchemeOf('rover'), reopened.data.active()]).toEqual([
+      { gameId: null, schemeId: null },
+      null,
+      { gameId: null, schemeId: null },
+    ]);
+  });
+
+  it('forgets the scheme picked for a game added by hand that wasn’t the active one', async () => {
+    const { data } = await openStore();
+    data.saveGame(ROVER);
+    const scheme = await data.createSchemeFromPreset('rover', 'keys');
+    await data.setActive('rover', scheme.id);
+    await data.setActive('skiff', null);
+    await data.deleteGame('rover');
+    expect([data.active(), data.activeSchemeOf('rover')]).toEqual([
+      { gameId: 'skiff', schemeId: null },
+      null,
+    ]);
+  });
+
+  it('keeps the built-in game active when your copy is dropped: the game is still there', async () => {
+    const { data } = await openStore();
+    data.saveGame({ ...SKIFF, name: 'My Skiff' });
+    const scheme = await data.createSchemeFromPreset('skiff', 'keys');
+    await data.setActive('skiff', scheme.id);
+    await data.deleteGame('skiff');
+    expect(data.active()).toEqual({ gameId: 'skiff', schemeId: scheme.id });
+  });
+});

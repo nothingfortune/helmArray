@@ -31,6 +31,9 @@ export interface PressHandlers {
 
 type KeyEvent = Event & { code: string; repeat: boolean; shiftKey: boolean };
 
+/** The object form: Node's EventTarget, which the tests use, removes only that one by it. */
+const CAPTURE = { capture: true } as const;
+
 /**
  * Listens while a press is waited for. A key: the next key pressed (Esc cancels, Tab goes to the
  * list of keys a press can't set). A controller button: the first pressed since the wait began
@@ -66,8 +69,10 @@ export function listenForPress(part: 'key' | 'pad', env: PressEnv, on: PressHand
   const onDown = (e: Event) => {
     if (!env.inZone(e)) on.cancel();
   };
-  env.target.addEventListener('keydown', onKey);
-  env.target.addEventListener('mousedown', onDown);
+  // In the capture phase, so a key waited for never reaches the page's own handlers (Delete on
+  // another field, Alt+Up on a row) as well as being set.
+  env.target.addEventListener('keydown', onKey, CAPTURE);
+  env.target.addEventListener('mousedown', onDown, CAPTURE);
 
   let frame: number | null = null;
   if (part === 'pad') {
@@ -82,8 +87,8 @@ export function listenForPress(part: 'key' | 'pad', env: PressEnv, on: PressHand
     frame = env.frame(poll);
   }
   return () => {
-    env.target.removeEventListener('keydown', onKey);
-    env.target.removeEventListener('mousedown', onDown);
+    env.target.removeEventListener('keydown', onKey, CAPTURE);
+    env.target.removeEventListener('mousedown', onDown, CAPTURE);
     if (frame !== null) env.cancelFrame(frame);
   };
 }

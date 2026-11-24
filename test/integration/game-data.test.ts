@@ -187,3 +187,56 @@ describe('a built-in game edited in the app, then back to helmArray’s', () => 
     expect(fileAfter).toEqual([]);
   });
 });
+
+describe('a game added by hand, active, then deleted', () => {
+  let world: World;
+  let schemeId: string;
+  let after: {
+    games: string[];
+    library: (string | null)[];
+    active: string | null;
+    pill: string;
+    preview: { ready: boolean; checks: string[] };
+    schemes: string[];
+  };
+
+  beforeAll(async () => {
+    world = await World.create();
+    await world.boot();
+    await world.helm.saveGame(ROVER);
+    schemeId = (await world.helm.createScheme('rover', 'keys')).id;
+    await world.helm.setActive('rover', schemeId);
+    await world.helm.deleteGame('rover');
+    // Not `world.idle()`, which looks at the plans itself: the delete must make the app look.
+    await world.until('the app to see no game active', () => world.state.activeGameId === null);
+    const preview = await world.helm.previewApply(schemeId);
+    after = {
+      games: (await world.helm.listGames()).map((e) => e.game.id),
+      library: (await world.helm.listLibrary()).map((e) => e.gameId),
+      active: world.state.activeGameId,
+      pill: world.state.sync.label,
+      preview: { ready: preview.ready, checks: preview.checks.map((c) => c.text) },
+      schemes: (await world.helm.listSchemes('rover')).map((s) => s.id),
+    };
+  });
+
+  afterAll(async () => {
+    await world.dispose();
+  });
+
+  it('is gone from the games and the Library', () => {
+    expect([after.games, after.library]).toEqual([[HELLDIVERS2], [HELLDIVERS2]]);
+  });
+
+  it('keeps its scheme on disk', () => {
+    expect(after.schemes).toEqual([schemeId]);
+  });
+
+  it('can’t be applied any more, and Apply says why', () => {
+    expect(after.preview).toEqual({ ready: false, checks: [expect.stringMatching(/game/i)] });
+  });
+
+  it('leaves no game active, so the pill no longer judges a game that is gone', () => {
+    expect([after.active, after.pill]).toEqual([null, 'Not checked yet']);
+  });
+});

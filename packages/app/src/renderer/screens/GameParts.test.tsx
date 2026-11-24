@@ -85,12 +85,23 @@ const names = (node: ReactNode): string[] =>
     .filter((e) => e.type === 'button' || e.type === 'input' || e.type === 'select')
     .map((e) => (e.props['aria-label'] as string | undefined) ?? textOf(e));
 
+/** The element an event lands on, as far as a handler reads it: its attributes. */
+function target() {
+  const attributes = new Set<string>();
+  return {
+    attributes,
+    hasAttribute: (name: string) => attributes.has(name),
+    setAttribute: (name: string) => void attributes.add(name),
+    removeAttribute: (name: string) => void attributes.delete(name),
+  };
+}
+
 /** Calls a handler the element has, as the browser would. */
 function fire(el: El, handler: string, event: Record<string, unknown> = {}) {
   const fn = el.props[handler];
   if (typeof fn !== 'function') throw new Error(`No ${handler}`);
   const preventDefault = vi.fn();
-  (fn as (e: unknown) => void)({ preventDefault, ...event });
+  (fn as (e: unknown) => void)({ preventDefault, currentTarget: target(), ...event });
   return { preventDefault };
 }
 
@@ -224,6 +235,39 @@ describe('an action row', () => {
       [[{ kind: 'mouse', button: 'right' }]],
       1,
     ]);
+  });
+
+  it('does not start a new wait on the click that ends a left press taken as the key', () => {
+    const waitingRow = row({ waiting: 'key' });
+    const el = target();
+    fire(named(waitingRow.node, 'Press a key for Jump'), 'onMouseDown', {
+      button: 0,
+      currentTarget: el,
+    });
+    // Drawn again, not waiting: the same element gets the click.
+    const after = row({ action: { ...jump, native: { key: { kind: 'mouse', button: 'left' } } } });
+    fire(named(after.node, 'Jump, key: Left mouse button'), 'onClick', { currentTarget: el });
+    fire(named(after.node, 'Jump, key: Left mouse button'), 'onClick', { currentTarget: el });
+    expect([
+      vi.mocked(waitingRow.props.onPress).mock.calls.length,
+      vi.mocked(after.props.onWait).mock.calls,
+    ]).toEqual([1, [[{ action: 'jump', part: 'key' }]]]);
+  });
+
+  it('marks nothing for a right press, which ends in no click', () => {
+    const { node } = row({ waiting: 'key' });
+    const el = target();
+    fire(named(node, 'Press a key for Jump'), 'onMouseDown', { button: 2, currentTarget: el });
+    expect([...el.attributes]).toEqual([]);
+  });
+
+  it('forgets the mark when the pointer leaves the field without a click', () => {
+    const { node } = row({ waiting: 'key' });
+    const el = target();
+    const field = named(node, 'Press a key for Jump');
+    fire(field, 'onMouseDown', { button: 0, currentTarget: el });
+    fire(field, 'onMouseLeave', { currentTarget: el });
+    expect([...el.attributes]).toEqual([]);
   });
 
   it('keeps the menu from opening on the waiting field, and ignores a click on it', () => {
@@ -360,6 +404,7 @@ describe('the title bar', () => {
       onConfirm: vi.fn(),
       onDrop: vi.fn(),
       onStart: vi.fn(),
+      onNameDone: vi.fn(),
       ...over,
     };
     return { node: <TitleBar {...props} />, props, calls: spy.calls };
@@ -399,6 +444,14 @@ describe('the title bar', () => {
     const { node, calls } = bar();
     fire(named(node, 'Game name'), 'onChange', { target: { value: 'Rover 2' } });
     expect([calls[0]?.field, calls[0]?.result.name]).toEqual(['game-name', 'Rover 2']);
+  });
+
+  it('says the name is typed when the field is left or Enter is pressed, and not for other keys', () => {
+    const { node, props } = bar();
+    fire(named(node, 'Game name'), 'onBlur');
+    fire(named(node, 'Game name'), 'onKeyDown', { key: 'Enter' });
+    fire(named(node, 'Game name'), 'onKeyDown', { key: 'a' });
+    expect(vi.mocked(props.onNameDone).mock.calls.length).toBe(2);
   });
 
   it('goes back, undoes, and starts a scheme from either default', () => {

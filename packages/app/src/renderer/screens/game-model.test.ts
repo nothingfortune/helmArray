@@ -317,6 +317,7 @@ describe('loadedOf', () => {
       builtIn: false,
       edited: false,
       saved: false,
+      taken: ['helldivers2', 'rover'],
     });
   });
 });

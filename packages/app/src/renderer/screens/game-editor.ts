@@ -13,6 +13,7 @@ import {
   addMode,
   canStartFrom,
   deleteMode,
+  newGame,
   record,
   setDefaultKey,
   setDefaultPad,
@@ -25,6 +26,9 @@ export interface Waiting {
   part: 'key' | 'pad';
 }
 
+/** The text field of the game's own name. */
+export const NAME_FIELD = 'game-name';
+
 export type EditorApi = Pick<HelmApi, 'saveGame' | 'deleteGame' | 'createScheme' | 'setActive'>;
 
 export interface Loaded {
@@ -35,6 +39,8 @@ export interface Loaded {
   edited: boolean;
   /** Main has it: a game set up from Steam is not saved until its first edit. */
   saved: boolean;
+  /** The other games' ids, which a new game's id must not be. */
+  taken?: readonly string[];
 }
 
 export interface GameEditorState {
@@ -61,6 +67,12 @@ export class GameEditor {
   private readonly listeners = new Set<() => void>();
   /** The text field the last edit was typed in, so typing is one step to undo. */
   private lastField: string | null = null;
+  /**
+   * A new game main doesn't have yet. Its id is made from its name when it is first sent, and it
+   * isn't sent while its name is being typed: only when the typing is done, or with another edit.
+   */
+  private fresh: boolean;
+  private readonly taken: readonly string[];
 
   constructor(
     loaded: Loaded,
@@ -79,6 +91,8 @@ export class GameEditor {
       draft: '',
     };
     this.builtIn = loaded.builtIn;
+    this.fresh = !loaded.saved;
+    this.taken = loaded.taken ?? [];
   }
 
   get state(): GameEditorState {
@@ -131,14 +145,40 @@ export class GameEditor {
     for (const listener of this.listeners) listener();
   }
 
-  private save(game: Game): void {
+  private save(game: Game, field: string | null): void {
     if (gameProblem(game) !== null) return;
+    if (this.fresh) {
+      if (field === NAME_FIELD) return;
+      game = this.settleId(game);
+    }
     this.api.saveGame(game).then(
       () => this.set({ saved: true, edited: this.builtIn, saveError: null }),
       (error: unknown) =>
         this.set({ saveError: `Couldn't save the game. ${plainReason(error)}`.trim() }),
     );
   }
+
+  /**
+   * The id of a new game, made from its name as it is when first sent, and given to every step of
+   * the history so an undo keeps it. From then on it never changes: setups name the game by it.
+   */
+  private settleId(game: Game): Game {
+    this.fresh = false;
+    const id = newGame(game.name, this.taken).id;
+    if (id === game.id) return game;
+    const withId = (g: Game): Game => ({ ...g, id });
+    const { past, present, future } = this.current.history;
+    this.current = {
+      ...this.current,
+      history: { past: past.map(withId), present: withId(present), future: future.map(withId) },
+    };
+    return withId(game);
+  }
+
+  /** The game's name is typed (the field is left, or Enter): a new game is sent now. */
+  readonly nameDone = (): void => {
+    if (this.fresh) this.save(this.game, null);
+  };
 
   /** An edit: into the history, and saved. `field` names a text field, so typing is one step. */
   readonly edit = (fn: (game: Game) => Game, field: string | null = null): void => {
@@ -148,7 +188,7 @@ export class GameEditor {
     const history = record(before, next, field, this.lastField);
     this.lastField = field;
     this.set({ history });
-    this.save(next);
+    this.save(this.game, field);
   };
 
   private travel(step: (h: History<Game>) => History<Game>): void {
@@ -156,7 +196,7 @@ export class GameEditor {
     if (history === this.current.history) return;
     this.lastField = null;
     this.set({ history });
-    this.save(history.present);
+    this.save(this.game, null);
   }
 
   readonly undo = (): void => {

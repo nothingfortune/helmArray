@@ -110,6 +110,13 @@ describe('waiting for a key', () => {
     expect([e.defaultPrevented, w.pressed]).toEqual([true, [{ kind: 'key', code: 'Q' }]]);
   });
 
+  it('keeps a key it takes from everything else in the page', () => {
+    const w = world('key');
+    const e = key('Delete');
+    w.target.dispatchEvent(e);
+    expect([e.cancelBubble, w.pressed]).toEqual([true, [{ kind: 'key', code: 'Del' }]]);
+  });
+
   it('stops listening when stopped', () => {
     const w = world('key');
     w.stop();

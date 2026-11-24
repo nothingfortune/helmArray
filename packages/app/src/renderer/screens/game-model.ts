@@ -183,14 +183,17 @@ export function record<T>(
 export function loadedOf(
   target: GameTarget,
   games: readonly GameEntry[],
-): { game: Game; builtIn: boolean; edited: boolean; saved: boolean } | null {
+): {
+  game: Game;
+  builtIn: boolean;
+  edited: boolean;
+  saved: boolean;
+  taken?: string[];
+} | null {
   if (target.kind === 'new') {
-    const game = newGame(
-      target.name,
-      games.map((g) => g.game.id),
-      target.steamAppId,
-    );
-    return { game, builtIn: false, edited: false, saved: false };
+    const taken = games.map((g) => g.game.id);
+    const game = newGame(target.name, taken, target.steamAppId);
+    return { game, builtIn: false, edited: false, saved: false, taken };
   }
   const entry = games.find((g) => g.game.id === target.gameId);
   if (entry === undefined) return null;

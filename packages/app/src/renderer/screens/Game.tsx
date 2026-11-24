@@ -192,6 +192,7 @@ function GameBody({
         nameRef={nameRef}
         edit={editor.edit}
         onBack={onBack}
+        onNameDone={editor.nameDone}
         onUndo={editor.undo}
         onConfirm={editor.confirm}
         onDrop={() => {

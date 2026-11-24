@@ -481,7 +481,32 @@ export class DataStore {
         );
       }
     });
-    return this.track(run);
+    // A game added by hand is gone: nothing may stay picked for it. A built-in game stays.
+    const done = builtIn ? run : run.then(() => this.forget(gameId));
+    return this.track(done);
+  }
+
+  /** Drops a game from the settings: no longer the active game, and no scheme picked for it. */
+  private forget(gameId: string): Promise<void> {
+    const run = this.settingsTurn.then(async () => {
+      const before = this.settings;
+      if (before.activeGameId !== gameId && own(before.activeScheme, gameId) === undefined) return;
+      const next: AppSettings = {
+        activeGameId: before.activeGameId === gameId ? null : before.activeGameId,
+        activeScheme: Object.fromEntries(
+          Object.entries(before.activeScheme).filter(([id]) => id !== gameId),
+        ),
+      };
+      this.settings = next;
+      try {
+        await this.put('settings', 'settings.json', next);
+      } catch (error) {
+        if (this.settings === next) this.settings = before;
+        throw error;
+      }
+    });
+    this.settingsTurn = run.catch(() => undefined);
+    return run;
   }
 
   private async findGame(gameId: string): Promise<Game | undefined> {
