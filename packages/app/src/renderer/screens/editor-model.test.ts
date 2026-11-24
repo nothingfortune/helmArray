@@ -1503,6 +1503,15 @@ describe('a switch of output or devices keeps what every control shows', () => {
    * The Azerons themselves: to keys, exactly what they showed; to a controller, the same tap, and
    * no long press or double tap, which a controller button hasn't got.
    */
+  /**
+   * What a switch may do to a control the setup keeps, and nothing else:
+   * - a device switch, and an output switch for the keyboard and the mouse: nothing at all;
+   * - an output switch to keys: nothing at all, to any control;
+   * - an output switch to a controller: an Azeron button loses its long press and double tap, which a
+   *   controller button hasn't got, and nothing else, in any mode; a controller button empty in
+   *   every mode may come to show an action (an Azeron group now sends its control), and one that
+   *   shows anything in any mode changes in none.
+   */
   function faultsOf(
     before: Scheme,
     after: Scheme,
@@ -1512,27 +1521,20 @@ describe('a switch of output or devices keeps what every control shows', () => {
     const was = setupOf(before.devices);
     const now = setupOf(after.devices);
     const out: string[] = [];
-    for (const mode of modes)
-      for (const control of everyControl) {
-        if (!inSetup(was, control) || !inSetup(now, control)) continue;
-        const a = shownPresses(before, mode, control);
-        const b = shownPresses(after, mode, control);
-        const say = () => `${mode} ${control}: ${JSON.stringify(a)} became ${JSON.stringify(b)}`;
-        if (
-          !outputSwitch ||
-          after.output === 'keys' ||
-          control.startsWith('key.') ||
-          control.startsWith('mouse.')
-        ) {
-          if (!same(a, b)) out.push(say());
-        } else if (azeron(control)) {
-          if (!same(a.tap === undefined ? {} : { tap: a.tap }, b)) out.push(say());
-        } else if (
-          !(['tap', 'long', 'double'] as const).every((p) => a[p] === undefined || a[p] === b[p])
-        ) {
-          out.push(say());
-        }
-      }
+    for (const control of everyControl) {
+      if (!inSetup(was, control) || !inSetup(now, control)) continue;
+      const a = modes.map((mode) => shownPresses(before, mode, control));
+      const b = modes.map((mode) => shownPresses(after, mode, control));
+      const say = () => `${control}: ${JSON.stringify(a)} became ${JSON.stringify(b)}`;
+      const toPad = outputSwitch && after.output === 'pad';
+      if (toPad && azeron(control)) {
+        const kept = a.map((p) => (p.tap === undefined ? {} : { tap: p.tap }));
+        if (!same(kept, b)) out.push(say());
+      } else if (toPad && control.startsWith('pad.')) {
+        const empty = a.every((p) => Object.keys(p).length === 0);
+        if (!empty && !same(a, b)) out.push(say());
+      } else if (!same(a, b)) out.push(say());
+    }
     return out;
   }
 
@@ -1570,6 +1572,12 @@ describe('a switch of output or devices keeps what every control shows', () => {
     // Modes and actions named __proto__, constructor, toString, hasOwnProperty.
     [11, hostileGame],
     [23, hostileGame],
+    [5, hostileGame],
+    [41, hostileGame],
+    // Two modes and buttons chosen to send one Xbox control: the shapes a join can get wrong.
+    [7, padGame],
+    [19, padGame],
+    [31, padGame],
   ] as const)('holds through 200 edits with switches among them (seed %i, %o)', (seed, g) => {
     const modes = g.modes.map((m) => m.id);
     let x = seed;
@@ -1581,24 +1589,262 @@ describe('a switch of output or devices keeps what every control shows', () => {
     let scheme: Scheme = xboxControllerPreset(g);
     const found: string[] = [];
     for (let i = 1; i <= 200; i++) {
-      const kind = next(10);
+      const kind = next(11);
       const control = everyControl[next(everyControl.length)] ?? '';
       const press = (['tap', 'tap', 'long', 'double'] as const)[next(4)] ?? 'tap';
       const action = actions[next(actions.length)] ?? '';
       const mode = g.actions.find((a) => a.id === action)?.mode ?? 'default';
       if (kind < 5) scheme = assign(scheme, { mode, control, press }, action, g);
       else if (kind < 7) scheme = clear(scheme, { mode, control, press });
+      else if (kind === 9)
+        // A button set to send another's Xbox control: two buttons with one action, which a switch
+        // to keys keeps on both.
+        scheme = setPadControl(scheme, control, PAD_CONTROLS[next(16)] ?? 'A', g);
       else {
         const before = scheme;
         scheme =
-          kind === 7
+          kind === 7 || kind === 10
             ? setOutput(scheme, scheme.output === 'pad' ? 'keys' : 'pad', g)
             : setDevices(scheme, DEVICES[next(DEVICES.length)] ?? AZERONS_ONLY, g);
-        for (const fault of faultsOf(before, scheme, kind === 7, modes))
+        for (const fault of faultsOf(before, scheme, kind === 7 || kind === 10, modes))
           found.push(`after edit ${i}: ${fault}`);
       }
     }
     expect(found).toEqual([]);
+  });
+});
+
+describe('a switch comes out the same whatever order the scheme lists its modes and controls in', () => {
+  /** The same scheme, its modes, controls and pad map listed in another order. */
+  function shuffled(scheme: Scheme, seed: number): Scheme {
+    let x = seed;
+    const next = (n: number) => {
+      x = (x * 1103515245 + 12345) % 2147483648;
+      return Math.floor(x / 65536) % n;
+    };
+    const mix = <T>(list: T[]): T[] => {
+      const out = [...list];
+      for (let i = out.length - 1; i > 0; i--) {
+        const j = next(i + 1);
+        [out[i], out[j]] = [out[j] as T, out[i] as T];
+      }
+      return out;
+    };
+    return {
+      ...scheme,
+      padMap: Object.fromEntries(mix(Object.entries(scheme.padMap))),
+      map: Object.fromEntries(
+        mix(Object.entries(scheme.map)).map(([mode, byControl]) => [
+          mode,
+          Object.fromEntries(mix(Object.entries(byControl))),
+        ]),
+      ),
+    };
+  }
+  const CONTROLS = [
+    ...CYBORG2_LEFT.positions.map((p) => `L.${p.name}`),
+    ...CYBORG2_RIGHT.positions.map((p) => `R.${p.name}`),
+    ...BUILT_IN_DEVICES.flatMap((d) => d.controls).map((c) => c.id),
+  ];
+  const layout = (scheme: Scheme, g: Game) =>
+    JSON.stringify(g.modes.map((m) => CONTROLS.map((c) => [c, shownPresses(scheme, m.id, c)])));
+  const switches = (g: Game): [string, (s: Scheme) => Scheme][] => [
+    ['to the other output', (s) => setOutput(s, s.output === 'pad' ? 'keys' : 'pad', g)],
+    ['to keys and back', (s) => setOutput(setOutput(s, 'keys', g), 'pad', g)],
+    [
+      'to the left Azeron and the controller',
+      (s) => setDevices(s, { azerons: 'left', keyboard: false, mouse: true, controller: true }, g),
+    ],
+    [
+      'to the controller and the keyboard only',
+      (s) => setDevices(s, { azerons: 'none', keyboard: true, mouse: true, controller: true }, g),
+    ],
+  ];
+  /** Schemes with buttons that share actions in some modes and not others. */
+  const start = (g: Game, seed: number): Scheme => {
+    let x = seed;
+    const next = (n: number) => {
+      x = (x * 1103515245 + 12345) % 2147483648;
+      return Math.floor(x / 65536) % n;
+    };
+    let scheme: Scheme = {
+      ...xboxControllerPreset(g),
+      devices: { ...AZERONS_ONLY, controller: true },
+    };
+    const buttons = CYBORG2_LEFT.positions
+      .filter((p) => p.name !== 'stick')
+      .map((p) => `L.${p.name}`);
+    for (let i = 0; i < 40; i++) {
+      const control = buttons[next(buttons.length)] ?? 'L.index_1';
+      const action = g.actions[next(g.actions.length)];
+      if (action === undefined) continue;
+      scheme =
+        i % 4 === 3
+          ? setPadControl(scheme, control, PAD_CONTROLS[next(16)] ?? 'A', g)
+          : assign(scheme, { mode: action.mode, control, press: 'tap' }, action.id, g);
+    }
+    // With keys, buttons that shared an Xbox control share its actions; more edits then make them
+    // differ in some modes and not others.
+    scheme = setOutput(scheme, 'keys', g);
+    for (let i = 0; i < 12; i++) {
+      const control = buttons[next(buttons.length)] ?? 'L.index_1';
+      const action = g.actions[next(g.actions.length)];
+      if (action !== undefined)
+        scheme = assign(scheme, { mode: action.mode, control, press: 'tap' }, action.id, g);
+    }
+    return scheme;
+  };
+
+  it.each([
+    [helldivers2, 3],
+    [hostileGame, 5],
+    [hostileGame, 9],
+    [padGame, 13],
+    [padGame, 21],
+  ] as const)('on %o (seed %i), for every switch', (g, seed) => {
+    const scheme = start(g, seed);
+    const faults: string[] = [];
+    for (const [name, run] of switches(g)) {
+      const want = layout(run(scheme), g);
+      for (const order of [1, 2, 3, 4, 5]) {
+        if (layout(run(shuffled(scheme, order)), g) !== want)
+          faults.push(`${name}, order ${order}`);
+      }
+    }
+    expect(faults).toEqual([]);
+  });
+});
+
+describe('switching to a controller: buttons share an Xbox control only when they agree in every mode', () => {
+  const threeModes: Game = {
+    ...padGame,
+    modes: [...padGame.modes, { id: 'foot', name: 'On foot' }],
+    actions: [
+      ...padGame.actions,
+      { id: 'sprint', name: 'Sprint', mode: 'foot', role: 'movement', required: false },
+    ],
+  };
+  const keysWith = (map: Scheme['map']): Scheme => deepFreeze({ ...keysScheme(), map });
+  const ROWS: [
+    name: string,
+    g: Game,
+    map: Scheme['map'],
+    shared: [string, string][],
+    apart: [string, string][],
+  ][] = [
+    [
+      // Codex's case: Boost on both in Ship, Jump only on middle 1 in SRV.
+      'Boost on two buttons in Ship, Jump on one of them in SRV',
+      padGame,
+      {
+        ship: { 'L.index_1': { tap: 'boost' }, 'L.middle_1': { tap: 'boost' } },
+        srv: { 'L.middle_1': { tap: 'jump' } },
+      },
+      [],
+      [['L.index_1', 'L.middle_1']],
+    ],
+    [
+      'the same, listed the other way round',
+      padGame,
+      {
+        srv: { 'L.middle_1': { tap: 'jump' } },
+        ship: { 'L.middle_1': { tap: 'boost' }, 'L.index_1': { tap: 'boost' } },
+      },
+      [],
+      [['L.index_1', 'L.middle_1']],
+    ],
+    [
+      'two buttons the same in both modes',
+      padGame,
+      {
+        ship: { 'L.index_1': { tap: 'boost' }, 'L.middle_1': { tap: 'boost' } },
+        srv: { 'L.index_1': { tap: 'jump' }, 'L.middle_1': { tap: 'jump' } },
+      },
+      [['L.index_1', 'L.middle_1']],
+      [],
+    ],
+    [
+      'three modes: three buttons agreeing in one mode each, two in all three',
+      threeModes,
+      {
+        ship: {
+          'L.index_1': { tap: 'boost' },
+          'L.middle_1': { tap: 'boost' },
+          'L.ring_1': { tap: 'boost' },
+          'L.pinky_1': { tap: 'boost' },
+        },
+        srv: {
+          'L.middle_1': { tap: 'jump' },
+          'L.ring_1': { tap: 'jump' },
+          'L.pinky_1': { tap: 'jump' },
+        },
+        foot: { 'L.ring_1': { tap: 'sprint' }, 'L.pinky_1': { tap: 'sprint' } },
+      },
+      [['L.ring_1', 'L.pinky_1']],
+      [
+        ['L.index_1', 'L.middle_1'],
+        ['L.middle_1', 'L.ring_1'],
+        ['L.index_1', 'L.ring_1'],
+      ],
+    ],
+  ];
+
+  it('two groups whose actions each ship on the left stick’s up, in different modes, don’t share it', () => {
+    // Elite's shape: Forward in the ship and Forward on foot, both on the left stick's up.
+    const g: Game = {
+      ...padGame,
+      actions: [
+        ...padGame.actions,
+        {
+          id: 'fwd_ship',
+          name: 'Forward',
+          mode: 'ship',
+          role: 'movement',
+          required: false,
+          native: { pad: 'LS_UP' },
+        },
+        {
+          id: 'fwd_srv',
+          name: 'Drive',
+          mode: 'srv',
+          role: 'movement',
+          required: false,
+          native: { pad: 'LS_UP' },
+        },
+      ],
+    };
+    const scheme = keysWith({
+      ship: { 'L.index_1': { tap: 'fwd_ship' } },
+      srv: { 'L.middle_1': { tap: 'fwd_srv' } },
+    });
+    const pad = setOutput(scheme, 'pad', g);
+    expect([
+      pad.padMap['L.index_1'] === pad.padMap['L.middle_1'],
+      shownPresses(pad, 'srv', 'L.index_1'),
+      shownPresses(pad, 'ship', 'L.middle_1'),
+    ]).toEqual([false, {}, {}]);
+  });
+
+  it.each(ROWS)('%s', (_name, g, map, shared, apart) => {
+    const scheme = keysWith(map);
+    const pad = setOutput(scheme, 'pad', g);
+    const shown = (s: Scheme) =>
+      g.modes.map((m) =>
+        Object.keys(map[m.id] ?? {})
+          .concat(...Object.values(map).map((r) => Object.keys(r)))
+          .map((c) => [c, shownPresses(s, m.id, c)]),
+      );
+    expect({
+      layout: JSON.stringify(shown(pad)),
+      shared: shared.map(
+        ([a, b]) => pad.padMap[a] !== undefined && pad.padMap[a] === pad.padMap[b],
+      ),
+      apart: apart.map(([a, b]) => pad.padMap[a] !== pad.padMap[b]),
+    }).toEqual({
+      layout: JSON.stringify(shown(scheme)),
+      shared: shared.map(() => true),
+      apart: apart.map(() => true),
+    });
   });
 });
 

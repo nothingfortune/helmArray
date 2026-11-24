@@ -831,71 +831,73 @@ export function setOutput(scheme: Scheme, output: Scheme['output'], game: Game):
 }
 
 /**
- * The Xbox control for each Azeron button with an action, for a switch to controller output. One
- * control per action where it can be: a button whose action is already on a control (the
- * controller's button, or a button chosen before) joins it, so the game binds one control, not two.
- * Else the stick's direction for an action a stick of the setup sends; else the control the game
- * ships its action on when nothing carries it; else the first that nothing carries. A join that
- * would put two actions on one control in another mode isn't made: the button gets its own, and the
- * game's set then has the action on two controls, which the checks say (`pad-bound-twice`). With
- * none free a button sends nothing, which the checks say too (`sends-nothing`).
+ * The Xbox control for each Azeron button with an action, for a switch to controller output.
+ * Order-free by construction: each button's tap vector (its tap in every mode, empty counting as
+ * its own value) is computed first, and only buttons with the very same vector share a control, so
+ * no button can come to show an action it didn't (every control sending one Xbox control shows what
+ * it carries). Each group of buttons gets one control, the groups taken in the order of their
+ * vectors, never of the map:
+ *   1. the controller's own button, when its vector is the group's: it already does exactly that;
+ *   2. the stick's direction, when every action of the group is one the game ships on it and a
+ *      stick of the setup sends it (STICK DIRECTION KEYS, rule 3);
+ *   3. the control the game ships the group's first action on, when free;
+ *   4. the first free control.
+ * A stick's direction goes to one group only, as every control does.
+ * Free: no stick sends it, no other group has it, and the controller's own button on it carries
+ * nothing in any mode (it may then come to show the group's actions: it is the same control).
+ * With none free a group sends nothing, which the checks say (`sends-nothing`): never a merge.
  */
 function choosePads(scheme: Scheme, game: Game): Scheme['padMap'] {
   const sticks = stickPadsOf(scheme);
-  const modes = Object.keys(scheme.map);
-  // What each Xbox control carries, per mode.
-  const carries = new Map<PadControl, Map<ModeId, ActionId>>();
-  const note = (pad: PadControl, mode: ModeId, action: ActionId) => {
-    const byMode = carries.get(pad) ?? new Map<ModeId, ActionId>();
-    byMode.set(mode, action);
-    carries.set(pad, byMode);
-  };
-  for (const mode of modes) {
-    for (const [control, presses] of Object.entries(own(scheme.map, mode) ?? {})) {
-      const pad = control.startsWith('pad.') ? padSignalOf(scheme, control) : undefined;
-      if (pad !== undefined && presses.tap !== undefined) note(pad, mode, presses.tap);
-    }
+  // Modes in one order, whatever order the scheme lists them in.
+  const modes = Object.keys(scheme.map).sort();
+  const vectorOf = (control: ControlId) =>
+    JSON.stringify(modes.map((mode) => own(own(scheme.map, mode) ?? {}, control)?.tap ?? null));
+  const empty = JSON.stringify(modes.map(() => null));
+  // The controller's own buttons: what each carries, by control.
+  const controller = new Map<PadControl, string>();
+  for (const pad of PAD_CONTROLS) {
+    if (padSignalOf(scheme, `pad.${pad}`) === undefined) continue;
+    controller.set(pad, vectorOf(`pad.${pad}`));
   }
-  const buttons = [
-    ...new Set(
-      modes.flatMap((mode) =>
-        Object.entries(own(scheme.map, mode) ?? {})
-          .filter(([control, presses]) => isAzeron(control) && presses.tap !== undefined)
-          .map(([control]) => control),
-      ),
-    ),
-  ];
+  // The Azeron buttons with an action, grouped by vector.
+  const groups = new Map<string, ControlId[]>();
+  const controls = new Set(
+    Object.values(scheme.map).flatMap((byControl) => Object.keys(byControl)),
+  );
+  for (const control of [...controls].filter(isAzeron).sort()) {
+    const vector = vectorOf(control);
+    if (vector === empty) continue;
+    groups.set(vector, [...(groups.get(vector) ?? []), control]);
+  }
+  const taken = new Set<PadControl>();
+  const free = (pad: PadControl) =>
+    !sticks.has(pad) &&
+    !taken.has(pad) &&
+    (controller.get(pad) === undefined || controller.get(pad) === empty);
+  const nativeOf = (id: ActionId) => game.actions.find((a) => a.id === id)?.native?.pad;
   let padMap: Scheme['padMap'] = {};
-  for (const button of buttons) {
-    const taps = modes.flatMap((mode) => {
-      const id = own(own(scheme.map, mode) ?? {}, button)?.tap;
-      return id === undefined ? [] : [[mode, id] as const];
-    });
-    // A control fits the button when, in every mode, it carries nothing or the button's own
-    // action: never another action, nor one in a mode the button is empty in, which the button
-    // would then show (and do) too.
-    const tapIn = new Map(taps);
-    const fits = (pad: PadControl) =>
-      modes.every((mode) => {
-        const there = carries.get(pad)?.get(mode);
-        return there === undefined || there === tapIn.get(mode);
-      });
-    const nativeOf = (id: ActionId) => game.actions.find((a) => a.id === id)?.native?.pad;
-    const free = (pad: PadControl) => !sticks.has(pad) && (carries.get(pad)?.size ?? 0) === 0;
-    const join = PAD_CONTROLS.find(
-      (pad) =>
-        !sticks.has(pad) &&
-        fits(pad) &&
-        taps.some(([mode, id]) => carries.get(pad)?.get(mode) === id),
+  for (const [vector, buttons] of [...groups].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
+    const actions = (JSON.parse(vector) as (ActionId | null)[]).filter(
+      (id): id is ActionId => id !== null,
     );
-    const stick = taps
-      .map(([, id]) => nativeOf(id))
-      .find((pad) => pad !== undefined && sticks.has(pad));
-    const native = taps.map(([, id]) => nativeOf(id)).find((pad) => pad !== undefined && free(pad));
-    const pick = join ?? stick ?? native ?? PAD_CONTROLS.find(free);
+    const pads = actions.map(nativeOf);
+    const same = PAD_CONTROLS.find(
+      (pad) => !sticks.has(pad) && !taken.has(pad) && controller.get(pad) === vector,
+    );
+    // A stick's direction is one group's too: two groups on it would show each other's actions.
+    const stick =
+      pads[0] !== undefined &&
+      sticks.has(pads[0]) &&
+      !taken.has(pads[0]) &&
+      pads.every((p) => p === pads[0])
+        ? pads[0]
+        : undefined;
+    const native = pads.find((pad) => pad !== undefined && free(pad));
+    const pick = same ?? stick ?? native ?? PAD_CONTROLS.find(free);
     if (pick === undefined) continue;
-    padMap = withOwn(padMap, button, pick);
-    if (!sticks.has(pick)) for (const [mode, id] of taps) note(pick, mode, id);
+    taken.add(pick);
+    for (const button of buttons) padMap = withOwn(padMap, button, pick);
   }
   return padMap;
 }
