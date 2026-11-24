@@ -184,8 +184,9 @@ export function padsHeld(pads: readonly (PadSnapshot | null)[]): PadControl[][] 
 }
 
 /**
- * The first control pressed since the wait began: held now, and not held then by the same pad. A
- * control held all along never counts, so a button still down from before can't set itself.
+ * The first control pressed between two reads: held now, and not held then by the same pad. Read
+ * frame after frame, a control held all along never counts, so a button still down from before
+ * the wait can't set itself; let go and pressed again, it does.
  */
 export function newPadPress(
   before: readonly (readonly PadControl[])[],

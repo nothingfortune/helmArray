@@ -161,6 +161,33 @@ describe('waiting for a controller button', () => {
     expect(w.pressed).toEqual(['B']);
   });
 
+  it('takes a button held when the wait began once it is let go and pressed again', () => {
+    const w = world('pad', [pad([0])]);
+    w.tick();
+    w.setPads([pad()]);
+    w.tick();
+    w.setPads([pad([0])]);
+    w.tick();
+    expect(w.pressed).toEqual(['A']);
+  });
+
+  it('never takes a button held all through the wait', () => {
+    const w = world('pad', [pad([0])]);
+    for (let i = 0; i < 5; i++) w.tick();
+    expect(w.pressed).toEqual([]);
+  });
+
+  it('takes a stick held past halfway when the wait began once it is let back and pushed again', () => {
+    const stick = (y: number): PadSnapshot => ({ ...pad(), axes: [0, y, 0, 0] });
+    const w = world('pad', [stick(-1)]);
+    w.tick();
+    w.setPads([stick(-0.2)]);
+    w.tick();
+    w.setPads([stick(-0.9)]);
+    w.tick();
+    expect(w.pressed).toEqual(['LS_UP']);
+  });
+
   it('reads the pads every frame until a press, then stops', () => {
     const w = world('pad');
     w.tick();

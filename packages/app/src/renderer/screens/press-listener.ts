@@ -76,9 +76,13 @@ export function listenForPress(part: 'key' | 'pad', env: PressEnv, on: PressHand
 
   let frame: number | null = null;
   if (part === 'pad') {
-    const before = padsHeld(env.pads());
+    // Each frame is compared with the one before it: only a hold unbroken since the wait began is
+    // ignored, so a button held then, let go and pressed again counts.
+    let before = padsHeld(env.pads());
     const poll = () => {
-      const pressed = newPadPress(before, padsHeld(env.pads()));
+      const now = padsHeld(env.pads());
+      const pressed = newPadPress(before, now);
+      before = now;
       if (pressed !== null) {
         frame = null;
         on.press(pressed);
