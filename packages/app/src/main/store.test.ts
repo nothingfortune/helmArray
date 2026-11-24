@@ -1055,6 +1055,49 @@ describe('what the units hold', () => {
   });
 });
 
+describe('what is still to set by hand in a game', () => {
+  const row = (action: string, code: string) => ({
+    set: 'keyboard' as const,
+    mode: 'ship',
+    modeName: 'Ship',
+    action,
+    actionName: action,
+    to: { kind: 'key' as const, code: code as 'J' },
+    from: null,
+  });
+
+  it('is nothing before any apply left something to set', async () => {
+    const { data } = await openStore();
+    expect(await data.sheets()).toEqual([]);
+  });
+
+  it("keeps each game's rows across a restart, until Done drops that game's", async () => {
+    const { data } = await openStore();
+    await data.keepSheet('skiff', 'Skiff', [row('boost', 'J')]);
+    await data.keepSheet('rover', 'Rover', [row('drive', 'K')]);
+    const again = await openStore();
+    const kept = await again.data.sheets();
+    await again.data.dismissSheet('rover');
+    const after = await (await openStore()).data.sheets();
+    expect([kept.map((s) => s.gameId), after]).toEqual([
+      ['rover', 'skiff'],
+      [{ gameId: 'skiff', gameName: 'Skiff', rows: [row('boost', 'J')] }],
+    ]);
+  });
+
+  it('is nothing, reported, when its file is damaged', async () => {
+    await writeRaw(['sheets.json'], '{');
+    const { data, problems } = await openStore();
+    expect([await data.sheets(), problems.map((p) => p.file)]).toEqual([[], ['sheets.json']]);
+  });
+
+  it('is nothing, reported, when its file is not a list of games', async () => {
+    await writeRaw(['sheets.json'], JSON.stringify({ schemaVersion: 1, games: [{ gameId: 3 }] }));
+    const { data, problems } = await openStore();
+    expect([await data.sheets(), problems.map((p) => p.file)]).toEqual([[], ['sheets.json']]);
+  });
+});
+
 describe('the applied plans', () => {
   it('keep the last plan applied for each scheme', async () => {
     const { data } = await openStore();

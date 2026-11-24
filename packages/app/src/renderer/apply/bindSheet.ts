@@ -1,52 +1,10 @@
-// The bind sheet after the drawer closes: what is still to be set by hand in each game's own
-// controls, until the person says it is done. Kept for the session (the drawer's last word is not
-// the only place it can be read). Pure.
+// The line on the Library's card for what is still to be set by hand in a game's own controls:
+// the bind sheet of the applies that said so, kept by the main process (sheets.json) until the
+// person says it is done. Pure.
 
-import type { ApplyGameRow, ApplyPreview, ApplyResult } from '../../shared/api';
+import type { KeptSheet } from '@helmarray/core';
 import { gameSection } from './applyFlow';
 import type { GameSection } from './applyFlow';
-
-interface KeptSheet {
-  gameId: string;
-  gameName: string;
-  rows: ApplyGameRow[];
-}
-
-/** Per game, the one applied last first. */
-export type KeptSheets = readonly KeptSheet[];
-
-export const NO_SHEETS: KeptSheets = [];
-
-const keyOf = (row: ApplyGameRow) => `${row.set}|${row.mode}|${row.action}`;
-
-/**
- * After an apply: the rows it left to set by hand are added to that game's sheet. A row for an
- * action already there replaces it (the latest is what the game should have); rows a later apply
- * doesn't mention are still to be set. Nothing for an apply that failed, or a game whose file
- * helmArray writes.
- */
-export function keepSheet(
-  sheets: KeptSheets,
-  preview: ApplyPreview,
-  result: ApplyResult,
-): KeptSheets {
-  if (!result.ok || preview.game.via !== 'sheet' || preview.game.rows.length === 0) return sheets;
-  const before = sheets.find((s) => s.gameId === preview.gameId)?.rows ?? [];
-  const fresh = new Map(preview.game.rows.map((r) => [keyOf(r), r]));
-  // The game's own order where the rows were already there, the new ones after.
-  const rows = [
-    ...before.map((r) => fresh.get(keyOf(r)) ?? r),
-    ...preview.game.rows.filter((r) => !before.some((b) => keyOf(b) === keyOf(r))),
-  ];
-  return [
-    { gameId: preview.gameId, gameName: preview.gameName, rows },
-    ...sheets.filter((s) => s.gameId !== preview.gameId),
-  ];
-}
-
-/** The person has set them: the game's sheet goes. */
-export const dismissSheet = (sheets: KeptSheets, gameId: string): KeptSheets =>
-  sheets.filter((s) => s.gameId !== gameId);
 
 export interface SheetLine {
   gameId: string;
@@ -57,7 +15,10 @@ export interface SheetLine {
 }
 
 /** The line on the Library's card: the sheet of the game applied last, or null when none is kept. */
-export function sheetLine(sheets: KeptSheets, cardGameId: string | null): SheetLine | null {
+export function sheetLine(
+  sheets: readonly KeptSheet[],
+  cardGameId: string | null,
+): SheetLine | null {
   const sheet = sheets[0];
   if (sheet === undefined) return null;
   const section = gameSection(

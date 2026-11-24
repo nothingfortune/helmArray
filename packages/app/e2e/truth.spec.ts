@@ -172,7 +172,7 @@ test('a game with actions and no scheme says No scheme yet, not Not set up', asy
   await page.getByRole('button', { name: 'Look again' }).click();
   const tile = page.locator('.tile', { hasText: 'Quiet Skies' });
   await expect(tile.locator('.status')).toHaveText('No scheme yet');
-  await expect(helldivers(page)).toHaveAttribute('aria-label', /Defaults found · not set up$/);
+  await expect(helldivers(page)).toHaveAttribute('aria-label', /Defaults found · no scheme yet$/);
   // Two games from Steam and one added by hand: not "From Steam".
   await expect(page.locator('.games-head .hint')).toHaveText('3 games · 0 with a scheme');
   await expect(tile.getByRole('button', { name: 'Edit actions: Quiet Skies' })).toBeVisible();

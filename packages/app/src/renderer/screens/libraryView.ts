@@ -79,7 +79,7 @@ export function statusLine(entry: LibraryEntry, onUnits: ReadonlySet<string>): S
   // set up", it has no scheme yet.
   if (count === 0) {
     return {
-      text: entry.shipsDefaults ? 'Defaults found · not set up' : 'No scheme yet',
+      text: entry.shipsDefaults ? 'Defaults found · no scheme yet' : 'No scheme yet',
       tone: 'plain',
     };
   }

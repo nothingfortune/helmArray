@@ -75,6 +75,7 @@ async function rig(
     trace?: (line: string) => void;
     settled?: () => void | Promise<void>;
     gameHolds?: ApplyServiceDeps['gameHolds'];
+    keepSheet?: ApplyServiceDeps['keepSheet'];
   } = {},
 ) {
   const units = new Map<string, FakeUnit>([
@@ -148,6 +149,7 @@ async function rig(
     now: () => 1234,
     ...(over.trace ? { trace: over.trace } : {}),
     ...(over.gameHolds ? { gameHolds: over.gameHolds } : {}),
+    ...(over.keepSheet ? { keepSheet: over.keepSheet } : {}),
   });
   const reports = () => [...units.values()].reduce((n, u) => n + u.received.length, 0);
   return {
@@ -1006,6 +1008,34 @@ describe('the game half of the Apply drawer', () => {
         },
       ],
     });
+  });
+
+  it('keeps the rows the drawer showed after a good apply, to be set by hand later', async () => {
+    const keepSheet = vi.fn(() => Promise.resolve());
+    r = await rig({ scheme: single, keepSheet });
+    const preview = await r.service.preview(single.id);
+    expect((await r.service.apply(single.id, preview.fingerprint)).ok).toBe(true);
+    expect(keepSheet.mock.calls).toEqual([['skiff', 'Skiff', preview.game.rows]]);
+  });
+
+  it('keeps nothing when the apply is refused', async () => {
+    const keepSheet = vi.fn(() => Promise.resolve());
+    r = await rig({ scheme: single, keepSheet, azeron: () => Promise.resolve(true) });
+    const preview = await r.service.preview(single.id);
+    expect((await r.service.apply(single.id, preview.fingerprint)).ok).toBe(false);
+    expect(keepSheet).not.toHaveBeenCalled();
+  });
+
+  it('is applied though the rows could not be kept, and the log says why', async () => {
+    const lines: string[] = [];
+    r = await rig({
+      scheme: single,
+      keepSheet: () => Promise.reject(new Error('disk full')),
+      trace: (line) => lines.push(line),
+    });
+    const preview = await r.service.preview(single.id);
+    expect((await r.service.apply(single.id, preview.fingerprint)).ok).toBe(true);
+    expect(lines).toContain("couldn't keep what is left to set in skiff: disk full");
   });
 
   it('lists nothing the game already holds from the setup applied to it last', async () => {

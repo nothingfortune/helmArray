@@ -64,5 +64,8 @@ export function createHelmApi(bridge: IpcBridge): HelmApi {
     deleteGame: async (gameId) => {
       await bridge.invoke(CHANNELS.deleteGame, gameId);
     },
+    dismissSheet: async (gameId) => {
+      await bridge.invoke(CHANNELS.dismissSheet, gameId);
+    },
   };
 }

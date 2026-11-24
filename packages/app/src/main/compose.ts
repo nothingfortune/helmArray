@@ -157,6 +157,7 @@ export async function composeServices(options: ComposeOptions): Promise<Services
     readLog: (lines) => log.recent(lines),
     active: () => data.active(),
     unitsHeld: () => data.unitsHeld(),
+    sheets: () => data.sheets(),
     plans: createActivePlans({
       ...plans,
       active: () => data.active(),
@@ -178,6 +179,7 @@ export async function composeServices(options: ComposeOptions): Promise<Services
     saveScheme: (scheme) => data.saveScheme(scheme),
     setActive: (gameId, schemeId) => data.setActive(gameId, schemeId),
     // The game holds the bindings of the setup applied to it last, of any of its schemes.
+    keepSheet: (gameId, gameName, rows) => data.keepSheet(gameId, gameName, rows),
     gameHolds: async (gameId) => {
       const last = await data.lastApplied(gameId);
       return last === null ? null : data.getApplied(last.schemeId);
@@ -229,6 +231,10 @@ export async function composeServices(options: ComposeOptions): Promise<Services
       },
       deleteGame: async (gameId) => {
         await data.deleteGame(gameId);
+        await helm.plansChanged();
+      },
+      dismissSheet: async (gameId) => {
+        await data.dismissSheet(gameId);
         await helm.plansChanged();
       },
     }),

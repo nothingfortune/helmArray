@@ -1,7 +1,7 @@
 // What the main process tells the windows, and what a window may ask of it. Plain data only:
 // it crosses IPC by structured clone. The preload exposes `HelmApi` as `window.helm`.
 
-import type { BindingSet, Game, Scheme, Signal, StickBehaviour } from '@helmarray/core';
+import type { Game, KeptSheet, Scheme, SheetRow, Signal, StickBehaviour } from '@helmarray/core';
 
 export type Hand = 'left' | 'right';
 
@@ -151,6 +151,11 @@ export interface AppState {
   activeSchemeId: string | null;
   /** What each unit holds, by the apply that last wrote it; null for one never written. */
   onUnits: { left: UnitHolds | null; right: UnitHolds | null };
+  /**
+   * What is still to be set by hand in each game's own controls, after the applies that said so,
+   * the game applied last first; kept on disk until *Done* (`dismissSheet`).
+   */
+  sheets: KeptSheet[];
 }
 
 /** One line of "what's ready" in the Apply drawer: a check or a cross, with one sentence. */
@@ -214,22 +219,12 @@ export interface ApplyUnitChange {
   problem: string | null;
 }
 
-/** One of the game's bindings Apply changes. Words are the drawer's: these are the facts. */
-export interface ApplyGameRow {
-  /** The game's keyboard bindings or its controller bindings. */
-  set: BindingSet;
-  mode: string;
-  modeName: string;
-  action: string;
-  actionName: string;
-  /** What the action goes on; null: on nothing (it comes off what it is on). */
-  to: Signal | null;
-  /**
-   * What the game has it on now, as far as helmArray knows: what the setup applied to it last
-   * says, else what the game ships. Null: on nothing.
-   */
-  from: Signal | null;
-}
+/**
+ * One of the game's bindings Apply changes: the set, the mode and action (with their names), what
+ * it goes on and what it was on. Words are the drawer's: these are the facts. The same row is kept
+ * as the reminder after Apply (`SheetRow`, core).
+ */
+export type ApplyGameRow = SheetRow;
 
 /** The game's half of Apply. */
 export interface ApplyGame {
@@ -344,6 +339,8 @@ export interface HelmApi {
    * schemes are kept.
    */
   deleteGame(gameId: string): Promise<void>;
+  /** *Done*: the game's bindings still to set by hand are set; its reminder goes. */
+  dismissSheet(gameId: string): Promise<void>;
 }
 
 /** IPC channel names, shared by main and preload. */
@@ -366,4 +363,5 @@ export const CHANNELS = {
   apply: 'helm:apply',
   saveGame: 'helm:save-game',
   deleteGame: 'helm:delete-game',
+  dismissSheet: 'helm:dismiss-sheet',
 } as const;

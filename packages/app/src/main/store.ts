@@ -9,6 +9,8 @@
 //   schemes/<id>.json   one scheme
 //   settings.json       the active game, and the active scheme of each game
 //   units.json          what each unit was last written with: which scheme, of which game, when
+//   sheets.json         what is still to be set by hand in each game's own controls, after the
+//                       applies that said so, until the person says it is done
 //   applied/<id>.json   the plan last applied for scheme <id>; `<game>.held.json`, what a game
 //                       holds after the scheme applied to it last was deleted
 //
@@ -29,13 +31,23 @@ import type {
   ApplyWho,
   Game,
   Hand,
+  KeptSheet,
+  KeptSheets,
+  SheetRow,
   Plan,
   Scheme,
   StoredKind,
   StoredKinds,
   UnitsHeld,
 } from '@helmarray/core';
-import { AZERON_USES, NOTHING_HELD, recordApply } from '@helmarray/core';
+import {
+  AZERON_USES,
+  NOTHING_HELD,
+  NO_SHEETS,
+  dismissSheet,
+  keepSheet,
+  recordApply,
+} from '@helmarray/core';
 import {
   DEFAULT_SETTINGS,
   copyScheme,
@@ -163,12 +175,33 @@ const isUnitWrite = (value: unknown) =>
 const isUnitsHeld = (value: unknown): value is UnitsHeld =>
   isRecord(value) && isUnitWrite(value['left']) && isUnitWrite(value['right']);
 
+const isSignalOrNone = (value: unknown) =>
+  value === null || (isRecord(value) && typeof value['kind'] === 'string');
+const isSheetRow = (value: unknown): value is SheetRow =>
+  isRecord(value) &&
+  (value['set'] === 'keyboard' || value['set'] === 'controller') &&
+  typeof value['mode'] === 'string' &&
+  typeof value['modeName'] === 'string' &&
+  typeof value['action'] === 'string' &&
+  typeof value['actionName'] === 'string' &&
+  isSignalOrNone(value['to']) &&
+  isSignalOrNone(value['from']);
+const isKeptSheet = (value: unknown): value is KeptSheet =>
+  isRecord(value) &&
+  typeof value['gameId'] === 'string' &&
+  typeof value['gameName'] === 'string' &&
+  Array.isArray(value['rows']) &&
+  value['rows'].every(isSheetRow);
+const isKeptSheets = (value: unknown): value is KeptSheets =>
+  isRecord(value) && Array.isArray(value['games']) && value['games'].every(isKeptSheet);
+
 const CHECKS: { [K in StoredKind]: (value: unknown) => value is StoredKinds[K] } = {
   scheme: isScheme,
   game: isGame,
   settings: isSettings,
   applied: isPlan,
   units: isUnitsHeld,
+  sheets: isKeptSheets,
 };
 
 const THING: Record<StoredKind, string> = {
@@ -177,6 +210,7 @@ const THING: Record<StoredKind, string> = {
   settings: 'settings file',
   applied: 'applied plan',
   units: 'record of what the units hold',
+  sheets: 'list of bindings to set in the game',
 };
 
 // --- reading and writing files --------------------------------------------------------------
@@ -285,6 +319,7 @@ export class DataStore {
   /** The settings are changed one call at a time. */
   private settingsTurn: Promise<unknown> = Promise.resolve();
   private unitsTurn: Promise<unknown> = Promise.resolve();
+  private sheetsTurn: Promise<unknown> = Promise.resolve();
   private createTurn: Promise<unknown> = Promise.resolve();
   /** Changes still under way, for `flush()` to wait for. */
   private readonly ops = new Set<Promise<void>>();
@@ -858,5 +893,37 @@ export class DataStore {
     });
     this.unitsTurn = run.catch(() => undefined);
     return this.track(run);
+  }
+
+  // What is still to set by hand in a game ------------------------------------------------------
+
+  /** Each game's rows still to set, the game applied last first. None when the file can't be read. */
+  async sheets(): Promise<KeptSheet[]> {
+    return (await this.readSheets()).games;
+  }
+
+  private async readSheets(): Promise<KeptSheets> {
+    const found = await this.read('sheets', 'sheets.json');
+    return found.status === 'ok' ? found.value : NO_SHEETS;
+  }
+
+  /** One change to sheets.json at a time, in the order asked. */
+  private changeSheets(change: (kept: KeptSheets) => KeptSheets): Promise<void> {
+    const run = this.sheetsTurn.then(async () => {
+      await this.put('sheets', 'sheets.json', change(await this.readSheets()));
+    });
+    this.sheetsTurn = run.catch(() => undefined);
+    return this.track(run);
+  }
+
+  /** After an apply that left rows to set by hand in the game (`keepSheet`). */
+  keepSheet(gameId: string, gameName: string, rows: readonly SheetRow[]): Promise<void> {
+    if (rows.length === 0) return Promise.resolve();
+    return this.changeSheets((kept) => keepSheet(kept, gameId, gameName, rows));
+  }
+
+  /** *Done*: the person has set the game's rows. */
+  dismissSheet(gameId: string): Promise<void> {
+    return this.changeSheets((kept) => dismissSheet(kept, gameId));
   }
 }

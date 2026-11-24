@@ -554,6 +554,7 @@ describe('when to look again', () => {
     activeGameId: null,
     activeSchemeId: null,
     onUnits: { left: null, right: null },
+    sheets: [],
     ...over,
   });
 

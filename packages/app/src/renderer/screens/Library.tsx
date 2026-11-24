@@ -17,8 +17,8 @@ import {
 import { useLibrary } from './useLibrary';
 import { gameTarget, needsSetUp } from './gameTile';
 import type { GameTarget } from './game-model';
-import { NO_SHEETS, sheetLine } from '../apply/bindSheet';
-import type { KeptSheets, SheetLine } from '../apply/bindSheet';
+import { sheetLine } from '../apply/bindSheet';
+import type { SheetLine } from '../apply/bindSheet';
 
 type Send = (event: FlowEvent) => void;
 type OpenGame = (target: GameTarget) => void;
@@ -291,15 +291,13 @@ export function Library({
   state,
   onOpenEditor,
   onOpenGame,
-  sheets = NO_SHEETS,
   onSheetDone,
 }: {
   state: AppState | null;
   onOpenEditor: (schemeId: string) => void;
   /** The Game screen: *Set up*, *Edit actions* and *Add a game*. */
   onOpenGame: OpenGame;
-  /** What is still to set by hand in a game's controls, since the drawer that said so closed. */
-  sheets?: KeptSheets;
+  /** *Done* on what is still to set by hand in a game's controls (`state.sheets`). */
   onSheetDone?(gameId: string): void;
 }) {
   const library = useLibrary();
@@ -334,7 +332,7 @@ export function Library({
   const held = heldSchemes(state);
   const shown = filterEntries(entries, query);
   const editing = card?.scheme ?? null;
-  const sheet = sheetLine(sheets, card?.entry.gameId ?? null);
+  const sheet = sheetLine(state?.sheets ?? [], card?.entry.gameId ?? null);
 
   return (
     <main className="screen library">

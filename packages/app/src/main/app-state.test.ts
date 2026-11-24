@@ -59,7 +59,19 @@ describe('the app state', () => {
       activeGameId: null,
       activeSchemeId: null,
       onUnits: { left: null, right: null },
+      sheets: [],
     });
+  });
+
+  it('carries what is still to set by hand in each game, as the store keeps it', () => {
+    const sheets = [{ gameId: 'skiff', gameName: 'Skiff', rows: [] }];
+    const state = composeAppState({
+      devices: { units: [] },
+      hands: handsFor([], known({})),
+      writeBlock: null,
+      sheets,
+    });
+    expect(state.sheets).toEqual(sheets);
   });
 
   it('carries the active game and scheme it is given', () => {

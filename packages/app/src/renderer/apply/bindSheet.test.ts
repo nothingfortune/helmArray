@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { ApplyGameRow, ApplyPreview, ApplyResult } from '../../shared/api';
-import { NO_SHEETS, dismissSheet, keepSheet, sheetLine } from './bindSheet';
+import type { KeptSheet, SheetRow } from '@helmarray/core';
+import { sheetLine } from './bindSheet';
 
-const row = (over: Partial<ApplyGameRow> = {}): ApplyGameRow => ({
+const row = (over: Partial<SheetRow> = {}): SheetRow => ({
   set: 'controller',
   mode: 'default',
   modeName: 'Default',
@@ -12,14 +12,15 @@ const row = (over: Partial<ApplyGameRow> = {}): ApplyGameRow => ({
   from: { kind: 'pad', control: 'X' },
   ...over,
 });
-const preview = (rows: ApplyGameRow[], via: 'sheet' | 'file' = 'sheet') =>
-  ({ gameId: 'helldivers2', gameName: 'Helldivers 2', game: { via, rows } }) as ApplyPreview;
-const OK: ApplyResult = { ok: true, message: 'Both units now run the layout.', units: [] };
+const sheet = (rows: SheetRow[], gameId = 'helldivers2', gameName = 'Helldivers 2'): KeptSheet => ({
+  gameId,
+  gameName,
+  rows,
+});
 
-describe('the bind sheet kept after the drawer closes', () => {
-  it('keeps the rows a good apply left to set by hand, for that game', () => {
-    const sheets = keepSheet(NO_SHEETS, preview([row()]), OK);
-    expect(sheetLine(sheets, 'helldivers2')).toEqual({
+describe('the bind sheet line on the Library card', () => {
+  it('says how many are left to set in the game the card shows, with the rows worded', () => {
+    expect(sheetLine([sheet([row()])], 'helldivers2')).toEqual({
       gameId: 'helldivers2',
       text: '1 to set in the game',
       section: {
@@ -31,49 +32,16 @@ describe('the bind sheet kept after the drawer closes', () => {
   });
 
   it('names the game when the card shows another', () => {
-    const sheets = keepSheet(
-      NO_SHEETS,
-      preview([row(), row({ action: 'jump', actionName: 'Jump' })]),
-      OK,
-    );
-    expect(sheetLine(sheets, 'other')?.text).toBe('2 to set in Helldivers 2');
+    const two = sheet([row(), row({ action: 'jump', actionName: 'Jump' })]);
+    expect(sheetLine([two], 'other')?.text).toBe('2 to set in Helldivers 2');
   });
 
-  it('keeps nothing for an apply that failed, a game whose file is written, or no row', () => {
-    expect([
-      keepSheet(NO_SHEETS, preview([row()]), { ...OK, ok: false }),
-      keepSheet(NO_SHEETS, preview([row()], 'file'), OK),
-      keepSheet(NO_SHEETS, preview([]), OK),
-    ]).toEqual([NO_SHEETS, NO_SHEETS, NO_SHEETS]);
+  it('is the game applied last, first in the list', () => {
+    const lines = sheetLine([sheet([row()], 'skiff', 'Skiff'), sheet([row()])], null);
+    expect(lines?.gameId).toBe('skiff');
   });
 
-  it('adds a later apply to what is still to set: the latest row for an action wins', () => {
-    const first = keepSheet(
-      NO_SHEETS,
-      preview([row(), row({ action: 'jump', actionName: 'Jump' })]),
-      OK,
-    );
-    const second = keepSheet(first, preview([row({ to: { kind: 'pad', control: 'B' } })]), OK);
-    expect(sheetLine(second, 'helldivers2')?.section.groups[0]?.lines).toEqual([
-      'Set Reload to Xbox B',
-      'Set Jump to Xbox Y',
-    ]);
-  });
-
-  it('shows the game applied last, and the other once that one is dismissed', () => {
-    const other = { ...preview([row()]), gameId: 'skiff', gameName: 'Skiff' } as ApplyPreview;
-    const both = keepSheet(keepSheet(NO_SHEETS, preview([row()]), OK), other, OK);
-    expect([
-      sheetLine(both, 'helldivers2')?.gameId,
-      sheetLine(dismissSheet(both, 'skiff'), 'helldivers2')?.gameId,
-    ]).toEqual(['skiff', 'helldivers2']);
-  });
-
-  it('has no line once dismissed, or for none kept', () => {
-    const sheets = keepSheet(NO_SHEETS, preview([row()]), OK);
-    expect([
-      sheetLine(NO_SHEETS, 'helldivers2'),
-      sheetLine(dismissSheet(sheets, 'helldivers2'), 'helldivers2'),
-    ]).toEqual([null, null]);
+  it('is nothing when none is kept', () => {
+    expect(sheetLine([], 'helldivers2')).toBeNull();
   });
 });

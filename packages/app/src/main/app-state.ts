@@ -3,7 +3,7 @@
 // Pure: every input is handed in, so tests build them by hand.
 
 import type { AppState, DeviceChip, HandQuestion as ApiQuestion, UnitHolds } from '../shared/api';
-import type { Hand, UnitWrite, UnitsHeld } from '@helmarray/core';
+import type { Hand, KeptSheet, UnitWrite, UnitsHeld } from '@helmarray/core';
 import type { ActivePlans } from './active-plans';
 import { NO_PLANS } from './active-plans';
 import { verifyProfile, verifyUnits } from './apply-units';
@@ -106,6 +106,8 @@ export interface AppStateInput {
   plans?: ActivePlans | undefined;
   /** What each unit was last written with (units.json). Without it no unit is said to hold anything. */
   held?: UnitsHeld | undefined;
+  /** What is still to set by hand in each game (sheets.json). None without it. */
+  sheets?: KeptSheet[] | undefined;
   /**
    * The time now (ms since 1970). With it, a unit read longer ago than `MAX_READING_AGE_MS` counts
    * as not read: the pill says it has not checked. Without it, no reading is too old.
@@ -160,6 +162,7 @@ export function composeAppState(input: AppStateInput): AppState {
       left: holdsOf(input.held?.left ?? null, read.left),
       right: holdsOf(input.held?.right ?? null, read.right),
     },
+    sheets: input.sheets ?? [],
   };
 }
 

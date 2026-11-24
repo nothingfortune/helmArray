@@ -10,6 +10,7 @@ const state = (sync: SyncPill, activeSchemeId: string | null = 's1'): AppState =
   activeGameId: 'g',
   activeSchemeId,
   onUnits: { left: null, right: null },
+  sheets: [],
 });
 
 describe("the Editor's Apply button", () => {

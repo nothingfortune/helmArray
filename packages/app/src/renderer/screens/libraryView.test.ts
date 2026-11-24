@@ -105,7 +105,7 @@ describe('the status line', () => {
 
   it('says a game with no scheme that ships its own bindings has defaults found', () => {
     expect(statusLine(entry({ shipsDefaults: true }), NONE)).toEqual({
-      text: 'Defaults found · not set up',
+      text: 'Defaults found · no scheme yet',
       tone: 'plain',
     });
   });

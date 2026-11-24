@@ -40,6 +40,7 @@ export interface HelmHandlers {
   apply(schemeId: string, fingerprint: string): Promise<ApplyResult>;
   saveGame(game: Game): Promise<void>;
   deleteGame(gameId: string): Promise<void>;
+  dismissSheet(gameId: string): Promise<void>;
 }
 
 const PRESETS: readonly string[] = ['xbox', 'keys'] satisfies Preset[];
@@ -117,6 +118,9 @@ export function registerHelmIpc(ipc: IpcRegistry, handlers: HelmHandlers): () =>
   ipc.handle(CHANNELS.deleteGame, (_event, gameId) =>
     handlers.deleteGame(idArg('deleteGame', gameId)),
   );
+  ipc.handle(CHANNELS.dismissSheet, (_event, gameId) =>
+    handlers.dismissSheet(idArg('dismissSheet', gameId)),
+  );
   return () => {
     for (const channel of [
       CHANNELS.state,
@@ -136,6 +140,7 @@ export function registerHelmIpc(ipc: IpcRegistry, handlers: HelmHandlers): () =>
       CHANNELS.apply,
       CHANNELS.saveGame,
       CHANNELS.deleteGame,
+      CHANNELS.dismissSheet,
     ]) {
       ipc.removeHandler(channel);
     }

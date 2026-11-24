@@ -14,6 +14,7 @@ const STATE: AppState = {
   activeGameId: null,
   activeSchemeId: null,
   onUnits: { left: null, right: null },
+  sheets: [],
 };
 
 const GAME: Game = {
@@ -75,6 +76,7 @@ function setup() {
     ),
     saveGame: vi.fn<HelmHandlers['saveGame']>(() => Promise.resolve()),
     deleteGame: vi.fn<HelmHandlers['deleteGame']>(() => Promise.resolve()),
+    dismissSheet: vi.fn<HelmHandlers['dismissSheet']>(() => Promise.resolve()),
   };
   const off = registerHelmIpc(registry, { state: () => STATE, ...calls });
   const call = (channel: string, ...args: unknown[]) =>
@@ -104,6 +106,7 @@ describe('the IPC channels', () => {
         CHANNELS.apply,
         CHANNELS.saveGame,
         CHANNELS.deleteGame,
+        CHANNELS.dismissSheet,
       ].sort(),
     );
   });
@@ -278,6 +281,12 @@ describe('the game channels', () => {
     expect(calls.saveGame).toHaveBeenCalledWith(ROVER);
   });
 
+  it('passes the game whose reminder is done through', async () => {
+    const { call, calls } = setup();
+    await call(CHANNELS.dismissSheet, 'rover');
+    expect(calls.dismissSheet).toHaveBeenCalledWith('rover');
+  });
+
   it('passes a game id to be deleted through', async () => {
     const { call, calls } = setup();
     await call(CHANNELS.deleteGame, 'rover');
@@ -303,6 +312,7 @@ describe('the game channels', () => {
     ],
     ['deleteGame', ['con'], "deleteGame: that isn't an id."],
     ['deleteGame', [7], "deleteGame: that isn't an id."],
+    ['dismissSheet', ['../x'], "dismissSheet: that isn't an id."],
   ] as const)('refuses %s with %j, saying why', async (name, args, message) => {
     const { call, calls } = setup();
     await expect(call(CHANNELS[name], ...args)).rejects.toThrow(message);

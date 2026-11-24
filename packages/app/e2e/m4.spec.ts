@@ -33,7 +33,7 @@ test.describe('the M4 screens', () => {
       'e2e-left',
       'e2e-right',
     ]);
-    await expect(helldivers(page)).toHaveAttribute('aria-label', /Defaults found · not set up/);
+    await expect(helldivers(page)).toHaveAttribute('aria-label', /Defaults found · no scheme yet/);
     await expect(page.getByText('A Game Nobody Wrote Yet')).toBeVisible();
     // A game helmArray has no data for is set up on the Game screen (it said "Not supported yet"
     // until games could be added in the app).

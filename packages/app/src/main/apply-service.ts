@@ -86,6 +86,11 @@ export interface ApplyServiceDeps {
     outcomes: readonly { hand: Hand; status: string }[],
     who: ApplyWho,
   ): Promise<void>;
+  /**
+   * Keeps what a good apply left to set by hand in the game's own controls (the bind sheet), until
+   * the person says it is done: the rows the drawer showed, worked out before anything was written.
+   */
+  keepSheet?(gameId: string, gameName: string, rows: readonly ApplyGameRow[]): Promise<void>;
   /** The clock, for when an apply was. Defaults to `Date.now`. */
   now?(): number;
   /** An apply ended, however it ended: the state is to be worked out again. */
@@ -373,6 +378,18 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
       if (planFingerprint(plan) !== fingerprint) {
         return { ok: false, changed: true, message: CHANGED_SENTENCE, units: [] };
       }
+      // What the game is to be told, against what it holds before this apply: the drawer's rows.
+      const half = await gameHalf(plan, game);
+      /** A good apply's rows to set by hand are kept; a failure to keep them never undoes it. */
+      const keep = async (result: ApplyResult): Promise<ApplyResult> => {
+        if (!result.ok || half.via !== 'sheet' || half.rows.length === 0) return result;
+        try {
+          await deps.keepSheet?.(game.id, game.name, half.rows);
+        } catch (error) {
+          trace(`couldn't keep what is left to set in ${game.id}: ${messageOf(error)}`);
+        }
+        return result;
+      };
 
       // A setup with no Azeron writes no unit: it is remembered, and the game's half is the
       // player's, from the drawer.
@@ -380,7 +397,7 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
         const blocked = findingChecks(plan).find((c) => !c.ok);
         if (blocked) return refused(blocked.text);
         const problem = await remember(schemeId, game.id, plan, fingerprint);
-        return { ok: problem === null, message: problem ?? NO_UNIT_SENTENCE, units: [] };
+        return keep({ ok: problem === null, message: problem ?? NO_UNIT_SENTENCE, units: [] });
       }
 
       const open = await azeronOpen();
@@ -433,7 +450,7 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
         slot: u.slot,
       }));
       if (outcome.problem !== null) return { ok: false, message: outcome.problem, units };
-      return { ok: outcome.result.ok, message: outcome.result.message, units };
+      return keep({ ok: outcome.result.ok, message: outcome.result.message, units });
     } catch (error) {
       trace(`apply failed unexpectedly: ${messageOf(error)}`);
       return refused(`helmArray couldn't apply: ${sentence(messageOf(error))}`);
