@@ -4,7 +4,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { ApplyPreview, ApplyResult } from '../../packages/app/src/shared/api';
 import type { Plan, Scheme } from '@helmarray/core';
+import { UNIT_KEY_CODES, decodeStoredRecord } from '@helmarray/azeron';
 import { isWrite } from './support/fake-hid';
+import type { PluggedUnit } from './support/fake-hid';
 import { HELLDIVERS2, World, expectedSlot, heldSlot, holding } from './support/world';
 
 describe('J1: the Xbox controller preset on Helldivers 2, applied', () => {
@@ -171,5 +173,79 @@ describe('J1: the Xbox controller preset, with nothing to keep', () => {
       ready: preview.ready,
       failing: preview.checks.filter((check) => !check.ok).map((check) => check.text),
     }).toEqual({ ready: true, failing: [] });
+  });
+});
+
+// J1 by the game's own keys: the preset puts Helldivers 2's actions on the units, each on the key
+// the game ships it on, so it is ready as it is made and needs nothing set in the game.
+describe("J1: the game's own keys preset on Helldivers 2, applied", () => {
+  let world: World;
+  let plan: Plan;
+  let preview: ApplyPreview;
+  let result: ApplyResult;
+
+  beforeAll(async () => {
+    world = await World.create();
+    await world.boot();
+    const created = await world.createScheme('keys');
+    plan = await world.planOf(created);
+    ({ preview, result } = await world.previewAndApply(created.id));
+  });
+
+  afterAll(async () => {
+    await world.dispose();
+  });
+
+  /** The key codes a unit's slot taps send, sorted. */
+  const tapped = (unit: PluggedUnit, slot: number): number[] =>
+    [...(unit.unit.slots.get(slot)?.records.values() ?? [])]
+      .map(decodeStoredRecord)
+      .flatMap((r) => (r.kind === 'button' ? r.tap.keys.filter((k) => k !== 0) : []))
+      .sort((a, b) => a - b);
+
+  it('is ready as it is made: nothing to keep, nothing to set in the game', () => {
+    expect({
+      ready: preview.ready,
+      failing: preview.checks.filter((check) => !check.ok).map((check) => check.text),
+      game: preview.game,
+    }).toEqual({ ready: true, failing: [], game: { via: 'sheet', rows: [] } });
+  });
+
+  it('writes both units, each holding its half of the plan', () => {
+    expect({
+      ok: result.ok,
+      left: heldSlot(world.left, 1),
+      right: heldSlot(world.right, 1),
+    }).toEqual({
+      ok: true,
+      left: expectedSlot(plan, 'left', 1),
+      right: expectedSlot(plan, 'right', 1),
+    });
+  });
+
+  it('has the units send the key the game ships each action on that is on a key', async () => {
+    const game = await world.game();
+    const keys = plan.bindings.flatMap((b) => {
+      const native = game.actions.find((a) => a.id === b.action)?.native?.key;
+      return native?.kind === 'key' ? [UNIT_KEY_CODES[native.code]] : [];
+    });
+    expect([...tapped(world.left, 1), ...tapped(world.right, 1)].sort((a, b) => a - b)).toEqual(
+      expect.arrayContaining(keys),
+    );
+    // Every action on a button but Fire and Aim, which the game ships on mouse buttons.
+    expect(keys).toHaveLength(22);
+  });
+
+  it('has the left stick send W, S, A and D', () => {
+    const stick = [...(world.left.unit.slots.get(1)?.records.values() ?? [])]
+      .map(decodeStoredRecord)
+      .find((r) => r.kind === 'stick');
+    // The left block: the one a left unit's stick reads. Each direction is a key and no modifier.
+    expect(stick?.kind === 'stick' ? stick.directions : undefined).toMatchObject({
+      'left.up': [UNIT_KEY_CODES.W, 0, 0],
+      'left.down': [UNIT_KEY_CODES.S, 0, 0],
+      'left.left': [UNIT_KEY_CODES.A, 0, 0],
+      'left.right': [UNIT_KEY_CODES.D, 0, 0],
+    });
   });
 });

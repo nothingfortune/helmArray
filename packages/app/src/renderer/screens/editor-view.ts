@@ -754,6 +754,14 @@ export const assignable = (game: Game, mode: ModeId, actionId: ActionId): boolea
 
 const SEVERITY_ORDER = { error: 0, warning: 1 } as const;
 
+/**
+ * Whether a scheme just made from a preset goes straight to the Apply drawer (J1): it has nothing
+ * to fix, the same reading that draws "Nothing to fix." under the units. Kept findings count as
+ * settled; any other, an error or a warning, keeps the Editor open to fix it.
+ */
+export const opensApply = (view: Pick<EditorView, 'findings'>): boolean =>
+  view.findings.length === 0;
+
 export function editorView(input: EditorViewInput): EditorView {
   const { scheme, game, plan, mode, selected } = input;
   // The press asked for, while the selected control can send it: a switch to a controller leaves

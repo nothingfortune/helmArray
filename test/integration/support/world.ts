@@ -381,7 +381,11 @@ export class World {
    */
   async createBlankKeysScheme(): Promise<Scheme> {
     const created = await this.createScheme('keys');
-    const blank: Scheme = { ...created, map: blankKeysScheme(await this.game()).map, behaviour: {} };
+    const blank: Scheme = {
+      ...created,
+      map: blankKeysScheme(await this.game()).map,
+      behaviour: {},
+    };
     await this.helm.saveScheme(blank);
     return this.scheme(created.id);
   }

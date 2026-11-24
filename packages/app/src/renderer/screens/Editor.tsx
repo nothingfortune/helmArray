@@ -33,7 +33,7 @@ import {
   unacceptFinding,
 } from './editor-model';
 import type { History } from './editor-model';
-import { assignable, editorView } from './editor-view';
+import { assignable, editorView, opensApply } from './editor-view';
 import { sidePanelWidth } from './editor-layout';
 import type { DeviceTabId } from './editor-view';
 import type { Fix } from './fixes';
@@ -50,6 +50,7 @@ import {
   Unplaced,
 } from './EditorParts';
 import type { PickerActions } from './EditorParts';
+import { RecentGames } from './RecentGames';
 import './editor.css';
 
 export interface EditorProps {
@@ -58,12 +59,18 @@ export interface EditorProps {
   /** The way back to the library. */
   onBack(): void;
   /**
-   * Opens another setup of the game (switched to, made, or what is left after a delete). Without it
-   * the Scheme picker only names the setup open.
+   * Opens another setup (switched to, made, or what is left after a delete; another game's, from
+   * the recent games). `made`: it was just made from a preset (J1), so the drawer opens on it when
+   * it has nothing to fix. Without it the Scheme picker only names the setup open.
    */
-  onOpenScheme?(schemeId: string): void;
+  onOpenScheme?(schemeId: string, made?: boolean): void;
   /** Opens the Apply drawer. Without it the Apply button is shown, disabled, with a reason. */
   onApply?(): void;
+  /**
+   * The scheme was just made from a preset (J1): once it is drawn, the Apply drawer opens by itself
+   * if it has nothing to fix (`opensApply`). With something to fix the Editor stays, to fix it.
+   */
+  applyWhenReady?: boolean;
   /**
    * Turns the Ctrl+Z / Ctrl+Y history shortcuts off. Set while something is over the editor (the
    * Apply drawer): an undo underneath would change the scheme being applied.
@@ -114,6 +121,7 @@ function EditorLoader({
   onApply,
   historyOff,
   keysKept,
+  applyWhenReady,
 }: EditorProps) {
   const [load, setLoad] = useState<Load>({ kind: 'loading' });
 
@@ -149,6 +157,7 @@ function EditorLoader({
         onApply={onApply}
         historyOff={historyOff === true}
         keysKept={keysKept ?? 0}
+        applyWhenReady={applyWhenReady === true}
       />
     );
   }
@@ -179,10 +188,11 @@ interface BodyProps {
   scheme: Scheme;
   game: Game;
   onBack(): void;
-  onOpenScheme: ((schemeId: string) => void) | undefined;
+  onOpenScheme: ((schemeId: string, made?: boolean) => void) | undefined;
   onApply: (() => void) | undefined;
   historyOff: boolean;
   keysKept: number;
+  applyWhenReady: boolean;
 }
 
 function EditorBody({
@@ -193,6 +203,7 @@ function EditorBody({
   onApply,
   historyOff,
   keysKept,
+  applyWhenReady,
 }: BodyProps) {
   const [history, setHistory] = useState<History<Scheme>>(() => startHistory(loaded));
   const historyRef = useRef(history);
@@ -275,6 +286,14 @@ function EditorBody({
     [planned, scheme, game, mode, selected, press, tab],
   );
 
+  // J1: a scheme just made from a preset with nothing to fix goes straight to the drawer, once.
+  const offered = useRef(false);
+  useEffect(() => {
+    if (!applyWhenReady || offered.current || view === null) return;
+    offered.current = true;
+    if (opensApply(view)) onApply?.();
+  }, [applyWhenReady, view, onApply]);
+
   const select = (id: ControlId) => {
     setSelected(selected === id ? undefined : id);
     setPress('tap');
@@ -292,14 +311,16 @@ function EditorBody({
     setPress('tap');
   };
   /** Opens a setup the picker made or switched to; a step that failed says why in one sentence. */
-  const opened = (outcome: { ok: true; schemeId: string } | { ok: false; message: string }) => {
-    if (outcome.ok) onOpenScheme?.(outcome.schemeId);
-    else setProblem(outcome.message);
-  };
+  const opened =
+    (made: boolean) =>
+    (outcome: { ok: true; schemeId: string } | { ok: false; message: string }) => {
+      if (outcome.ok) onOpenScheme?.(outcome.schemeId, made);
+      else setProblem(outcome.message);
+    };
   const picker: PickerActions = {
-    switchTo: (id) => void runPick(window.helm, game.id, id).then(opened),
-    make: (preset) => void runMake(window.helm, game.id, preset).then(opened),
-    copy: () => void runCopy(window.helm, game.id, scheme.id).then(opened),
+    switchTo: (id) => void runPick(window.helm, game.id, id).then(opened(false)),
+    make: (preset) => void runMake(window.helm, game.id, preset).then(opened(true)),
+    copy: () => void runCopy(window.helm, game.id, scheme.id).then(opened(false)),
     rename: (name) => edit((s) => renameScheme(s, name)),
     remove: () =>
       void runDelete(window.helm, game.id, scheme.id).then((after) => {
@@ -346,6 +367,9 @@ function EditorBody({
               actions={onOpenScheme === undefined ? null : picker}
             />
           </div>
+          {onOpenScheme !== undefined && (
+            <RecentGames openGameId={game.id} onOpen={(id) => onOpenScheme(id)} />
+          )}
           <span className="ed-rule" aria-hidden="true" />
           {view !== null && view.tabs.length > 0 && (
             <div className="ed-seg" role="group" aria-label="Device">

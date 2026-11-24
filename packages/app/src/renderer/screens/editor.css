@@ -39,6 +39,24 @@
   margin: 0;
   font: 700 var(--size-title) / 1.1 var(--font-name);
 }
+/* The recent games: another game's Editor in one click. */
+.ed-recent {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+.ed-recent-label {
+  color: var(--color-muted);
+  font-size: var(--size-caption);
+  margin-right: var(--space-4);
+}
+.ed-recent-game {
+  max-width: 150px;
+  padding: 0 var(--space-8);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .ed-scheme {
   color: var(--color-muted);
   font-size: var(--size-label);

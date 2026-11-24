@@ -7,7 +7,10 @@ import type { GameTarget } from './screens/game-model';
 import { Library } from './screens/Library';
 
 type Screen =
-  { name: 'library' } | { name: 'editor'; schemeId: string } | { name: 'game'; target: GameTarget };
+  | { name: 'library' }
+  /** `made`: just made from a preset, so the drawer opens on it when it has nothing to fix (J1). */
+  | { name: 'editor'; schemeId: string; made?: boolean }
+  | { name: 'game'; target: GameTarget };
 
 /**
  * The screen under the header: the Library, the Editor on one scheme and its Apply drawer, or the
@@ -26,13 +29,14 @@ export function App({ state }: { state: AppState | null }) {
             setApplying(false);
             setScreen({ name: 'library' });
           }}
-          onOpenScheme={(schemeId) => {
+          onOpenScheme={(schemeId, made) => {
             setApplying(false);
-            setScreen({ name: 'editor', schemeId });
+            setScreen({ name: 'editor', schemeId, made: made === true });
           }}
           onApply={() => setApplying(true)}
           historyOff={applying}
           keysKept={keysKept}
+          applyWhenReady={screen.made === true}
         />
         <ApplyDrawer
           schemeId={screen.schemeId}
@@ -49,14 +53,16 @@ export function App({ state }: { state: AppState | null }) {
       <GameScreen
         target={screen.target}
         onBack={() => setScreen({ name: 'library' })}
-        onOpenEditor={(schemeId) => setScreen({ name: 'editor', schemeId })}
+        onOpenEditor={(schemeId) => setScreen({ name: 'editor', schemeId, made: true })}
       />
     );
   }
   return (
     <Library
       state={state}
-      onOpenEditor={(schemeId) => setScreen({ name: 'editor', schemeId })}
+      onOpenEditor={(schemeId, made) =>
+        setScreen({ name: 'editor', schemeId, made: made === true })
+      }
       onOpenGame={(target) => setScreen({ name: 'game', target })}
     />
   );
