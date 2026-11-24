@@ -269,6 +269,19 @@ describe('the modes shown', () => {
     expect([showsModes(newGame('Rover', [])), showsModes(two)]).toEqual([false, true]);
   });
 
+  it('shows a lone mode with no name, so the name it needs can be typed', () => {
+    // Blanked while a second mode was there, then the second deleted: not saved until named.
+    const blank = deleteMode(
+      renameMode(addNextMode(newGame('Rover', [])).game, 'default', ' '),
+      'mode_2',
+    );
+    expect([blank.modes.length, gameProblem(blank) !== null, showsModes(blank)]).toEqual([
+      1,
+      true,
+      true,
+    ]);
+  });
+
   it('names a mode added next for its place', () => {
     const { game, id } = addNextMode(two);
     expect(game.modes.find((m) => m.id === id)).toEqual({ id: 'mode_3', name: 'Mode 3' });

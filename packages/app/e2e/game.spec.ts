@@ -345,6 +345,40 @@ test.describe('the Game screen', () => {
     await expect(page.getByRole('status')).toHaveCount(0);
   });
 
+  test('the arrows only move through the list: Enter sets what it shows', async ({ helm }) => {
+    const { page } = helm;
+    await noPadYet(page);
+    await setUpUnknown(page);
+    await addAction(page, 'Jump', 'Space', 'Space');
+    await page.getByRole('button', { name: "Set Jump's controller button" }).click();
+    const list = page.getByRole('combobox', { name: 'Controller buttons' });
+    await expect(list).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('ArrowDown');
+    // Still waiting: no arrow set a button.
+    await expect(page.getByRole('status')).toHaveText(
+      "No controller connected. Pick Jump's button:",
+    );
+    await expect(list).toHaveValue('X');
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('button', { name: 'Jump, controller button: X' })).toBeVisible();
+  });
+
+  test('a new action at the end of a long list is scrolled into view, waiting for its key', async ({
+    helm,
+  }) => {
+    const { page } = helm;
+    await editHelldivers(page);
+    const field = page.getByRole('textbox', { name: 'New action' });
+    await field.fill('Wave');
+    await field.press('Enter');
+    await expect(page.getByRole('status')).toHaveText(
+      "Press Wave's key or mouse button. Esc cancels.",
+    );
+    await expect(page.getByRole('status')).toBeInViewport({ ratio: 1 });
+    await expect(page.getByRole('button', { name: 'Press a key for Wave' })).toBeInViewport();
+  });
+
   test('a controller plugged in during the wait is listened to, and its press is taken', async ({
     helm,
   }) => {

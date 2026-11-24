@@ -175,9 +175,11 @@ export function addMode(
 
 /**
  * Whether the modes are shown at all. A game with one mode has nothing to tell apart: it shows no
- * tab and no mode name until *Add mode*.
+ * tab and no mode name until *Add mode*. Unless that mode has no name: the game isn't saved until
+ * it has one, so its field is shown to type it in.
  */
-export const showsModes = (game: Game): boolean => game.modes.length > 1;
+export const showsModes = (game: Game): boolean =>
+  game.modes.length > 1 || game.modes.some((m) => m.name.trim() === '');
 
 /**
  * *Add mode*: a mode named for its place (*Mode 2*), at the end. A first mode still called by the
