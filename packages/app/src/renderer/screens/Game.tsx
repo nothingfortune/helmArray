@@ -39,13 +39,18 @@ export interface GameScreenProps {
 }
 
 type Load =
-  { kind: 'loading' } | { kind: 'gone' } | { kind: 'failed' } | ({ kind: 'ready' } & Loaded);
+  | { kind: 'loading' }
+  | { kind: 'gone' }
+  | { kind: 'failed' }
+  /** `generation` counts the reads: the editor is made anew for each, never kept across one. */
+  | ({ kind: 'ready'; generation: number } & Loaded);
 
 /** Loads the game (or makes the new one, unsaved) and hands it to the screen. */
 export function GameScreen(props: GameScreenProps) {
   const { target } = props;
   const [load, setLoad] = useState<Load>({ kind: 'loading' });
   const [reloads, setReloads] = useState(0);
+  const generation = useRef(0);
 
   useEffect(() => {
     let live = true;
@@ -53,7 +58,11 @@ export function GameScreen(props: GameScreenProps) {
       (games: GameEntry[]) => {
         if (!live) return;
         const loaded = loadedOf(target, games);
-        setLoad(loaded === null ? { kind: 'gone' } : { kind: 'ready', ...loaded });
+        setLoad(
+          loaded === null
+            ? { kind: 'gone' }
+            : { kind: 'ready', generation: ++generation.current, ...loaded },
+        );
       },
       () => {
         if (live) setLoad({ kind: 'failed' });
@@ -67,10 +76,14 @@ export function GameScreen(props: GameScreenProps) {
   if (load.kind === 'ready') {
     return (
       <GameBody
-        key={`${load.game.id}/${reloads}`}
+        key={load.generation}
         {...props}
         loaded={load}
-        onReload={() => setReloads((n) => n + 1)}
+        onReload={() => {
+          // Nothing is shown from the data main has just replaced: the screen waits for the new.
+          setLoad({ kind: 'loading' });
+          setReloads((n) => n + 1);
+        }}
       />
     );
   }

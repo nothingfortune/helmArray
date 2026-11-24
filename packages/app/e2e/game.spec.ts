@@ -285,6 +285,39 @@ test.describe('the Game screen', () => {
   });
 });
 
+test('Back to helmArray’s on a copy saved earlier shows helmArray’s game, and the next edit is saved on it alone', async ({
+  helm,
+}) => {
+  const { page } = helm;
+  const file = join(helm.dataDir, 'games', 'helldivers2.json');
+  const saved = () => readFile(file, 'utf8').catch(() => '');
+  // A copy saved in an earlier visit: the screen then opens on the copy.
+  await page.getByRole('button', { name: /^Edit game: HELLDIVERS/ }).click();
+  await page.getByRole('textbox', { name: 'Reload, name' }).fill('Reload weapon');
+  await expect.poll(saved).toContain('Reload weapon');
+  await page.getByRole('button', { name: 'Library' }).click();
+  await page.getByRole('button', { name: /^Edit game: HELLDIVERS/ }).click();
+  await expect(page.getByRole('textbox', { name: 'Reload weapon, name' })).toBeVisible();
+
+  await page.getByRole('button', { name: "Back to helmArray's" }).click();
+  await page
+    .getByRole('group', { name: 'Are you sure?' })
+    .getByRole('button', { name: "Back to helmArray's" })
+    .click();
+  await expect.poll(saved).toBe('');
+  await expect(page.getByRole('textbox', { name: 'Reload, name' })).toHaveValue('Reload');
+  await expect(page.getByText("helmArray's game. Your edits are kept as your copy.")).toBeVisible();
+
+  // One edit now: the copy saved is helmArray's game with that edit, and nothing from before.
+  await page.getByRole('textbox', { name: 'Melee, name' }).fill('Punch');
+  await expect.poll(saved).toContain('Punch');
+  const copy = JSON.parse(await saved()) as { actions: { id: string; name: string }[] };
+  expect(copy.actions.filter((a) => a.id === 'reload' || a.id === 'melee')).toEqual([
+    expect.objectContaining({ id: 'reload', name: 'Reload' }),
+    expect.objectContaining({ id: 'melee', name: 'Punch' }),
+  ]);
+});
+
 test.describe('the Game screen: axe and the keyboard in each state', () => {
   test('empty', async ({ helm }) => {
     const { page } = helm;
