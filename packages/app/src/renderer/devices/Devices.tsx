@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { ControlId } from '@helmarray/core';
 import { fitLabel } from '../unit/label';
+import { labelStyle } from '../unit/Unit';
 import { controlFor, litParts, sideOf } from './controls';
 import type { DeviceProps } from './controls';
 import {
@@ -71,9 +72,13 @@ function Said({ children }: { children: string }) {
 }
 
 function KeyButton({ cap, control }: { cap: KeyCap; control: ReturnType<typeof useControls> }) {
-  const { label, said, attrs } = control.props(cap.id, true, sideOf(cap.id));
-  const fit =
-    label === null ? null : fitLabel(label, cap.w - 16, cap.h - 24, { sizes: [13, 12, 11, 10] });
+  const { label, name, short, qualifier, said, attrs } = control.props(
+    cap.id,
+    true,
+    sideOf(cap.id),
+  );
+  const width = cap.w - 16;
+  const fit = name === null ? null : fitLabel(name, width, cap.h - 24, { short, qualifier });
   return (
     <button
       {...attrs}
@@ -86,9 +91,19 @@ function KeyButton({ cap, control }: { cap: KeyCap; control: ReturnType<typeof u
       </span>
       {fit !== null && (
         <>
-          <span className="kb-a" style={{ fontSize: `${fit.fontSize}px` }}>
-            {label}
-            <Said>{said}</Said>
+          <span className="kb-a" style={labelStyle(fit, width, 'left top')}>
+            {fit.short ? (
+              // The key label is what is seen; the action's own name is what is said.
+              <>
+                <span aria-hidden="true">{fit.text}</span>
+                <Said>{`${label ?? ''}${said}`}</Said>
+              </>
+            ) : (
+              <>
+                {fit.text}
+                <Said>{said}</Said>
+              </>
+            )}
           </span>
           <span className="kb-d" aria-hidden="true" />
         </>

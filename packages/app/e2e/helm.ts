@@ -52,7 +52,9 @@ export interface Helm {
   opened(): Promise<string[]>;
 }
 
-async function launch(): Promise<{ helm: Helm; close(): Promise<void> }> {
+async function launch(
+  extraArgs: readonly string[],
+): Promise<{ helm: Helm; close(): Promise<void> }> {
   const dataDir = await mkdtemp(join(tmpdir(), 'helm-e2e-'));
   await steamFolder(join(dataDir, 'steam'));
   // Which unit is which hand is already known: first run is not what these tests are about.
@@ -75,7 +77,7 @@ async function launch(): Promise<{ helm: Helm; close(): Promise<void> }> {
   const launched = await electron
     .launch({
       executablePath: electronBinary,
-      args: [APP_DIR],
+      args: [APP_DIR, ...extraArgs],
       cwd: APP_DIR,
       env,
       // The page's language, so the words asserted on are the ones asserted on everywhere.
@@ -168,11 +170,11 @@ function killTree(pid: number): void {
   }
 }
 
-export const test = base.extend<{ helm: Helm }>({
-  // Playwright wants the fixtures argument destructured, even with nothing to take from it.
-  // eslint-disable-next-line no-empty-pattern
-  helm: async ({}, use, testInfo) => {
-    const { helm, close } = await launch();
+export const test = base.extend<{ helm: Helm; helmArgs: readonly string[] }>({
+  /** More command-line arguments for the app, such as `--play`: `test.use({ helmArgs: [...] })`. */
+  helmArgs: [[], { option: true }],
+  helm: async ({ helmArgs }, use, testInfo) => {
+    const { helm, close } = await launch(helmArgs);
     try {
       await use(helm);
     } finally {

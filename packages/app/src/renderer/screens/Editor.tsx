@@ -19,9 +19,11 @@ import {
   isStick,
   isTextEntry,
   drop,
+  followLabels,
   redo,
   renameScheme,
   setDevices,
+  setKeyLabel,
   setLatch,
   setOutput,
   setPadControl,
@@ -32,6 +34,7 @@ import {
 } from './editor-model';
 import type { History } from './editor-model';
 import { assignable, editorView } from './editor-view';
+import { sidePanelWidth } from './editor-layout';
 import type { DeviceTabId } from './editor-view';
 import type { DragSource } from '../devices/drag';
 import { runMake, runPick } from './libraryFlow';
@@ -81,6 +84,26 @@ type Load =
   | { kind: 'failed' };
 
 const PRESS_WORD: Record<Press, string> = { tap: 'tap', long: 'long press', double: 'double tap' };
+
+/**
+ * The content width of an element, kept up to date: a ref to put on it, and its width (undefined
+ * until it is first measured). A callback ref, so an element that comes and goes is followed.
+ */
+function useContentWidth(): [(el: HTMLElement | null) => void, number | undefined] {
+  const [width, setWidth] = useState<number | undefined>(undefined);
+  const watching = useRef<ResizeObserver | null>(null);
+  const ref = useCallback((el: HTMLElement | null) => {
+    watching.current?.disconnect();
+    watching.current = null;
+    if (el === null) return;
+    const watch = new ResizeObserver(([entry]) => {
+      if (entry !== undefined) setWidth(entry.contentRect.width);
+    });
+    watch.observe(el);
+    watching.current = watch;
+  }, []);
+  return [ref, width];
+}
 
 /** Loads the scheme and its game, then hands them to the editor. Keyed by scheme id. */
 function EditorLoader({
@@ -178,6 +201,10 @@ function EditorBody({
   const [tab, setTab] = useState<DeviceTabId | undefined>(undefined);
   const [saveFailed, setSaveFailed] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  // The side panel, shown or shut by the Inspector button; picking a control opens it again.
+  const [inspector, setInspector] = useState(true);
+  const [bodyRef, bodyWidth] = useContentWidth();
+  const [mainRef, mainWidth] = useContentWidth();
 
   /** Applies a change to the history and saves the scheme if it changed. Never inside an updater. */
   const change = useCallback((next: (h: History<Scheme>) => History<Scheme>) => {
@@ -191,8 +218,9 @@ function EditorBody({
       () => setSaveFailed(true),
     );
   }, []);
+  // Every edit carries the key labels along: a label goes with its action (followLabels).
   const edit = useCallback(
-    (fn: (s: Scheme) => Scheme) => change((h) => commit(h, fn(h.present))),
+    (fn: (s: Scheme) => Scheme) => change((h) => commit(h, followLabels(h.present, fn(h.present)))),
     [change],
   );
 
@@ -249,6 +277,7 @@ function EditorBody({
   const select = (id: ControlId) => {
     setSelected(selected === id ? undefined : id);
     setPress('tap');
+    if (selected !== id) setInspector(true);
   };
   const place = (control: ControlId, actionId: string, which: Press) => {
     if (isStick(control) || !assignable(game, mode, actionId)) return;
@@ -365,6 +394,19 @@ function EditorBody({
           <div className="ed-spacer" />
           <button
             type="button"
+            className="btn icon ed-insp"
+            aria-label="Inspector"
+            aria-pressed={inspector}
+            title={inspector ? 'Hide the side panel' : 'Show the side panel'}
+            onClick={() => setInspector((open) => !open)}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <rect x="1.5" y="2.5" width="13" height="11" rx="2" stroke="currentColor" />
+              <path d="M10 2.5v11" stroke="currentColor" />
+            </svg>
+          </button>
+          <button
+            type="button"
             className="btn icon"
             aria-label="Undo"
             title="Undo (Ctrl+Z)"
@@ -431,9 +473,15 @@ function EditorBody({
             This scheme can&apos;t be drawn: {'error' in planned ? planned.error : ''}
           </p>
         ) : (
-          <div className="ed-body">
-            <section className="ed-main" aria-label="Devices and checks">
-              <DeviceArea view={view} selected={selected} onSelect={select} onDropAction={dropOn} />
+          <div className="ed-body" ref={bodyRef}>
+            <section className="ed-main" aria-label="Devices and checks" ref={mainRef}>
+              <DeviceArea
+                view={view}
+                width={mainWidth}
+                selected={selected}
+                onSelect={select}
+                onDropAction={dropOn}
+              />
               <Checks
                 view={view}
                 onFix={(row) => row.fix && edit(row.fix.apply)}
@@ -441,47 +489,56 @@ function EditorBody({
                 onFlag={(row) => edit((s) => unacceptFinding(s, row.finding))}
               />
             </section>
-            <aside className="ed-side" aria-label="Button and actions">
-              {view.panel === null ? (
-                <div className="ed-pick">
-                  <h2 className="ed-pick-title">Pick a {view.controlWord}</h2>
-                  <p className="ed-hint">
-                    Click one, then click an action below, or drag an action onto a{' '}
-                    {view.controlWord}. Drag a {view.controlWord}&apos;s action onto another to move
-                    it.
-                  </p>
-                </div>
-              ) : (
-                <Panel
-                  panel={view.panel}
-                  onClose={() => setSelected(undefined)}
-                  onMode={setMode}
-                  onTarget={setPress}
-                  onClear={(which) =>
-                    edit((s) =>
-                      clear(s, { mode, control: view.panel?.control ?? '', press: which }),
-                    )
+            {inspector && (
+              <aside
+                className="ed-side"
+                aria-label="Button and actions"
+                style={{ width: `${sidePanelWidth(bodyWidth ?? window.innerWidth)}px` }}
+              >
+                {view.panel === null ? (
+                  <div className="ed-pick">
+                    <h2 className="ed-pick-title">Pick a {view.controlWord}</h2>
+                    <p className="ed-hint">
+                      Click one, then click an action below, or drag an action onto a{' '}
+                      {view.controlWord}. Drag a {view.controlWord}&apos;s action onto another to
+                      move it.
+                    </p>
+                  </div>
+                ) : (
+                  <Panel
+                    panel={view.panel}
+                    onClose={() => setSelected(undefined)}
+                    onMode={setMode}
+                    onTarget={setPress}
+                    onClear={(which) =>
+                      edit((s) =>
+                        clear(s, { mode, control: view.panel?.control ?? '', press: which }),
+                      )
+                    }
+                    onTurbo={(on) => edit((s) => setTurbo(s, view.panel?.control ?? '', on))}
+                    onLatch={(on) => edit((s) => setLatch(s, view.panel?.control ?? '', on))}
+                    onPad={(pad) =>
+                      edit((s) => setPadControl(s, view.panel?.control ?? '', pad, game))
+                    }
+                    onKeyLabel={(text) =>
+                      edit((s) => setKeyLabel(s, mode, view.panel?.control ?? '', text))
+                    }
+                  />
+                )}
+                <Unplaced
+                  view={view}
+                  modeName={view.modes.find((m) => m.active)?.name ?? ''}
+                  prompt={
+                    canPlace && view.panel
+                      ? `Click an action to put it on ${view.panel.where}, ${PRESS_WORD[target]}.`
+                      : null
                   }
-                  onTurbo={(on) => edit((s) => setTurbo(s, view.panel?.control ?? '', on))}
-                  onLatch={(on) => edit((s) => setLatch(s, view.panel?.control ?? '', on))}
-                  onPad={(pad) =>
-                    edit((s) => setPadControl(s, view.panel?.control ?? '', pad, game))
-                  }
+                  onPlace={(id) => {
+                    if (selected !== undefined && canPlace) place(selected, id, target);
+                  }}
                 />
-              )}
-              <Unplaced
-                view={view}
-                modeName={view.modes.find((m) => m.active)?.name ?? ''}
-                prompt={
-                  canPlace && view.panel
-                    ? `Click an action to put it on ${view.panel.where}, ${PRESS_WORD[target]}.`
-                    : null
-                }
-                onPlace={(id) => {
-                  if (selected !== undefined && canPlace) place(selected, id, target);
-                }}
-              />
-            </aside>
+              </aside>
+            )}
           </div>
         )}
       </div>

@@ -255,6 +255,13 @@ export interface Scheme {
    * one about an action on no button names the action.
    */
   accepted: { rule: RuleId; control?: ControlId; action?: ActionId; reason: string }[];
+  /**
+   * Per mode, per control: the key's short label, the player's own, shown on the key in place of
+   * the action's name when that won't fit at a readable size (the Main board's label rule). It is
+   * the player's for that control's action: it moves with the action and goes when the action does.
+   * Drawing only: nothing a unit, the game or Apply sees. Missing in a scheme that has none.
+   */
+  keyLabels?: Record<ModeId, Record<ControlId, string>>;
 }
 
 /**

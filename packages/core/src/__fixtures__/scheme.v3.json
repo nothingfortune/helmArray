@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 3,
+  "id": "skiff-own-keys",
+  "gameId": "skiff",
+  "name": "Game's own keys",
+  "devices": { "azerons": "left", "keyboard": false, "mouse": true, "controller": false },
+  "output": "keys",
+  "padMap": {},
+  "writeGameFile": false,
+  "map": { "ship": { "L.index_1": { "tap": "boost" } } },
+  "behaviour": {},
+  "ledger": { "L.index_1": { "tap": { "kind": "key", "code": "F13" } } },
+  "accepted": []
+}

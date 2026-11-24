@@ -18,6 +18,10 @@ import {
 import {
   HISTORY_LIMIT,
   KEPT_REASON,
+  KEY_LABEL_LIMIT,
+  followLabels,
+  keyLabelOf,
+  setKeyLabel,
   acceptFinding,
   adoptLedger,
   actionAt,
@@ -1896,5 +1900,133 @@ describe('renameScheme', () => {
       renameScheme(scheme, 'Main') === scheme,
       renameScheme(scheme, 'x'.repeat(60)).name.length,
     ]).toEqual(['Desk', true, true, 40]);
+  });
+});
+
+describe('key labels', () => {
+  const labelled = (labels: NonNullable<Scheme['keyLabels']>): Scheme =>
+    deepFreeze({ ...keysScheme(), keyLabels: labels });
+
+  it('sets a key label on a control showing an action, trimmed, in that mode only', () => {
+    const next = setKeyLabel(frozen(), 'ship', 'L.middle_1', '  FSD  ');
+    expect([keyLabelOf(next, 'ship', 'L.middle_1'), keyLabelOf(next, 'srv', 'L.middle_1')]).toEqual(
+      ['FSD', undefined],
+    );
+  });
+
+  it('takes no key label on a control showing nothing, or on a scheme that has none yet', () => {
+    const scheme = frozen();
+    expect([
+      setKeyLabel(scheme, 'ship', 'L.index_5', 'Go') === scheme,
+      keyLabelOf(scheme, 'ship', 'L.index_1'),
+    ]).toEqual([true, undefined]);
+  });
+
+  it('cuts a key label at its limit, and removes it when it is blank', () => {
+    const long = setKeyLabel(frozen(), 'ship', 'L.middle_1', 'x'.repeat(40));
+    const removed = setKeyLabel(long, 'ship', 'L.middle_1', '   ');
+    expect([
+      keyLabelOf(long, 'ship', 'L.middle_1')?.length,
+      keyLabelOf(removed, 'ship', 'L.middle_1'),
+    ]).toEqual([KEY_LABEL_LIMIT, undefined]);
+    expect(removed.keyLabels).toEqual({ ship: {} });
+  });
+
+  it('returns the same scheme for the label it already has', () => {
+    const scheme = labelled({ ship: { 'L.middle_1': 'FSD' } });
+    expect([
+      setKeyLabel(scheme, 'ship', 'L.middle_1', 'FSD') === scheme,
+      setKeyLabel(scheme, 'ship', 'L.index_1', '') === scheme,
+    ]).toEqual([true, true]);
+  });
+
+  it('reads only a label that is text', () => {
+    const odd = deepFreeze({
+      ...keysScheme(),
+      keyLabels: { ship: { 'L.middle_1': 7 } },
+    } as unknown as Scheme);
+    expect(keyLabelOf(odd, 'ship', 'L.middle_1')).toBeUndefined();
+  });
+
+  it('reads a control or mode named like an Object property as itself', () => {
+    expect(keyLabelOf(frozen(), 'constructor', 'toString')).toBeUndefined();
+  });
+});
+
+describe('followLabels: a key label goes with its action', () => {
+  const labelled = (): Scheme =>
+    deepFreeze({
+      ...keysScheme(),
+      keyLabels: { ship: { 'L.middle_1': 'FSD' }, srv: { 'L.index_1': 'Hop' } },
+    });
+  const after = (fn: (s: Scheme) => Scheme): Scheme => {
+    const before = labelled();
+    return followLabels(before, fn(before));
+  };
+
+  it('stays while the control shows the same action', () => {
+    expect(after((s) => assign(s, slot('ship', 'L.index_2'), 'gear', game)).keyLabels).toEqual(
+      labelled().keyLabels,
+    );
+  });
+
+  it('moves with an action moved to another control', () => {
+    const moved = after((s) =>
+      drop(s, 'ship', 'R.middle_2', 'fsd', { control: 'L.middle_1', press: 'tap' }, game),
+    );
+    expect(moved.keyLabels).toEqual({ ship: { 'R.middle_2': 'FSD' }, srv: { 'L.index_1': 'Hop' } });
+  });
+
+  it('moves with an action put on another control from the list', () => {
+    const moved = after((s) => assign(s, slot('ship', 'L.index_3'), 'fsd', game));
+    expect(moved.keyLabels?.['ship']).toEqual({ 'L.index_3': 'FSD' });
+  });
+
+  it('goes when the control is given another action', () => {
+    const replaced = after((s) => assign(s, slot('ship', 'L.middle_1'), 'galaxy', game));
+    expect(replaced.keyLabels?.['ship']).toEqual({});
+  });
+
+  it('goes when the action is cleared', () => {
+    expect(after((s) => clear(s, slot('ship', 'L.middle_1'))).keyLabels?.['ship']).toEqual({});
+  });
+
+  it('on a move onto a labelled button, drops the label there and brings the moved one', () => {
+    const both = deepFreeze({
+      ...keysScheme(),
+      keyLabels: { ship: { 'L.middle_1': 'FSD', 'L.index_1': 'Go' } },
+    });
+    // Boost moves onto the frame shift drive's button: FSD is dropped, Go goes with Boost.
+    const next = followLabels(
+      both,
+      drop(both, 'ship', 'L.middle_1', 'boost', { control: 'L.index_1', press: 'tap' }, game),
+    );
+    expect(next.keyLabels?.['ship']).toEqual({ 'L.middle_1': 'Go' });
+  });
+
+  it('returns the edit itself when it changes no label', () => {
+    const before = labelled();
+    const next = assign(before, slot('ship', 'L.index_2'), 'gear', game);
+    expect(followLabels(before, next)).toBe(next);
+  });
+
+  it('returns the edit itself for a scheme with no labels', () => {
+    const before = frozen();
+    const next = assign(before, slot('ship', 'L.index_2'), 'gear', game);
+    expect(followLabels(before, next)).toBe(next);
+  });
+
+  it('keeps a label just set', () => {
+    const before = labelled();
+    const next = setKeyLabel(before, 'ship', 'L.index_1', 'Go');
+    expect(followLabels(before, next)).toBe(next);
+  });
+});
+
+describe('followLabels: a label left on a control showing nothing', () => {
+  it('is not given to the next action put there', () => {
+    const stale = deepFreeze({ ...keysScheme(), keyLabels: { ship: { 'L.index_4': 'Old' } } });
+    const next = followLabels(stale, assign(stale, slot('ship', 'L.index_4'), 'gear', game));
+    expect(next.keyLabels).toEqual({ ship: {} });
   });
 });

@@ -6,6 +6,8 @@ import { Controller, Keyboard, Mouse } from './Devices';
 
 const RELOAD = { label: 'Reload', role: 'combat' as const, action: 'reload' };
 const text = (html: string) => html.replace(/<[^>]+>/g, '');
+/** What a screen reader is given: the text, less what is hidden from it. */
+const said = (html: string) => text(html.replace(/<span aria-hidden="true">[^<]*<\/span>/g, ''));
 
 describe('the keyboard, drawn', () => {
   it('draws every key as a button in a group called Keyboard', () => {
@@ -31,6 +33,35 @@ describe('the keyboard, drawn', () => {
       ),
     );
     expect(t).toContain('Shift, Sprint, left one, conflict');
+  });
+
+  it('shows a key label on a key too small for the name, and still says the name', () => {
+    const html = renderToStaticMarkup(
+      <Keyboard
+        keys={{
+          'key.G': { label: 'Throw the big grenade', role: 'combat', action: 'g', short: 'Nade' },
+        }}
+      />,
+    );
+    expect([
+      html.includes('<span aria-hidden="true">Nade</span>'),
+      said(html).includes('G, Throw the big grenade'),
+    ]).toEqual([true, true]);
+  });
+
+  it('keeps the name, not the key label, on a key it fits', () => {
+    const html = renderToStaticMarkup(
+      <Keyboard keys={{ 'key.Space': { ...RELOAD, short: 'Rld' } }} />,
+    );
+    expect([html.includes('Rld'), text(html).includes('Space, Reload')]).toEqual([false, true]);
+  });
+
+  it('never draws a key label under 10 px', () => {
+    const html = renderToStaticMarkup(
+      <Keyboard keys={{ 'key.G': { label: 'Secondary weapon', role: 'combat', action: 'g' } }} />,
+    );
+    const sizes = [...html.matchAll(/font-size:(\d+(?:\.\d+)?)px/g)].map((m) => Number(m[1]));
+    expect(sizes.length > 0 && sizes.every((s) => s >= 10)).toBe(true);
   });
 
   it('lets a key with an action be dragged only while it can be edited', () => {

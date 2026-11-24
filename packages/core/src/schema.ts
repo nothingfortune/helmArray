@@ -57,6 +57,8 @@ export const MIGRATIONS: Readonly<Record<StoredKind, readonly Migration[]>> = {
         accepted: accepted.filter((a) => !RETIRED_RULES.includes(String(a.rule))),
       };
     },
+    // 3 → 4: key labels, the player's short labels for keys. A scheme saved before them has none.
+    (doc) => ({ ...doc, keyLabels: {} }),
   ],
   game: [],
   settings: [],

@@ -48,8 +48,9 @@ fields), 10 (keys, buttons), 16 (panels, unit plates). Motion 120 ms hover and s
   directions as chips). The thumb keys, the stick and the d-pad each sit in their own labelled
   zone, a darker inset, with more space between zones than within them, so the clusters read
   apart before any label does. Finger keys are 72 px wide; a label is the action's whole words,
-  top-left like a keycap legend, stepping its type down (never below 9 px) rather than breaking
-  a word, with the role dot in the bottom corner. 640 × 380 at full size.
+  top-left like a keycap legend, at 13, 12 or 11 px, then the key's short label (its Key label),
+  then 10 px, never smaller; a word is never broken or cut (past 10 px it is drawn narrower), with
+  the role dot in the bottom corner. 640 × 380 at full size.
   Props: hand, keys (position → action, role), stick, selected, lit.
   The editor and Play view use the same one.
 - **Key** states: empty (dashed), assigned (role dot and tint), selected (amber outline),
@@ -67,7 +68,7 @@ fields), 10 (keys, buttons), 16 (panels, unit plates). Motion 120 ms hover and s
 | Screen      | What's on it                                                                                       |
 | ----------- | -------------------------------------------------------------------------------------------------- |
 | Library     | What's on your Azerons now (big card), then your Steam games as covers with a one-line status each. |
-| Editor      | Game, scheme, Keys/Controller, mode tabs, Play view, Apply. Both units big in the middle, side by side, scaled to fit the width; they stack only when there is no room for two at a readable size. Pedals and checks under them. Side panel: the selected button in every mode, its presses (tap, long, double), turbo and latch, what it sends, then the actions not on a button yet. With nothing selected, just that list. |
+| Editor      | Game, scheme, Keys/Controller, mode tabs, Play view, Apply. Both units big in the middle, side by side, scaled to fit the width; they stack only when there is no room for two at a readable size (each under 0.65). Pedals and checks under them. Side panel (340 px, 300 below a 1440 px window; the Inspector button shuts it): the selected button in every mode, its presses (tap, long, double), its Key label, turbo and latch, what it sends, then the actions not on a button yet. With nothing selected, just that list. The window never scrolls: the checks and the side panel scroll in their own columns. |
 | Play view   | Its own small window, kept on top. Tabs for Azerons, keyboard and controller. Each control labelled with its action in the game's words, lit as you press it, the last few presses along the bottom. |
 | Game        | (not drawn; built in the canvas's style, M4.5) A game's data: mode tabs, then the mode's actions as rows (name, role, required, default key, default controller button, More). A default is set by clicking its field and pressing it. The new-action field: type a name, Enter, press its key. *New scheme from* once it has an action; *Back to helmArray's* on your copy of a built-in game. |
 | Devices     | (not drawn) The units, pedals and controller, their state, and the repair utility.                 |

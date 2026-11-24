@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Tooltip } from 'radix-ui';
+import './fonts';
 import './styles/tokens.css';
 import './styles/base.css';
 import './styles/chrome.css';
@@ -25,7 +26,10 @@ function MainWindow() {
           onChoose={(unitId, hand) => void window.helm.chooseHand(unitId, hand)}
         />
       )}
-      <App state={state} />
+      {/* The screen scrolls in here, under the header: the window itself never scrolls. */}
+      <div className="app-screen">
+        <App state={state} />
+      </div>
     </>
   );
 }
