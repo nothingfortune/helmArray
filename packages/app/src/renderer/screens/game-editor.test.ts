@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { HelmApi } from '../../shared/api';
 import { GameEditor } from './game-editor';
 import type { EditorApi } from './game-editor';
-import { addAction, newGame, renameGame, updateAction } from './game-model';
+import { addAction, newGame, renameGame, renameMode, updateAction } from './game-model';
 
 const rover: Game = {
   id: 'rover',
@@ -167,6 +167,17 @@ describe('undo and redo', () => {
     expect(editor.game.name).toBe('A');
   });
 
+  it('says whether there is something to redo', () => {
+    const { editor } = open();
+    const before = editor.canRedo;
+    editor.edit((g) => renameGame(g, 'A'));
+    const edited = editor.canRedo;
+    editor.undo();
+    const undone = editor.canRedo;
+    editor.redo();
+    expect([before, edited, undone, editor.canRedo]).toEqual([false, false, true, false]);
+  });
+
   it('does nothing with nothing to undo or redo', () => {
     const { editor, calls } = open();
     editor.undo();
@@ -184,6 +195,17 @@ describe('the mode shown', () => {
     const { editor } = open();
     const id = editor.addMode();
     expect([editor.mode, editor.game.modes.at(-1)]).toEqual([id, { id: 'mode_2', name: 'Mode 2' }]);
+  });
+
+  it('names the first mode when a second is added, both in one step to undo', () => {
+    const { editor } = open();
+    editor.addMode();
+    const added = editor.game.modes.map((m) => m.name);
+    editor.undo();
+    expect([added, editor.game.modes]).toEqual([
+      ['Mode 1', 'Mode 2'],
+      [{ id: 'default', name: 'Default' }],
+    ]);
   });
 
   it('moves to another mode when the one shown is deleted', () => {
@@ -205,6 +227,64 @@ describe('the mode shown', () => {
     editor.addMode();
     editor.setMode('default');
     expect(editor.mode).toBe('default');
+  });
+});
+
+describe('whether the modes are shown', () => {
+  /** Codex's sequence: two modes, the first one's name cleared, the other deleted. */
+  function loneBlank() {
+    const { editor } = open();
+    const second = editor.addMode();
+    editor.edit((g) => renameMode(g, 'default', ''), 'mode-name:default');
+    editor.modeNameDone();
+    editor.deleteMode(second);
+    return editor;
+  }
+
+  it('hides them for one named mode, and shows them once a second is added', () => {
+    const { editor } = open();
+    const before = editor.state.modesShown;
+    editor.addMode();
+    expect([before, editor.state.modesShown]).toEqual([false, true]);
+  });
+
+  it('shows a lone mode with no name, so the name it needs can be typed', () => {
+    const editor = loneBlank();
+    expect([editor.game.modes, editor.state.modesShown]).toEqual([
+      [{ id: 'default', name: '' }],
+      true,
+    ]);
+  });
+
+  it('never changes while the mode’s name is typed: the field being typed in stays', () => {
+    const editor = loneBlank();
+    const shown: boolean[] = [];
+    for (const name of ['O', 'On', 'On foot']) {
+      editor.edit((g) => renameMode(g, 'default', name), 'mode-name:default');
+      shown.push(editor.state.modesShown);
+    }
+    expect(shown).toEqual([true, true, true]);
+  });
+
+  it('is decided again once the typing is done', () => {
+    const editor = loneBlank();
+    editor.edit((g) => renameMode(g, 'default', 'On foot'), 'mode-name:default');
+    editor.modeNameDone();
+    expect(editor.state.modesShown).toBe(false);
+  });
+
+  it('is decided again by any other edit, and by undo', () => {
+    const editor = loneBlank();
+    editor.edit((g) => renameMode(g, 'default', 'On foot'), 'mode-name:default');
+    editor.edit((g) => renameGame(g, 'Rover 2'));
+    const afterEdit = editor.state.modesShown;
+    editor.undo();
+    editor.undo();
+    expect([afterEdit, editor.game.modes.length, editor.state.modesShown]).toEqual([
+      false,
+      1,
+      true,
+    ]);
   });
 });
 

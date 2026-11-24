@@ -1,22 +1,38 @@
 /* The Game screen: a game's modes and actions, and each action's defaults. Not drawn on the canvas:
    built in its language (the Editor's bar, the Library's panels) from the tokens. */
 
-.gm {
+/* The window never scrolls on this screen: it fills what the header and its lines leave, and the
+   rows scroll inside the panel, so the bar (with *New scheme from*) stays in view. */
+#root:has(> .gm) {
   display: flex;
   flex-direction: column;
+  height: 100vh;
+}
+#root:has(> .gm) > :not(.gm) {
+  flex-shrink: 0;
+}
+.gm {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
   gap: var(--space-16);
-  min-height: calc(100vh - 60px);
-  padding-bottom: var(--space-48);
+  min-height: 0;
+  overflow: hidden;
+  padding-bottom: var(--space-24);
   background: var(--color-bg);
 }
 
+/* One line, always: asking before a delete takes the place of the button, and the name gives way. */
 .gm-bar {
   display: flex;
-  flex-wrap: wrap;
+  flex-shrink: 0;
   align-items: center;
   gap: var(--space-16);
   padding: var(--space-12) var(--space-24);
   border-bottom: 1px solid var(--color-raised);
+}
+.gm-bar > * {
+  flex-shrink: 0;
 }
 .gm-back {
   display: inline-flex;
@@ -25,11 +41,12 @@
   padding-left: var(--space-8);
   color: var(--color-muted);
 }
-.gm-titles {
+.gm-bar > .gm-titles {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 2px;
-  min-width: 260px;
+  min-width: 0;
 }
 .gm-name {
   width: 100%;
@@ -54,12 +71,12 @@
   color: var(--color-muted);
 }
 .gm-note {
+  overflow: hidden;
   color: var(--color-muted);
   font-size: var(--size-label);
   font-weight: 600;
-}
-.gm-spacer {
-  flex: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .gm-state {
   padding: var(--space-24);
@@ -79,6 +96,11 @@
   background: var(--color-panel);
   border: 1px solid var(--color-line);
   font-size: var(--size-label);
+  white-space: nowrap;
+}
+/* The one primary of the screen, at the bar's height. */
+.gm-start .btn.primary {
+  height: 32px;
 }
 .gm-start-label {
   color: var(--color-muted);
@@ -140,8 +162,11 @@
 
 .gm-panel {
   display: flex;
+  flex: 0 1 auto;
   flex-direction: column;
   gap: var(--space-16);
+  min-height: 0;
+  max-width: 1080px;
   margin: 0 var(--space-24);
   padding: 20px;
   border-radius: var(--radius-panel);
@@ -174,6 +199,15 @@
   margin: 0;
   color: var(--color-muted);
 }
+/* The rows' own scroll: the column names stay at its top. */
+.gm-rows {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+.gm-panel > :not(.gm-rows) {
+  flex-shrink: 0;
+}
 
 /* Text fields and the role picker: fields on the panel, an edge that reads at 3:1. */
 .gm input:not([type='checkbox']):not(.gm-name),
@@ -198,7 +232,11 @@
   border-collapse: collapse;
 }
 .gm-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   padding: 0 var(--space-8) var(--space-8);
+  background: var(--color-panel);
   color: var(--color-muted);
   font-size: var(--size-caption);
   font-weight: 600;
@@ -243,6 +281,17 @@
 }
 .gm-role-dot.role-menu {
   background: var(--color-menu);
+}
+/* No role yet: a ring, no colour. */
+.gm-role-dot.role-none {
+  box-shadow: inset 0 0 0 1.5px var(--color-muted);
+}
+/* The role picker with no role yet reads as a placeholder; its list keeps the text colour. */
+.gm select.gm-role.unset {
+  color: var(--color-muted);
+}
+.gm-role option {
+  color: var(--color-text);
 }
 .gm-check {
   width: 18px;

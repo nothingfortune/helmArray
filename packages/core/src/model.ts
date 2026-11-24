@@ -126,7 +126,8 @@ export interface Action {
   id: ActionId;
   name: string;
   mode: ModeId;
-  role: Role;
+  /** What kind of action it is, drawn as its colour. None yet: an action just added. */
+  role?: Role;
   required: boolean;
   /** What the game ships with. */
   native?: { key?: Signal; pad?: PadControl };

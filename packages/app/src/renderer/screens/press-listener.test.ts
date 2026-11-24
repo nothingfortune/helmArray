@@ -42,14 +42,17 @@ function world(part: 'key' | 'pad', start: (PadSnapshot | null)[] = [pad()]) {
     },
   };
   const pressed: (Signal | PadControl)[] = [];
+  const connected: boolean[] = [];
   let cancelled = 0;
   const stop = listenForPress(part, env, {
     press: (value) => pressed.push(value),
     cancel: () => cancelled++,
+    controller: (present) => connected.push(present),
   });
   return {
     target,
     pressed,
+    connected,
     cancelled: () => cancelled,
     listFocused: () => listFocused,
     stop,
@@ -216,6 +219,51 @@ describe('waiting for a controller button', () => {
       [],
       1,
     ]);
+  });
+});
+
+describe('waiting for a controller button with none connected', () => {
+  it('says at once that no controller is connected', () => {
+    expect(world('pad', [null, null]).connected).toEqual([false]);
+  });
+
+  it('says at once that one is, when a standard controller is there', () => {
+    expect(world('pad', [null, pad()]).connected).toEqual([true]);
+  });
+
+  it('counts a pad without the standard layout as none: its buttons can’t be named', () => {
+    expect(world('pad', [{ ...pad(), mapping: '' }]).connected).toEqual([false]);
+  });
+
+  it('goes on reading the pads, so a controller plugged in is noticed', () => {
+    const w = world('pad', []);
+    for (let i = 0; i < 3; i++) w.tick();
+    expect(w.waitingFrames()).toBe(1);
+  });
+
+  it('says so when a controller connects, and takes the press it was found by', () => {
+    const w = world('pad', [null]);
+    w.tick();
+    // The Gamepad API shows a pad only once a button on it is pressed: that press counts.
+    w.setPads([pad([0])]);
+    w.tick();
+    expect([w.connected, w.pressed]).toEqual([[false, true], ['A']]);
+  });
+
+  it('says it once per change, not every frame', () => {
+    const w = world('pad', [null]);
+    w.tick();
+    w.setPads([pad()]);
+    w.tick();
+    w.tick();
+    w.setPads([null]);
+    w.tick();
+    w.tick();
+    expect(w.connected).toEqual([false, true, false]);
+  });
+
+  it('says nothing of controllers while it waits for a key', () => {
+    expect(world('key', [null]).connected).toEqual([]);
   });
 });
 
