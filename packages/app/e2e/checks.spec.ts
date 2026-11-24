@@ -1,0 +1,178 @@
+// The checks' fix buttons and their groups (the UI audit, summary item 5), in the real window over
+// the fake units: each fix is clicked and its finding is gone. Then the keyboard and axe on the
+// grouped checks and on the recent games. Input is Playwright's own, into the page.
+import type { Locator, Page } from '@playwright/test';
+import { expect, test } from './helm';
+import {
+  drawer,
+  helldiversTile,
+  leftUnit,
+  seriousViolations,
+  startBlankKeys,
+  startFrom,
+  startKeysScheme,
+  unseen,
+  walkTabOrder,
+} from './screens';
+
+const checks = (page: Page): Locator => page.getByRole('region', { name: 'Checks' });
+/** The check row that says `text`. */
+const row = (page: Page, text: string | RegExp): Locator =>
+  checks(page).locator('.ed-check', { hasText: text });
+
+test.describe('the checks’ fixes', () => {
+  test('a blank game’s own keys scheme: every fix clicked, every finding gone', async ({
+    helm,
+  }) => {
+    const { page } = helm;
+    await startBlankKeys(page);
+    // Six required actions on no button, four of them movement, and both sticks sending nothing.
+    const movement = row(page, "4 movement actions aren't on a button.");
+    await expect(movement).toBeVisible();
+    await expect(checks(page).locator('.ed-check-each')).toHaveCount(1);
+
+    // One finding of the group, opened under "Show each", fixed on its own.
+    await checks(page).getByText('Show each').click();
+    const forward = row(page, /^Move forward/);
+    await forward.getByRole('button', { name: 'Put it on a button' }).click();
+    await expect(forward).toHaveCount(0);
+    await expect(row(page, "3 movement actions aren't on a button.")).toBeVisible();
+
+    // The group's fix: the other three at once.
+    await row(page, '3 movement actions')
+      .getByRole('button', { name: 'Put them on buttons' })
+      .click();
+    await expect(checks(page).getByText(/movement actions/)).toHaveCount(0);
+
+    // Fire: put on the button the presets give it, and that button is selected.
+    await row(page, /^Fire/).getByRole('button', { name: 'Put it on a button' }).click();
+    await expect(row(page, /^Fire/)).toHaveCount(0);
+    await expect(page.locator('.ed-panel-title')).toHaveText('Fire');
+    await expect(leftUnit(page).getByRole('button', { name: 'Fire, index 2' })).toBeVisible();
+
+    await row(page, /^Stratagem/)
+      .getByRole('button', { name: 'Put it on a button' })
+      .click();
+    await expect(row(page, /^Stratagem/)).toHaveCount(0);
+
+    // The sticks: the left one gets the movement keys, the right one moves the mouse.
+    await row(page, /left stick/)
+      .getByRole('button', { name: 'Give it the movement keys' })
+      .click();
+    await expect(row(page, /left stick/)).toHaveCount(0);
+    await row(page, /right stick/)
+      .getByRole('button', { name: 'Use it as the mouse' })
+      .click();
+    await expect(row(page, /right stick/)).toHaveCount(0);
+
+    await expect(checks(page).getByText('Nothing to fix.')).toBeVisible();
+  });
+
+  test('a stick sending Xbox among buttons sending keys follows the buttons', async ({ helm }) => {
+    const { page } = helm;
+    await startKeysScheme(page, {
+      blank: false,
+      behaviour: { 'L.stick': { stick: { mode: 'pad-left' } } },
+    });
+    const mixed = row(page, /Xbox stick while the buttons send keys/);
+    await mixed.getByRole('button', { name: 'Give it the movement keys' }).click();
+    await expect(mixed).toHaveCount(0);
+    await expect(checks(page).getByText('Nothing to fix.')).toBeVisible();
+  });
+
+  test('a stick set to keys with none, among buttons sending Xbox, becomes a controller stick', async ({
+    helm,
+  }) => {
+    const { page } = helm;
+    await startFrom(page, 'Xbox controller');
+    // Its keys turned off another way: the Azerons sent keys, then Controller, and the stick kept
+    // keys mode with no keys (a scheme saved by hand, or by an older helmArray).
+    await page.evaluate(async () => {
+      const helm = (
+        window as unknown as {
+          helm: {
+            listSchemes(gameId: string): Promise<Record<string, unknown>[]>;
+            saveScheme(scheme: unknown): Promise<void>;
+          };
+        }
+      ).helm;
+      const [scheme] = await helm.listSchemes('helldivers2');
+      await helm.saveScheme({
+        ...scheme,
+        behaviour: {
+          ...(scheme?.['behaviour'] as Record<string, unknown>),
+          'L.stick': { stick: { mode: 'keys' } },
+        },
+      });
+    });
+    await page.getByRole('button', { name: 'Library' }).click();
+    await page.getByRole('button', { name: 'Look again' }).click();
+    await helldiversTile(page).click();
+    const stick = row(page, /left stick/);
+    await stick.getByRole('button', { name: 'Use as controller stick' }).click();
+    await expect(stick).toHaveCount(0);
+    await expect(checks(page).getByText('Nothing to fix.')).toBeVisible();
+  });
+
+  test('an action deleted from the game is taken off its button', async ({ helm }) => {
+    const { page } = helm;
+    await startFrom(page, 'Xbox controller');
+    await page.getByRole('button', { name: 'Library' }).click();
+    // Reload goes from the game (your copy of Helldivers 2).
+    await page.getByRole('button', { name: /^Edit game: / }).click();
+    await page.getByRole('button', { name: 'More for Reload' }).click();
+    await page.getByRole('button', { name: 'Delete Reload' }).click();
+    await page.getByRole('button', { name: 'Library' }).click();
+    await helldiversTile(page).click();
+    const deleted = row(page, /deleted from/);
+    await deleted.getByRole('button', { name: 'Take it off the button' }).click();
+    await expect(deleted).toHaveCount(0);
+    await expect(leftUnit(page).getByRole('button', { name: 'Empty, middle 1' })).toBeVisible();
+  });
+});
+
+test.describe('the grouped checks and the recent games: keyboard and axe', () => {
+  test('the grouped checks, opened: every stop shows, and axe finds nothing serious', async ({
+    helm,
+  }) => {
+    const { page } = helm;
+    await startBlankKeys(page);
+    await checks(page).getByText('Show each').click();
+    expect(await seriousViolations(page)).toEqual([]);
+    const stops = await walkTabOrder(page);
+    expect(stops.map((s) => s.label)).toEqual(
+      expect.arrayContaining([
+        'Show each',
+        'Put them on buttons',
+        'Put it on a button',
+        'Give it the movement keys',
+        'Keep, I know',
+      ]),
+    );
+    expect(unseen(stops)).toEqual([]);
+  });
+
+  test('the recent games: every stop shows, and axe finds nothing serious', async ({ helm }) => {
+    const { page } = helm;
+    await startFrom(page, 'Xbox controller');
+    await page.getByRole('button', { name: 'Library' }).click();
+    await page.getByRole('button', { name: /^Set up / }).click();
+    const field = page.getByRole('textbox', { name: 'New action' });
+    await field.fill('Jump');
+    await field.press('Enter');
+    await page.keyboard.press('Space');
+    await page
+      .getByRole('group', { name: 'New scheme from' })
+      .getByRole('button', { name: 'Xbox controller' })
+      .click();
+    await drawer(page).getByRole('button', { name: 'Cancel' }).click();
+    const recent = page.getByRole('navigation', { name: 'Recent games' });
+    await expect(recent.getByRole('button')).toHaveCount(1);
+    expect(await seriousViolations(page)).toEqual([]);
+    const stops = await walkTabOrder(page);
+    expect(stops.map((s) => s.label)).toEqual(
+      expect.arrayContaining([expect.stringMatching(/HELLDIVERS|Helldivers 2/)]),
+    );
+    expect(unseen(stops)).toEqual([]);
+  });
+});

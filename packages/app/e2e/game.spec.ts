@@ -12,7 +12,6 @@ import {
   applyInDrawer,
   drawer,
   keepEveryCheck,
-  leftUnit,
   pill,
   schemePicker,
   seriousViolations,
@@ -26,10 +25,9 @@ const UNKNOWN = 'A Game Nobody Wrote Yet';
 const UNKNOWN_ID = 'a_game_nobody_wrote_yet';
 /** The units' codes for Space and R: 0xF000 | the HID usage (packages/azeron `UNIT_KEY_CODES`). */
 const KEY_SPACE = 0xf02c;
+const KEY_R = 0xf015;
 
 const gameName = (page: Page) => page.getByRole('textbox', { name: 'Game name' });
-/** The checks "Game's own keys" leaves to keep before Apply: each a click. */
-const KEYS_ROUTE_KEEPS = 2;
 
 /** *Set up* on the Steam game helmArray doesn't know: the Game screen, on a new game. */
 async function setUpUnknown(page: Page) {
@@ -182,37 +180,38 @@ test.describe('the Game screen', () => {
       ],
     ]);
 
-    // J1 from here: a default, then Apply.
+    // J1 from here: a default, then the drawer's Apply. The preset puts both actions on buttons
+    // sending their own keys, and the sticks (no movement keys) on the mouse: nothing to fix, so
+    // the drawer opens on it.
     await page
       .getByRole('group', { name: 'New scheme from' })
       .getByRole('button', { name: "Game's own keys" })
       .click();
-    await expect(page.getByRole('heading', { name: UNKNOWN })).toBeVisible();
-    const jump = page.locator('.ed-actions').getByRole('button', { name: 'Jump' });
-    await jump.dragTo(leftUnit(page).getByRole('button', { name: 'Empty, index 1' }));
-    await expect(leftUnit(page).getByRole('button', { name: 'Jump, index 1' })).toBeVisible();
-    // Game's own keys leaves both sticks sending no keys: two checks to keep, as on Helldivers 2.
-    expect(await keepEveryCheck(page)).toBe(KEYS_ROUTE_KEEPS);
-    await page.getByRole('button', { name: 'Apply', exact: true }).click();
+    await expect(drawer(page)).toBeVisible();
     await expect(applyInDrawer(page)).toBeEnabled();
     await applyInDrawer(page).click();
     await expect(drawer(page).getByLabel('Result')).toContainText('Both units now run the layout.');
     await drawer(page).getByRole('button', { name: 'Close' }).click();
+    await expect(page.getByRole('heading', { name: UNKNOWN })).toBeVisible();
     await expect(pill(page)).toHaveText('In sync');
 
-    const [left] = await helm.units();
-    const written = left?.slots.find((s) => s.slot === left.running);
-    expect([written?.name, written?.taps]).toEqual([
-      "Game's own keys",
-      [{ input: expect.any(Number), keys: [KEY_SPACE] }],
-    ]);
+    // Both on the right unit (the left hand is on the stick), each sending the key pressed for it.
+    const [left, right] = await helm.units();
+    const running = (u: typeof left) => u?.slots.find((s) => s.slot === u.running);
+    expect([
+      running(right)?.name,
+      running(right)
+        ?.taps.flatMap((t) => t.keys)
+        .sort((a, b) => a - b),
+      running(left)?.taps,
+    ]).toEqual(["Game's own keys", [KEY_R, KEY_SPACE], []]);
   });
 
   test('J1 by the Xbox controller: Set up, a key and a controller button pressed, the default, Apply', async ({
     helm,
   }) => {
-    // Clicks, counted: Set up, the controller field, Xbox controller, Apply, Apply in the drawer.
-    // Everything else is typing and pressing.
+    // Clicks, counted: Set up, the controller field, Xbox controller, Apply in the drawer (it
+    // opens by itself: nothing to fix). Everything else is typing and pressing.
     const { page } = helm;
     await plugFakePad(page);
     await setUpUnknown(page); // click 1
@@ -224,12 +223,10 @@ test.describe('the Game screen', () => {
       .getByRole('group', { name: 'New scheme from' })
       .getByRole('button', { name: 'Xbox controller' })
       .click(); // click 3
-    await expect(page.getByRole('heading', { name: UNKNOWN })).toBeVisible();
-    // The preset puts Jump where the game ships it: nothing to keep.
-    await expect(page.getByRole('button', { name: 'Keep, I know' })).toHaveCount(0);
-    await page.getByRole('button', { name: 'Apply', exact: true }).click(); // click 4
+    // The preset puts Jump where the game ships it: nothing to keep, so the drawer opens.
+    await expect(drawer(page)).toBeVisible();
     await expect(applyInDrawer(page)).toBeEnabled();
-    await applyInDrawer(page).click(); // click 5
+    await applyInDrawer(page).click(); // click 4
     await expect(drawer(page).getByLabel('Result')).toContainText('Both units now run the layout.');
     const names = (await helm.units()).map((u) => u.slots.find((s) => s.slot === u.running)?.name);
     expect(names).toEqual(['Xbox controller', 'Xbox controller']);
@@ -622,6 +619,8 @@ test('a game whose last action is deleted keeps its scheme: opened, applied and 
     .getByRole('group', { name: 'New scheme from' })
     .getByRole('button', { name: "Game's own keys" })
     .click();
+  // Nothing to fix: the drawer opens on it. Not applied this time.
+  await drawer(page).getByRole('button', { name: 'Cancel' }).click();
   await expect(page.getByRole('heading', { name: UNKNOWN })).toBeVisible();
   await page.getByRole('button', { name: 'Library' }).click();
 

@@ -76,6 +76,16 @@ const UNIT_BUTTONS: readonly ControlId[] = [CYBORG2_LEFT, CYBORG2_RIGHT].flatMap
     .map((p) => `${unit.hand === 'left' ? 'L' : 'R'}.${p.name}`),
 );
 
+/** The *Xbox controller* preset's layout of a game, worked out once per game. */
+const HOMES = new WeakMap<Game, Scheme['map']>();
+function homesOf(game: Game): Scheme['map'] {
+  const known = HOMES.get(game);
+  if (known !== undefined) return known;
+  const map = xboxControllerPreset(game).map;
+  HOMES.set(game, map);
+  return map;
+}
+
 /**
  * Where an action is tried, in order. First its homes: the button the *Xbox controller* preset gives
  * it (the layout both presets share), then its own key, mouse button and controller button. Then
@@ -84,7 +94,7 @@ const UNIT_BUTTONS: readonly ControlId[] = [CYBORG2_LEFT, CYBORG2_RIGHT].flatMap
  */
 function placesFor(game: Game, mode: ModeId, action: ActionId): ControlId[] {
   const native = game.actions.find((a) => a.id === action)?.native;
-  const home = Object.entries(own(xboxControllerPreset(game).map, mode) ?? {}).find(
+  const home = Object.entries(own(homesOf(game), mode) ?? {}).find(
     ([, presses]) => presses.tap === action,
   )?.[0];
   const key = native?.key;

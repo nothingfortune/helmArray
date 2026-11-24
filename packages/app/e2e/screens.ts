@@ -15,13 +15,75 @@ export const applyInDrawer = (page: Page): Locator =>
   drawer(page).getByRole('button', { name: 'Apply' });
 export const helldivers = (page: Page): Locator =>
   page.getByRole('button', { name: /^HELLDIVERS/ });
+/** Helldivers 2's cover: the tile's own button, also once the game has schemes beside it. */
+export const helldiversTile = (page: Page): Locator =>
+  page.locator('.tile', { hasText: /HELLDIVERS|Helldivers 2/ }).locator('.tile-button');
 
-/** Opens Helldivers 2 from the Library: the game, then what to start from. */
-export async function startFrom(page: Page, preset: 'Xbox controller' | "Game's own keys") {
+/**
+ * J1 on Helldivers 2: the game, then what to start from. Both presets leave nothing to fix there,
+ * so the Apply drawer opens on the new scheme by itself (the owner's decision, 2026-11-24).
+ */
+export async function openFrom(page: Page, preset: 'Xbox controller' | "Game's own keys") {
   await helldivers(page).click();
   await page.getByRole('button', { name: preset }).click();
+  await expect(drawer(page)).toBeVisible();
+}
+
+/**
+ * Opens Helldivers 2 from the Library in the Editor: the game, then what to start from. The drawer
+ * that opens on it (`openFrom`) is cancelled, so the test starts in the Editor as the player would
+ * after looking at it.
+ */
+export async function startFrom(page: Page, preset: 'Xbox controller' | "Game's own keys") {
+  await openFrom(page, preset);
+  await drawer(page).getByRole('button', { name: 'Cancel' }).click();
+  await expect(drawer(page)).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Helldivers 2' })).toBeVisible();
 }
+
+/**
+ * Opens Helldivers 2 in the Editor on a "Game's own keys" scheme as a test needs it, made through
+ * `window.helm` as the store keeps it: the preset, then saved again with `blank` (nothing placed,
+ * the sticks not set) and the sticks in `behaviour` over it. Made the game's active scheme, and
+ * opened from its tile after *Look again* reads the Library afresh: not made from a preset in the
+ * Library, so no drawer opens on it.
+ */
+export async function startKeysScheme(
+  page: Page,
+  change: { blank: boolean; behaviour?: Record<string, unknown> },
+) {
+  await page.evaluate(async ({ blank, behaviour }) => {
+    const helm = (
+      window as unknown as {
+        helm: {
+          createScheme(gameId: string, preset: string): Promise<Record<string, unknown>>;
+          saveScheme(scheme: unknown): Promise<void>;
+          setActive(gameId: string, schemeId: string): Promise<void>;
+        };
+      }
+    ).helm;
+    const made = await helm.createScheme('helldivers2', 'keys');
+    await helm.saveScheme({
+      ...made,
+      ...(blank ? { map: { default: {} }, behaviour: {} } : {}),
+      behaviour: {
+        ...(blank ? {} : (made['behaviour'] as Record<string, unknown>)),
+        ...behaviour,
+      },
+    });
+    await helm.setActive('helldivers2', made['id'] as string);
+  }, change);
+  await page.getByRole('button', { name: 'Look again' }).click();
+  await expect(helldiversTile(page)).toHaveAttribute('aria-label', /Not applied/);
+  await helldiversTile(page).click();
+  await expect(page.getByRole('heading', { name: 'Helldivers 2' })).toBeVisible();
+}
+
+/**
+ * Opens Helldivers 2 in the Editor on a "Game's own keys" scheme with nothing placed: what that
+ * preset made before it placed the game's actions, and what a scheme saved then still holds.
+ */
+export const startBlankKeys = (page: Page) => startKeysScheme(page, { blank: true });
 
 /** A device tab of the Editor: Azerons, Keyboard, Controller. */
 export const deviceTab = (page: Page, name: string): Locator =>
@@ -46,13 +108,49 @@ export async function chooseDevice(page: Page, label: string) {
 export const leftUnit = (page: Page) => page.locator('.unit[data-hand="left"]');
 
 /**
- * Opens Helldivers 2 on a setup with checks the player can keep: the game's own keys with nothing
- * placed yet flags the required actions (and the sticks, which send no keys). The Xbox controller
- * preset has none, and putting an action on a button no longer raises one: the game is rebound.
+ * Opens Helldivers 2 on a setup with checks the player can keep: a game's own keys scheme with
+ * nothing placed yet (`startBlankKeys`) flags the required actions (and the sticks, which send no
+ * keys). Neither preset has any now: the game is rebound, and both place every required action.
  */
 export async function startWithChecks(page: Page) {
-  await startFrom(page, "Game's own keys");
+  await startBlankKeys(page);
   await expect(page.getByRole('button', { name: 'Keep, I know' }).first()).toBeVisible();
+}
+
+/**
+ * Counts the clicks and drags a test makes from here on, as the page sees them: every trusted
+ * pointer press (a click, or the start of a drag), and every drop. A drag is one press and one
+ * drop, so clicks are the presses that didn't end in a drop. Listened for in the capture phase on
+ * the window, so a click a helper makes counts too.
+ */
+export async function countInput(
+  page: Page,
+): Promise<() => Promise<{ clicks: number; drags: number }>> {
+  await page.evaluate(() => {
+    const w = window as unknown as { e2eInput?: { presses: number; drops: number } };
+    const counts = { presses: 0, drops: 0 };
+    w.e2eInput = counts;
+    window.addEventListener(
+      'pointerdown',
+      (e) => {
+        if (e.isTrusted) counts.presses++;
+      },
+      { capture: true },
+    );
+    window.addEventListener(
+      'drop',
+      (e) => {
+        if (e.isTrusted) counts.drops++;
+      },
+      { capture: true },
+    );
+  });
+  return async () => {
+    const { presses, drops } = await page.evaluate(
+      () => (window as unknown as { e2eInput: { presses: number; drops: number } }).e2eInput,
+    );
+    return { clicks: presses - drops, drags: drops };
+  };
 }
 
 /** "Keep, I know" on every check that is still flagged. Returns how many were kept. */

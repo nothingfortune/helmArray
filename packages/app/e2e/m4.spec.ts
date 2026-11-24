@@ -13,6 +13,7 @@ import {
   keepEveryCheck,
   pill,
   schemeFiles,
+  startBlankKeys,
   startFrom,
 } from './screens';
 
@@ -109,7 +110,8 @@ test.describe('the M4 screens', () => {
 
   test('J2: drag an action onto a button, Apply, and the unit holds that key', async ({ helm }) => {
     const { page } = helm;
-    await startFrom(page, "Game's own keys");
+    // A game's own keys scheme with nothing placed: the preset places every action now.
+    await startBlankKeys(page);
     const left = page.locator('.unit[data-hand="left"]');
     const button = left.getByRole('button', { name: 'Empty, index 1' });
     const action = page.locator('.ed-actions').getByRole('button', { name: 'Move forward' });

@@ -127,7 +127,7 @@ test.describe('axe: no serious or critical violations', () => {
     await leftUnit(page)
       .getByRole('button', { name: /^Stick/ })
       .press('Enter');
-    await expect(page.getByText('The stick sends its four directions.')).toBeVisible();
+    await expect(page.getByRole('group', { name: 'Directions' })).toBeVisible();
     expect(await seriousViolations(page)).toEqual([]);
   });
 
