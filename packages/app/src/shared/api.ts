@@ -1,7 +1,7 @@
 // What the main process tells the windows, and what a window may ask of it. Plain data only:
 // it crosses IPC by structured clone. The preload exposes `HelmApi` as `window.helm`.
 
-import type { BindingSet, Game, Scheme, Signal } from '@helmarray/core';
+import type { BindingSet, Game, Scheme, Signal, StickBehaviour } from '@helmarray/core';
 
 export type Hand = 'left' | 'right';
 
@@ -157,6 +157,32 @@ export interface AppState {
 export interface ReadyCheck {
   ok: boolean;
   text: string;
+  /**
+   * What it is about: the Azeron app (shown always: it is the one thing the person may have to
+   * do), a unit, the scheme's errors, or another apply running. The drawer shows the others only
+   * when they are not ready.
+   */
+  kind?: 'azeron-app' | 'unit' | 'scheme' | 'busy';
+}
+
+/**
+ * One button of a unit (or its stick) that Apply changes, as facts: the drawer words them in the
+ * game's terms ("Middle 1 · Frame shift drive · new"). Read from what the unit holds now against
+ * the layout, so it is what changes on the unit, whatever was applied before.
+ */
+export interface ApplyButtonChange {
+  /** The position on the unit: `middle_1`, `dpad_up`, `stick`. */
+  position: string;
+  /** The game's actions it carries once applied, by name, each once, in mode then press order. */
+  actions: string[];
+  /** What its tap sends once applied (for a button with no action), or null. */
+  sends: Signal | null;
+  /** For the stick: what it does once applied. Null for a button. */
+  stick: (StickBehaviour & { angle?: number; invertX?: boolean }) | null;
+  /** It sent nothing before: the action on it is new. Never for the stick. */
+  wasEmpty: boolean;
+  /** It sends nothing once applied: cleared. Never for the stick. */
+  nowEmpty: boolean;
 }
 
 /** What Apply would do to one unit. */
@@ -173,6 +199,11 @@ export interface ApplyUnitChange {
   differs: boolean;
   /** How many of the unit's inputs differ. */
   inputsChanged: number;
+  /**
+   * The buttons that change, in the unit's order: those that differ and are not empty both
+   * before and after (a button that sent nothing and still sends nothing is no change to anyone).
+   */
+  buttons: ApplyButtonChange[];
   /** The slot written, or null when the unit already holds the layout. */
   write: { slot: number; name: string; overwrites: { slot: number; name: string } | null } | null;
   /** The slots deleted afterwards, each by name (empty when the unit has no other). */
@@ -215,6 +246,8 @@ export interface ApplyGame {
 export interface ApplyPreview {
   schemeId: string;
   schemeName: string;
+  /** The scheme's game; empty when the scheme could not be worked out. */
+  gameId: string;
   gameName: string;
   /**
    * Stands for the layout this preview is of. `apply` takes it back and writes only that layout:

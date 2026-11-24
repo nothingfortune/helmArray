@@ -6,6 +6,7 @@ import {
   FakeUnit,
   UnitError,
   UnitSession,
+  decodeStoredRecord,
   encodeRecord,
   parseHostReport,
   storedFromWritten,
@@ -16,6 +17,7 @@ import type { StoredSlot, UnitRecord } from '@helmarray/azeron';
 import { CYBORG2_LEFT, CYBORG2_RIGHT } from '@helmarray/core';
 import type { UnitOps } from './gated-session';
 import type { HeldUnit, HeldUnits, UnitsDeps } from './apply-units';
+import type { ApplyButtonChange } from '../shared/api';
 import { applyUnits, chooseSlot, previewUnits, unitSlotName, verifyUnits } from './apply-units';
 
 // Both units are written from one plan: keys from the pool, a long press, a latch, a turbo.
@@ -789,6 +791,61 @@ describe('previewing the units', () => {
   });
 });
 
+describe("the buttons a preview changes, in the game's words", () => {
+  const nameOf = (_mode: string, action: string) =>
+    game.actions.find((a) => a.id === action)?.name ?? action;
+  const rows = (buttons: readonly ApplyButtonChange[]) =>
+    buttons
+      .map((b) => [b.position, b.actions, b.wasEmpty, b.nowEmpty] as const)
+      .sort(([a], [b]) => (a < b ? -1 : 1));
+  const holdingPlan = (hand: Hand): HeldUnit => ({
+    ...untouched(hand),
+    slots: [{ ...slotOf(1, NAME), records: holding(1, hand).map(decodeStoredRecord) }],
+    running: 1,
+  });
+
+  it('lists the one button a drag gave an action, and the one it left, on that unit only', () => {
+    const moved: Scheme = {
+      ...scheme,
+      map: { ship: { ...scheme.map['ship'], 'L.index_1': {}, 'L.ring_1': { tap: 'boost' } } },
+      behaviour: { 'R.middle_1': { turbo: { interval: 40 } } },
+      // The keys dealt when it was applied are kept, as Apply keeps them.
+      ledger: plan.ledger,
+    };
+    const next = resolve(moved, game, BUILT_IN_DEVICES);
+    const preview = previewUnits(
+      next,
+      { left: holdingPlan('left'), right: holdingPlan('right') },
+      { name: NAME, actionName: nameOf },
+    );
+    expect([rows(preview.left.buttons), preview.right.buttons]).toEqual([
+      [
+        ['index_1', [], false, true],
+        ['ring_1', ['Boost'], true, false],
+      ],
+      [],
+    ]);
+  });
+
+  it('names every action on a button, each once, and leaves out a button empty before and after', () => {
+    const preview = previewUnits(plan, { left: untouched('left') }, { actionName: nameOf });
+    const named = rows(preview.left.buttons).filter(([position]) => position !== 'stick');
+    expect(named).toEqual([
+      ['index_1', ['Boost'], true, false],
+      ['middle_1', ['Fire', 'Map'], true, false],
+    ]);
+  });
+
+  it('lists the stick when what it does changes, with what it does now', () => {
+    const preview = previewUnits(plan, { left: untouched('left') }, { actionName: nameOf });
+    expect(preview.left.buttons.find((b) => b.position === 'stick')).toMatchObject({
+      stick: unitOf(plan, 'left').stick,
+      wasEmpty: false,
+      nowEmpty: false,
+    });
+  });
+});
+
 describe('the verdict for the sync pill', () => {
   it('is clean for a unit running the plan, a difference for one that is not, null for none', async () => {
     const stored = holding(0, 'left');
@@ -926,6 +983,7 @@ describe('a preview, field by field', () => {
       connected: false,
       differs: false,
       inputsChanged: 0,
+      buttons: [],
       write: null,
       deletes: [],
       changes: [],
@@ -1461,6 +1519,7 @@ describe('a setup of the left Azeron and the mouse', () => {
         connected: true,
         differs: false,
         inputsChanged: 0,
+        buttons: [],
         write: null,
         deletes: [],
         changes: [],

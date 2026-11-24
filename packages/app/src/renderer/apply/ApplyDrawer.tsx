@@ -1,6 +1,6 @@
 import { useEffect, useReducer, useRef } from 'react';
 import { Dialog } from 'radix-ui';
-import type { AppState } from '../../shared/api';
+import type { AppState, ApplyPreview, ApplyResult } from '../../shared/api';
 import { plainReason } from '../screens/libraryFlow';
 import { START, drawerView, previewKey, reduce } from './applyFlow';
 import type { GameSection } from './applyFlow';
@@ -13,6 +13,8 @@ export interface ApplyDrawerProps {
   onClose(): void;
   /** An apply ran, and may have written keys into the scheme: whoever shows it takes them. */
   onApplied?(): void;
+  /** An apply ended, with the preview it applied: what is left to set by hand is kept. */
+  onResult?(preview: ApplyPreview, result: ApplyResult): void;
   /** The app state: when a unit or the Azeron app changes, what is ready is looked at again. */
   state: AppState | null;
 }
@@ -39,12 +41,9 @@ function Game({ section }: { section: GameSection }) {
   );
 }
 
+/** A check's dot: green when it is ready, red when it is not. Its words say which as well. */
 function Mark({ ok }: { ok: boolean }) {
-  return (
-    <span className={`apply-mark ${ok ? 'tone-ok' : 'tone-error'}`} aria-hidden="true">
-      {ok ? '✓' : '✕'}
-    </span>
-  );
+  return <span className={`dot apply-dot tone-${ok ? 'ok' : 'error'}`} aria-hidden="true" />;
 }
 
 /**
@@ -52,7 +51,14 @@ function Mark({ ok }: { ok: boolean }) {
  * unit, then Cancel and Apply. Opened by the Editor's Apply button; closed by Cancel, Escape or
  * the scrim, but never while it writes.
  */
-export function ApplyDrawer({ schemeId, open, onClose, onApplied, state }: ApplyDrawerProps) {
+export function ApplyDrawer({
+  schemeId,
+  open,
+  onClose,
+  onApplied,
+  onResult,
+  state,
+}: ApplyDrawerProps) {
   const [drawer, dispatch] = useReducer(reduce, START);
   // The newest look wins: an answer that comes back after a newer ask is dropped.
   const asked = useRef(0);
@@ -95,11 +101,13 @@ export function ApplyDrawer({ schemeId, open, onClose, onApplied, state }: Apply
     }
     if (drawer.phase !== 'ready') return;
     dispatch({ type: 'apply' });
+    const shown = drawer.preview;
     // Exactly the layout that was shown: if the scheme changed since, main refuses and the
     // drawer looks again.
-    window.helm.apply(schemeId, drawer.preview.fingerprint).then(
+    window.helm.apply(schemeId, shown.fingerprint).then(
       (result) => {
         dispatch({ type: 'applied', result });
+        onResult?.(shown, result);
         if (result.units.length > 0) onApplied?.();
         if (result.changed === true) look();
       },

@@ -121,6 +121,7 @@ const emptyUnit = (hand: Hand, problem: string | null, used = true): ApplyUnitCh
   connected: false,
   differs: false,
   inputsChanged: 0,
+  buttons: [],
   write: null,
   deletes: [],
   changes: [],
@@ -160,26 +161,28 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
       if (!unit) {
         return {
           ok: false,
+          kind: 'unit',
           text: strangers
             ? `helmArray doesn't know yet which Azeron is the ${word} one.`
             : `The ${word} Azeron isn't connected.`,
         };
       }
       if (unit.state === 'connecting') {
-        return { ok: false, text: `The ${word} Azeron is still being read.` };
+        return { ok: false, kind: 'unit', text: `The ${word} Azeron is still being read.` };
       }
       if (unit.state === 'paused' || (unit.state === 'ready' && unit.slots === undefined)) {
         // Let go of while the Azeron app was open, not looked at since it was, or could not be
         // ruled out.
-        return { ok: false, text: `The ${word} Azeron hasn't been read yet.` };
+        return { ok: false, kind: 'unit', text: `The ${word} Azeron hasn't been read yet.` };
       }
       if (unit.state === 'failed') {
         return {
           ok: false,
+          kind: 'unit',
           text: `The ${word} Azeron couldn't be read${unit.error ? `: ${sentence(unit.error)}` : '.'}`,
         };
       }
-      return { ok: true, text: `The ${word} Azeron is connected.` };
+      return { ok: true, kind: 'unit', text: `The ${word} Azeron is connected.` };
     });
   };
 
@@ -187,8 +190,8 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
   const findingChecks = (plan: Plan): ReadyCheck[] => {
     const errors = plan.findings.filter((f) => f.severity === 'error' && f.accepted === undefined);
     return errors.length === 0
-      ? [{ ok: true, text: 'The scheme has no errors.' }]
-      : errors.map((f) => ({ ok: false, text: sentence(f.message) }));
+      ? [{ ok: true, kind: 'scheme', text: 'The scheme has no errors.' }]
+      : errors.map((f): ReadyCheck => ({ ok: false, kind: 'scheme', text: sentence(f.message) }));
   };
 
   /** What must hold before Apply. A setup with no Azeron talks to no unit: nothing about them. */
@@ -197,10 +200,10 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
     if (used.length === 0) return findingChecks(plan);
     return [
       open === null
-        ? { ok: false, text: APP_UNKNOWN_SENTENCE }
+        ? { ok: false, kind: 'azeron-app', text: APP_UNKNOWN_SENTENCE }
         : open
-          ? { ok: false, text: APP_OPEN_SENTENCE }
-          : { ok: true, text: 'The Azeron app is closed.' },
+          ? { ok: false, kind: 'azeron-app', text: APP_OPEN_SENTENCE }
+          : { ok: true, kind: 'azeron-app', text: 'The Azeron app is closed.' },
       // With the Azeron app open the units are not talked to, so the service lists none: that is
       // not "unplugged", and is not said.
       ...(open === false ? unitChecks(used) : []),
@@ -223,6 +226,7 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
     const base = {
       schemeId,
       schemeName: '',
+      gameId: '',
       gameName: '',
       fingerprint: '',
       azeronOpen: false,
@@ -239,6 +243,7 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
     const used = handsOf(resolved.plan);
     const names = {
       schemeName: resolved.scheme.name,
+      gameId: resolved.game.id,
       gameName: resolved.game.name,
       fingerprint: planFingerprint(resolved.plan),
       game: await gameHalf(resolved.plan, resolved.game),
@@ -251,7 +256,7 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
         ...names,
         busy: true,
         ready: false,
-        checks: [{ ok: false, text: BUSY_SENTENCE }],
+        checks: [{ ok: false, kind: 'busy', text: BUSY_SENTENCE }],
       };
     }
     // A setup with no Azeron has nothing to ask of the units or of the Azeron app.
@@ -281,10 +286,17 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
     const snapshot = deps.devices.snapshot();
     const ids = snapshot.units.flatMap((u) => (u.identity ? [u.identity.deviceId] : []));
     const held = heldUnits(snapshot, handsFor(ids, deps.hands));
-    const units = previewUnits(resolved.plan, held, { name: resolved.scheme.name });
+    const { game } = resolved;
+    const units = previewUnits(resolved.plan, held, {
+      name: resolved.scheme.name,
+      actionName: (mode, action) =>
+        game.actions.find((a) => a.mode === mode && a.id === action)?.name ?? action,
+    });
     // A unit that isn't there already has its own check above; one not used has no problem.
     for (const unit of [units.left, units.right]) {
-      if (unit.connected && unit.problem !== null) checks.push({ ok: false, text: unit.problem });
+      if (unit.connected && unit.problem !== null) {
+        checks.push({ ok: false, kind: 'unit', text: unit.problem });
+      }
     }
     return {
       ...base,
@@ -444,6 +456,7 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
         return {
           schemeId,
           schemeName: '',
+          gameId: '',
           gameName: '',
           fingerprint: '',
           ready: false,

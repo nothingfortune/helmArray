@@ -212,10 +212,13 @@ describe('searching and counting', () => {
   });
 
   it('does not say From Steam for a game Steam does not list', () => {
-    // The built-in game alone, Steam having none: "2 games" would be untrue, and so would Steam.
+    // The built-in game alone, Steam having none, is not "From Steam"; nor is a list with one.
     expect([
       summary([entry({ inSteam: false })]),
-      summary([entry({ inSteam: false, schemes: [XBOX] }), { ...all[1]!, inSteam: true }]),
+      summary([
+        entry({ inSteam: false, schemes: [XBOX] }),
+        entry({ name: 'Everspace 2', appId: '1', gameId: null, inSteam: true }),
+      ]),
     ]).toEqual(['1 game · 0 with a scheme', '2 games · 1 with a scheme']);
   });
 });

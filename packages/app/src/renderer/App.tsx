@@ -6,6 +6,8 @@ import { Header } from './header/Header';
 import { HandQuestion } from './header/HandQuestion';
 import { WriteBlockLine } from './header/WriteBlockLine';
 import { applyButton } from './apply/applyButton';
+import { NO_SHEETS, dismissSheet, keepSheet } from './apply/bindSheet';
+import type { KeptSheets } from './apply/bindSheet';
 import { Editor } from './screens/Editor';
 import { GameScreen } from './screens/Game';
 import type { GameTarget } from './screens/game-model';
@@ -23,6 +25,8 @@ export function App({ state }: { state: AppState | null }) {
   const [screen, setScreen] = useState<Screen>({ name: 'library' });
   const [applying, setApplying] = useState(false);
   const [keysKept, setKeysKept] = useState(0);
+  // What is still to be set by hand in a game's controls, after the drawer that said so closed.
+  const [sheets, setSheets] = useState<KeptSheets>(NO_SHEETS);
   const chrome = (body: ReactNode) => (
     <>
       <Header
@@ -67,6 +71,7 @@ export function App({ state }: { state: AppState | null }) {
           open={applying}
           onClose={() => setApplying(false)}
           onApplied={() => setKeysKept((n) => n + 1)}
+          onResult={(preview, result) => setSheets((kept) => keepSheet(kept, preview, result))}
           state={state}
         />
       </>,
@@ -86,6 +91,8 @@ export function App({ state }: { state: AppState | null }) {
       state={state}
       onOpenEditor={(schemeId) => setScreen({ name: 'editor', schemeId })}
       onOpenGame={(target) => setScreen({ name: 'game', target })}
+      sheets={sheets}
+      onSheetDone={(gameId) => setSheets((kept) => dismissSheet(kept, gameId))}
     />,
   );
 }

@@ -28,6 +28,7 @@ const UNIT: Omit<ApplyUnitChange, 'hand'> = {
   connected: true,
   differs: false,
   inputsChanged: 0,
+  buttons: [],
   write: null,
   deletes: [],
   changes: [],
@@ -36,6 +37,7 @@ const UNIT: Omit<ApplyUnitChange, 'hand'> = {
 const PREVIEW: ApplyPreview = {
   schemeId: SCHEME.id,
   schemeName: 'Skiff',
+  gameId: 'skiff',
   gameName: 'Skiff',
   fingerprint: 'abc',
   ready: true,

@@ -14,8 +14,10 @@
 // The first failure stops everything and says, in one sentence, what failed, on which unit, and
 // what is left as it was. The units' profile button is never part of any of it.
 
-import type { StoredSlot, Verdict } from '@helmarray/azeron';
+import type { StoredRecord, StoredSlot, Verdict } from '@helmarray/azeron';
 import {
+  BLOCK_TYPES,
+  INPUT_ID_BY_PIN,
   MAX_PROFILE_NAME,
   UnitError,
   encodeRecord,
@@ -25,6 +27,7 @@ import {
 } from '@helmarray/azeron';
 import type { UnitRecord } from '@helmarray/azeron';
 import type { Hand, Plan, UnitProfile } from '@helmarray/core';
+import type { ApplyButtonChange } from '../shared/api';
 import type { UnitOps } from './gated-session';
 import { CYBORG2_LEFT, CYBORG2_RIGHT, handsOf, unitOf } from '@helmarray/core';
 
@@ -48,6 +51,8 @@ export type HeldUnits = Partial<Record<Hand, HeldUnit | undefined>>;
 export interface UnitsOptions {
   /** The slot's name on the unit; plain ASCII, cut to the 19 characters a unit keeps. */
   name?: string;
+  /** The game's name for an action, for the buttons a preview lists. Its id without it. */
+  actionName?(mode: string, action: string): string;
 }
 
 const handName = (hand: Hand) => (hand === 'left' ? 'left' : 'right');
@@ -116,6 +121,8 @@ export interface UnitPreview {
   differs: boolean;
   /** How many of the unit's inputs differ. */
   inputsChanged: number;
+  /** The buttons that change, for the person: see `ApplyUnitChange.buttons`. */
+  buttons: ApplyButtonChange[];
   /** The slot that gets written, or null when the unit already holds the layout. */
   write: { slot: number; name: string; overwrites: { slot: number; name: string } | null } | null;
   /** Slots that go, by name, so the drawer can say what is lost. */
@@ -150,11 +157,77 @@ function writableRecordsFor(plan: Plan, hand: Hand): UnitRecord[] {
   return records;
 }
 
+/** Block type bytes that send nothing: none, disabled, and 0 (never written). */
+const SILENT = new Set<number>([0, BLOCK_TYPES.none, BLOCK_TYPES.disabled]);
+
+/** The unit held nothing on this input: no record, or a button whose every press sends nothing. */
+function heldNothing(stored: StoredRecord | undefined): boolean {
+  if (stored === undefined) return true;
+  if (stored.kind !== 'button') return false;
+  return [stored.tap, stored.long, stored.double].every(
+    (block) => SILENT.has(block.typeByte) && block.wheel === undefined,
+  );
+}
+
+/**
+ * The buttons (and the stick) whose inputs differ, as the person knows them: the position, the
+ * actions on it once applied, and whether it was empty before or is empty after. A button that
+ * was empty and stays empty is no change to anyone, and is left out.
+ */
+function changedButtons(
+  plan: Plan,
+  hand: Hand,
+  verdict: Verdict,
+  running: readonly StoredRecord[],
+  actionName: (mode: string, action: string) => string,
+): ApplyButtonChange[] {
+  const profile = unitOf(plan, hand);
+  const ids = new Set([
+    ...verdict.differences.map((d) => d.id),
+    ...verdict.unchecked.map((u) => u.id),
+  ]);
+  const stickId = recordsFor(plan, hand).find((r) => r.kind === 'stick')?.id;
+  const out: ApplyButtonChange[] = [];
+  for (const pin of profile.pins) {
+    const id = INPUT_ID_BY_PIN.get(pin.pin);
+    if (id === undefined || !ids.has(id)) continue;
+    const wasEmpty = heldNothing(running.find((r) => r.id === id));
+    const nowEmpty = Object.keys(pin.presses).length === 0;
+    if (wasEmpty && nowEmpty) continue;
+    const actions: string[] = [];
+    for (const b of plan.bindings) {
+      if (b.control !== pin.control) continue;
+      const words = actionName(b.mode, b.action);
+      if (!actions.includes(words)) actions.push(words);
+    }
+    out.push({
+      position: pin.position,
+      actions,
+      sends: pin.presses.tap ?? null,
+      stick: null,
+      wasEmpty,
+      nowEmpty,
+    });
+  }
+  if (stickId !== undefined && ids.has(stickId)) {
+    out.push({
+      position: 'stick',
+      actions: [],
+      sends: null,
+      stick: structuredClone(profile.stick),
+      wasEmpty: false,
+      nowEmpty: false,
+    });
+  }
+  return out;
+}
+
 function previewUnit(
   plan: Plan,
   hand: Hand,
   held: HeldUnit | undefined,
   name: string,
+  actionName: (mode: string, action: string) => string,
 ): UnitPreview {
   const base: UnitPreview = {
     hand,
@@ -162,6 +235,7 @@ function previewUnit(
     connected: held !== undefined,
     differs: false,
     inputsChanged: 0,
+    buttons: [],
     write: null,
     deletes: [],
     changes: [],
@@ -176,18 +250,20 @@ function previewUnit(
   } catch (error) {
     return { ...base, problem: sentence(messageOf(error)) };
   }
-  const verdict = verify(records, held.slots.find((s) => s.slot === held.running)?.records ?? []);
+  const runningRecords = held.slots.find((s) => s.slot === held.running)?.records ?? [];
+  const verdict = verify(records, runningRecords);
   const differs = !isClean(verdict);
   const inputsChanged = new Set([
     ...verdict.differences.map((d) => d.id),
     ...verdict.unchecked.map((u) => u.id),
   ]).size;
+  const buttons = changedButtons(plan, hand, verdict, runningRecords, actionName);
   let target = held.running;
   let write: UnitPreview['write'] = null;
   const changes: string[] = [];
   if (differs) {
     const choice = chooseSlot(held.slots, held.running, held.slotLimit, name);
-    if (!choice.ok) return { ...base, differs, inputsChanged, problem: choice.reason };
+    if (!choice.ok) return { ...base, differs, inputsChanged, buttons, problem: choice.reason };
     target = choice.slot;
     write = {
       slot: choice.slot,
@@ -208,7 +284,7 @@ function previewUnit(
   if (deletes.length > 0) {
     changes.push(`Delete ${deletes.map((s) => slotLabel(s)).join(', ')} from the ${unit} unit.`);
   }
-  return { ...base, differs, inputsChanged, write, deletes, changes };
+  return { ...base, differs, inputsChanged, buttons, write, deletes, changes };
 }
 
 /** What Apply would do to the units, in words. `held` is what each unit holds now. */
@@ -218,8 +294,9 @@ export function previewUnits(
   options: UnitsOptions = {},
 ): UnitsPreview {
   const name = unitSlotName(options.name);
-  const left = previewUnit(plan, 'left', held.left, name);
-  const right = previewUnit(plan, 'right', held.right, name);
+  const actionName = options.actionName ?? ((_mode: string, action: string) => action);
+  const left = previewUnit(plan, 'left', held.left, name, actionName);
+  const right = previewUnit(plan, 'right', held.right, name, actionName);
   // A unit the setup doesn't use has nothing to do, so it adds no line, no change and no problem.
   const units = [left, right];
   return {

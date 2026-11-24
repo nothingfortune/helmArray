@@ -3,6 +3,7 @@ import type {
   AppState,
   ApplyGameRow,
   ApplyPreview,
+  ApplyButtonChange,
   ApplyResult,
   ApplyUnitChange,
 } from '../../shared/api';
@@ -17,12 +18,28 @@ import {
 } from './applyFlow';
 import type { DrawerState } from './applyFlow';
 
+/** A button Apply changes, as main sends it: the Reload on middle 1 by default. */
+const button = (over: Partial<ApplyButtonChange> = {}): ApplyButtonChange => ({
+  position: 'middle_1',
+  actions: ['Reload'],
+  sends: { kind: 'pad', control: 'X' },
+  stick: null,
+  wasEmpty: false,
+  nowEmpty: false,
+  ...over,
+});
+
 const unit = (over: Partial<ApplyUnitChange> = {}): ApplyUnitChange => ({
   hand: 'left',
   used: true,
   connected: true,
   differs: true,
   inputsChanged: 3,
+  buttons: [
+    button(),
+    button({ position: 'index_5', actions: ['Silent running'], wasEmpty: true }),
+    button({ position: 'dpad_up', actions: [], sends: null, nowEmpty: true }),
+  ],
   write: { slot: 1, name: 'Main', overwrites: null },
   deletes: [
     { slot: 0, name: 'Default' },
@@ -36,14 +53,16 @@ const unit = (over: Partial<ApplyUnitChange> = {}): ApplyUnitChange => ({
 const preview = (over: Partial<ApplyPreview> = {}): ApplyPreview => ({
   schemeId: 'skiff-main',
   schemeName: 'Main',
+  gameId: 'skiff',
   gameName: 'Skiff',
   fingerprint: 'f1',
   ready: true,
   azeronOpen: false,
   busy: false,
   checks: [
-    { ok: true, text: 'The Azeron app is closed.' },
-    { ok: true, text: 'The scheme has no errors.' },
+    { ok: true, text: 'The Azeron app is closed.', kind: 'azeron-app' },
+    { ok: true, text: 'The left Azeron is connected.', kind: 'unit' },
+    { ok: true, text: 'The scheme has no errors.', kind: 'scheme' },
   ],
   anyChange: true,
   left: unit(),
@@ -383,59 +402,118 @@ describe('a setup with no Azeron, or the left one only', () => {
 });
 
 describe('what changes on a unit', () => {
-  it('names the slot written and the slots deleted, by name', () => {
+  it("lists each button that changes in the game's words, and counts buttons", () => {
     expect(unitSection(unit(), false)).toEqual({
       hand: 'left',
       title: 'Left Azeron',
-      summary: '3 inputs change',
+      summary: '3 buttons',
       lines: [
-        { kind: 'write', text: 'A new slot 1 ("Main") is written, then switched to.' },
-        { kind: 'delete', text: 'Slot 0 (Default) is deleted.' },
-        { kind: 'delete', text: 'Slot 2 is deleted.' },
+        { kind: 'button', text: 'Middle 1 · Reload' },
+        { kind: 'button', text: 'Index 5 · Silent running · new' },
+        { kind: 'button', text: 'D-pad ↑ · cleared' },
+        { kind: 'housekeeping', text: 'Your other layouts on this unit are removed.' },
       ],
     });
   });
 
-  it('says a slot is written over, by its name, when there is no free one', () => {
+  it('says one button in the singular, for a drag onto one empty button', () => {
+    const one = unit({
+      buttons: [button({ position: 'middle_2', wasEmpty: true })],
+      deletes: [],
+    });
+    expect(unitSection(one, false)).toMatchObject({
+      summary: '1 button',
+      lines: [{ kind: 'button', text: 'Middle 2 · Reload · new' }],
+    });
+  });
+
+  it('names every action on a button, and what a button with none sends', () => {
+    const lines = unitSection(
+      unit({
+        buttons: [
+          button({ actions: ['Fire', 'Map'] }),
+          button({ position: 'middle_2', actions: [], sends: { kind: 'pad', control: 'Y' } }),
+        ],
+        deletes: [],
+      }),
+      false,
+    ).lines;
+    expect(lines.map((l) => l.text)).toEqual(['Middle 1 · Fire, Map', 'Middle 2 · Xbox Y']);
+  });
+
+  it('says what the stick does once applied', () => {
+    const stick = (mode: 'pad-left' | 'mouse') =>
+      button({ position: 'stick', actions: [], sends: null, stick: { mode } });
+    const lines = unitSection(
+      unit({ buttons: [stick('pad-left'), stick('mouse')], deletes: [] }),
+      false,
+    ).lines;
+    expect(lines.map((l) => l.text)).toEqual(['Stick · Xbox left stick', 'Stick · Mouse movement']);
+  });
+
+  it('says the other layouts go in one line, also when one is written over', () => {
     const section = unitSection(
-      unit({ write: { slot: 3, name: 'Main', overwrites: { slot: 3, name: 'Old' } } }),
+      unit({ write: { slot: 3, name: 'Main', overwrites: { slot: 3, name: 'Old' } }, deletes: [] }),
       false,
     );
-    expect(section.lines[0]?.text).toBe(
-      'Slot 3 (Old) is written over with "Main", then switched to.',
-    );
+    expect(section.lines.filter((l) => l.kind === 'housekeeping')).toEqual([
+      { kind: 'housekeeping', text: 'Your other layouts on this unit are removed.' },
+    ]);
   });
 
-  it('says one input in the singular', () => {
-    expect(unitSection(unit({ inputsChanged: 1 }), false).summary).toBe('1 input changes');
-  });
-
-  it('says a unit already holding the layout has no change, or only a tidy up', () => {
-    const same = unit({ differs: false, inputsChanged: 0, write: null, deletes: [] });
+  it('says a unit already holding the layout has no change, or no button change', () => {
+    const same = unit({ differs: false, inputsChanged: 0, buttons: [], write: null, deletes: [] });
     expect(unitSection(same, false)).toMatchObject({
       summary: 'No change',
       lines: [{ kind: 'same', text: 'It already holds this layout.' }],
     });
-    expect(unitSection({ ...same, deletes: [{ slot: 4, name: 'Spare' }] }, false).summary).toBe(
-      'Tidy up',
-    );
+    expect(unitSection({ ...same, deletes: [{ slot: 4, name: 'Spare' }] }, false)).toEqual({
+      hand: 'left',
+      title: 'Left Azeron',
+      summary: 'No button changes',
+      lines: [{ kind: 'housekeeping', text: 'Your other layouts on this unit are removed.' }],
+    });
   });
 
-  it('says a unit that is not connected, or was not looked at, has nothing to show', () => {
+  it('says a unit that is not connected, or waits for the Azeron app, has nothing to show', () => {
     expect(unitSection(unit({ connected: false }), false)).toMatchObject({
       summary: 'Not connected',
       lines: [],
     });
     expect(unitSection(unit({ connected: false }), true)).toMatchObject({
-      summary: 'Not looked at',
+      summary: 'Waiting for the Azeron app to close',
       lines: [],
     });
   });
 
   it('shows why a unit cannot be done', () => {
-    const section = unitSection(unit({ write: null, deletes: [], problem: 'No room.' }), false);
+    const section = unitSection(
+      unit({ buttons: [], write: null, deletes: [], problem: 'No room.' }),
+      false,
+    );
     expect(section.summary).toBe("Can't be done");
     expect(section.lines).toEqual([{ kind: 'problem', text: 'No room.' }]);
+  });
+});
+
+describe('what is ready, as the drawer shows it', () => {
+  it('shows only what can fail or needs doing: the Azeron app always, the rest when not ready', () => {
+    expect(drawerView(ready()).checks).toEqual([
+      { ok: true, text: 'The Azeron app is closed.', kind: 'azeron-app' },
+    ]);
+  });
+
+  it('shows every check that is not ready', () => {
+    const checks = [
+      {
+        ok: false,
+        text: 'Close the Azeron app first: it talks to the units too.',
+        kind: 'azeron-app' as const,
+      },
+      { ok: false, text: "The right Azeron isn't connected.", kind: 'unit' as const },
+      { ok: true, text: 'The left Azeron is connected.', kind: 'unit' as const },
+    ];
+    expect(drawerView(ready({ ready: false, checks })).checks).toEqual([checks[0], checks[1]]);
   });
 });
 

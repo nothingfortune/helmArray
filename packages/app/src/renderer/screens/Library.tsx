@@ -17,6 +17,8 @@ import {
 import { useLibrary } from './useLibrary';
 import { gameTarget, needsSetUp } from './gameTile';
 import type { GameTarget } from './game-model';
+import { NO_SHEETS, sheetLine } from '../apply/bindSheet';
+import type { KeptSheets, SheetLine } from '../apply/bindSheet';
 
 type Send = (event: FlowEvent) => void;
 type OpenGame = (target: GameTarget) => void;
@@ -216,16 +218,69 @@ function Tile({
   );
 }
 
+/**
+ * What is still to set by hand in a game's controls, from the last apply's bind sheet: one line on
+ * the card, *Show* for the rows, *Done* once they are set.
+ */
+function SheetReminder({ line, onDone }: { line: SheetLine; onDone(gameId: string): void }) {
+  return (
+    <div className="current-sheet" role="status">
+      <span className="dot tone-warning" aria-hidden="true" />
+      <span>{line.text}</span>
+      <Popover.Root>
+        <Popover.Trigger asChild>
+          <button type="button" className="btn ghost small" aria-label="Show what to set">
+            Show
+          </button>
+        </Popover.Trigger>
+        <Popover.Portal>
+          <Popover.Content
+            className="popover sheet-popover"
+            sideOffset={8}
+            align="start"
+            aria-label={line.section.title}
+          >
+            <span className="hint">{line.section.title}</span>
+            {line.section.groups.map((group) => (
+              <div key={group.label ?? ''} className="sheet-group">
+                {group.label !== null && <span className="sheet-group-label">{group.label}</span>}
+                {group.lines.map((text) => (
+                  <p key={text} className="sheet-line">
+                    {text}
+                  </p>
+                ))}
+              </div>
+            ))}
+          </Popover.Content>
+        </Popover.Portal>
+      </Popover.Root>
+      <button
+        type="button"
+        className="btn ghost small"
+        aria-label="Done, they are set"
+        onClick={() => onDone(line.gameId)}
+      >
+        Done
+      </button>
+    </div>
+  );
+}
+
 /** The Library: what is current on the Azerons, then every game as a cover with one line. */
 export function Library({
   state,
   onOpenEditor,
   onOpenGame,
+  sheets = NO_SHEETS,
+  onSheetDone,
 }: {
   state: AppState | null;
   onOpenEditor: (schemeId: string) => void;
   /** The Game screen: *Set up*, *Edit actions* and *Add a game*. */
   onOpenGame: OpenGame;
+  /** What is still to set by hand in a game's controls, since the drawer that said so closed. */
+  sheets?: KeptSheets;
+  onSheetDone?(gameId: string): void;
 }) {
   const library = useLibrary();
   const [flow, setFlow] = useState<FlowState>(START);
@@ -259,6 +314,7 @@ export function Library({
   const held = heldSchemes(state);
   const shown = filterEntries(entries, query);
   const editing = card?.scheme ?? null;
+  const sheet = sheetLine(sheets, card?.entry.gameId ?? null);
 
   return (
     <main className="screen library">
@@ -275,6 +331,9 @@ export function Library({
             <span className="eyebrow">On your Azerons now</span>
             <span className="current-title">{card ? card.title : 'Nothing yet'}</span>
             <span className="hint">{card ? card.detail : 'Pick a game below to start.'}</span>
+            {sheet !== null && onSheetDone !== undefined && (
+              <SheetReminder line={sheet} onDone={onSheetDone} />
+            )}
           </div>
           {card !== null && editing !== null && (
             <div className="row">

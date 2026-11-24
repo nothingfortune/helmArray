@@ -248,7 +248,11 @@ describe('Apply as the windows ask for it', () => {
       expect(preview).toMatchObject({ ready: false, azeronOpen: true });
       expect(preview.checks).toEqual(
         expect.arrayContaining([
-          { ok: false, text: 'Close the Azeron app first: it talks to the units too.' },
+          {
+            ok: false,
+            kind: 'azeron-app',
+            text: 'Close the Azeron app first: it talks to the units too.',
+          },
         ]),
       );
       // Not "unplugged": the units were not looked at.
@@ -285,9 +289,9 @@ describe('Apply as the windows ask for it', () => {
       expect([preview.ready, preview.checks.filter((c) => /Azeron/.test(c.text))]).toEqual([
         false,
         [
-          { ok: true, text: 'The Azeron app is closed.' },
-          { ok: false, text: "The left Azeron hasn't been read yet." },
-          { ok: false, text: "The right Azeron hasn't been read yet." },
+          { ok: true, kind: 'azeron-app', text: 'The Azeron app is closed.' },
+          { ok: false, kind: 'unit', text: "The left Azeron hasn't been read yet." },
+          { ok: false, kind: 'unit', text: "The right Azeron hasn't been read yet." },
         ],
       ]);
     });
@@ -585,9 +589,14 @@ describe('Apply as the windows ask for it', () => {
       expect(preview.ready).toBe(false);
       expect(preview.checks).toContainEqual({
         ok: false,
+        kind: 'unit',
         text: "The right Azeron isn't connected.",
       });
-      expect(preview.checks).toContainEqual({ ok: true, text: 'The left Azeron is connected.' });
+      expect(preview.checks).toContainEqual({
+        ok: true,
+        kind: 'unit',
+        text: 'The left Azeron is connected.',
+      });
       expect(preview.right.connected).toBe(false);
 
       const before = writesTo(r.left).length;
@@ -626,6 +635,7 @@ describe('Apply as the windows ask for it', () => {
       expect(preview.ready).toBe(false);
       expect(preview.checks).toContainEqual({
         ok: false,
+        kind: 'scheme',
         text: 'Fire is needed to play Ship, and it is on no button.',
       });
       const reports = r.reports();

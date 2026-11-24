@@ -188,6 +188,7 @@ describe('a preview of a scheme that cannot be worked out', () => {
     expect(await service.preview(scheme.id)).toEqual({
       schemeId: scheme.id,
       schemeName: '',
+      gameId: '',
       gameName: '',
       fingerprint: '',
       ready: false,
@@ -202,6 +203,7 @@ describe('a preview of a scheme that cannot be worked out', () => {
         connected: false,
         differs: false,
         inputsChanged: 0,
+        buttons: [],
         write: null,
         deletes: [],
         changes: [],
@@ -213,6 +215,7 @@ describe('a preview of a scheme that cannot be worked out', () => {
         connected: false,
         differs: false,
         inputsChanged: 0,
+        buttons: [],
         write: null,
         deletes: [],
         changes: [],
@@ -234,6 +237,7 @@ describe('when the Azeron app cannot be told about', () => {
     expect(preview).toMatchObject({ ready: false, azeronOpen: false });
     expect(preview.checks[0]).toEqual({
       ok: false,
+      kind: 'azeron-app',
       text: "helmArray couldn't tell whether the Azeron app is open.",
     });
     expect(b.refreshed).toEqual([]);
@@ -280,6 +284,7 @@ describe('a layout that cannot be written to a unit that is there', () => {
     expect(preview.ready).toBe(false);
     expect(preview.checks.at(-1)).toEqual({
       ok: false,
+      kind: 'unit',
       text: "input 17: tap turbo interval is 256, which doesn't fit.",
     });
   });
@@ -317,6 +322,7 @@ describe('an apply or a preview that goes wrong in a way nobody planned for', ()
     expect(preview).toMatchObject({
       schemeId: scheme.id,
       schemeName: '',
+      gameId: '',
       gameName: '',
       fingerprint: '',
       ready: false,
@@ -344,7 +350,7 @@ describe('a preview while an apply runs', () => {
     expect([during.busy, during.ready, during.checks]).toEqual([
       true,
       false,
-      [{ ok: false, text: BUSY_SENTENCE }],
+      [{ ok: false, kind: 'busy', text: BUSY_SENTENCE }],
     ]);
   });
 });
@@ -366,8 +372,8 @@ describe('what is said of units depends on whether the Azeron app is known to be
     );
     const preview = await service.preview(scheme.id);
     expect(preview.checks).toEqual([
-      { ok: false, text },
-      { ok: true, text: 'The scheme has no errors.' },
+      { ok: false, kind: 'azeron-app', text },
+      { ok: true, kind: 'scheme', text: 'The scheme has no errors.' },
     ]);
   });
 
