@@ -132,10 +132,11 @@ function decodeButton(
   types: number[],
 ): StoredButton {
   // Seen 2026-11-19 on both units: a scrolling tap stores x and y (signed bytes), then the two
-  // intervals, where a key's tap stores its four keys and three modifiers.
+  // intervals, where a key's tap stores its four keys and three modifiers. Only the tap can scroll:
+  // decodeStoredRecord hands over a scroll type nowhere else.
   const presses = types.map(
-    (typeByte, i): Omit<StoredBlock, 'hold' | 'holdTime' | 'turbo' | 'turboInterval'> =>
-      i === 0 && typeByte === WHEEL_TYPE
+    (typeByte): Omit<StoredBlock, 'hold' | 'holdTime' | 'turbo' | 'turboInterval'> =>
+      typeByte === WHEEL_TYPE
         ? {
             typeByte,
             keys: [],
@@ -154,6 +155,7 @@ function decodeButton(
     turbo: r.u8() === 1,
     turboInterval: r.u8(),
   }));
+  // Stryker disable next-line StringLiteral: unreachable message; three types are always read, the guard only narrows the type
   if (!tap || !long || !double) throw new ProtocolError(`Input ${id} has no three presses.`);
   return { kind: 'button', id, pinOne, pinTwo, tap, long, double, longDelay, doubleDelay };
 }

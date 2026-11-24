@@ -44,3 +44,27 @@ describe('the fingerprint of a plan', () => {
     expect(canonical([1, 2])).not.toBe(canonical([2, 1]));
   });
 });
+
+describe('canonical, piece by piece', () => {
+  it('writes nothing as null', () => {
+    expect([canonical(undefined), canonical(() => 1), canonical([undefined])]).toEqual([
+      'null',
+      'null',
+      '[null]',
+    ]);
+  });
+
+  it('joins array items and object entries with a comma', () => {
+    expect([canonical([1, 2, 3]), canonical({ a: 1, b: 2 })]).toEqual(['[1,2,3]', '{"a":1,"b":2}']);
+  });
+
+  it('puts keys in order whatever order they were made in', () => {
+    expect(canonical({ b: 1, c: 2, a: 3, A: 4, 10: 5, 9: 6 })).toBe(
+      '{"10":5,"9":6,"A":4,"a":3,"b":1,"c":2}',
+    );
+  });
+
+  it('leaves out a key whose value is undefined, and keeps one that is null', () => {
+    expect(canonical({ a: undefined, b: null })).toBe('{"b":null}');
+  });
+});

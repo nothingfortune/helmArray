@@ -9,6 +9,7 @@ import {
   fromHex,
   hostReports,
   nextSeq,
+  parseHostReport,
   parseUnitReport,
   toHex,
 } from './report';
@@ -85,5 +86,12 @@ describe('unit reports', () => {
   it('name a command for the log, or show its byte', () => {
     expect(commandName(0x0b)).toBe('OBM_COPY');
     expect(commandName(0x12)).toBe('0x12');
+  });
+});
+
+describe('a host report, as a fake unit reads it', () => {
+  it('has the payload its part length says, not a whole report of it', () => {
+    const [report] = hostReports('SWITCH_PROFILE', 0, Uint8Array.of(3));
+    expect(parseHostReport(report ?? new Uint8Array()).payload).toEqual(Uint8Array.of(3));
   });
 });
