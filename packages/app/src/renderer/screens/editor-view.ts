@@ -291,7 +291,8 @@ function keysOf(
   mode: ModeId,
   prefix: string,
 ): Record<ControlId, UnitKey> {
-  const keys: Record<ControlId, UnitKey> = {};
+  // Keyed by control id, which a scheme file may make `__proto__`: an entry list, then a record.
+  const keys: [ControlId, UnitKey][] = [];
   // Every control with an action of its own, every one sending an Xbox control another does, and
   // the controller's buttons, which show what an Azeron button sending them carries.
   const controls = new Set([
@@ -306,14 +307,17 @@ function keysOf(
     const ref = actionRef(game, lead.id);
     // A button with only a long press must not read as if its tap did that.
     const label = lead.press === 'tap' ? ref.name : `${PRESS_WORD[lead.press]}: ${ref.name}`;
-    keys[control] = {
-      label,
-      action: lead.id,
-      press: lead.press,
-      ...(ref.role === undefined ? {} : { role: ref.role }),
-    };
+    keys.push([
+      control,
+      {
+        label,
+        action: lead.id,
+        press: lead.press,
+        ...(ref.role === undefined ? {} : { role: ref.role }),
+      },
+    ]);
   }
-  return keys;
+  return Object.fromEntries(keys);
 }
 
 const unitKeys = (scheme: Scheme, game: Game, mode: ModeId, hand: Hand) =>
@@ -428,6 +432,7 @@ function stickLabels(
         a.native?.key !== undefined &&
         signalId(a.native.key) === signalId(signal),
     );
+    // keyed-write-ok: the key is a stick direction, one of four names
     labels[direction] = action?.name ?? signalText(signal);
     if (action !== undefined && labels.role === undefined) labels.role = action.role;
   }

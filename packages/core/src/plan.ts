@@ -150,6 +150,7 @@ export function recordApply(
   for (const { hand, status } of outcomes) {
     const profile = plan.units[hand];
     if (profile === undefined || (status !== 'applied' && status !== 'unchanged')) continue;
+    // keyed-write-ok: the key is a hand, left or right, never data
     next[hand] = { ...who, profile };
   }
   return next;

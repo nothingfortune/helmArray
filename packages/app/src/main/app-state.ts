@@ -70,6 +70,7 @@ export function heldUnits(
       (u) => u.id === identity.deviceId,
     )?.hand;
     if (hand !== 'left' && hand !== 'right') continue;
+    // keyed-write-ok: the key is a hand, left or right, never data
     held[hand] = {
       deviceId: identity.deviceId,
       slots,

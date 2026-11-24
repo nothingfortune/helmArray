@@ -67,6 +67,7 @@ describe('a control of the keyboard, the mouse or the controller', () => {
     const dataTransfer = {
       types: [] as string[],
       getData: (t: string) => data[t] ?? '',
+      // keyed-write-ok: drag data is keyed by its MIME types, fixed constants
       setData: (t: string, v: string) => void (data[t] = v),
       effectAllowed: '',
       dropEffect: '',

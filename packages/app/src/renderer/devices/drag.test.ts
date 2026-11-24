@@ -10,6 +10,7 @@ function drag(data: Record<string, string> = {}, inside = false) {
     dataTransfer: {
       types: Object.keys(store),
       getData: (type) => store[type] ?? '',
+      // keyed-write-ok: drag data is keyed by its MIME types, fixed constants
       setData: (type, value) => void (store[type] = value),
       effectAllowed: 'none',
       dropEffect: 'none',

@@ -2,7 +2,7 @@
 // of control on that tab: the action list is the selected control's binding set's, and every action
 // cleared off a control can be put back on it in two clicks (the control, then the action).
 import { describe, expect, it } from 'vitest';
-import type { Scheme, SetupDevices } from '@helmarray/core';
+import type { Game, Scheme, SetupDevices } from '@helmarray/core';
 import {
   AZERONS_ONLY,
   BUILT_IN_DEVICES,
@@ -28,10 +28,8 @@ import {
   shownPresses,
 } from './editor-model';
 import { editorView } from './editor-view';
+import { hostileOneMode } from './editor-fixture';
 import type { DeviceTabId, EditorView } from './editor-view';
-
-const g = helldivers2;
-const MODE = 'default';
 
 /** Every setup the chooser can reach: which Azerons, the keyboard and mouse, the controller. */
 const SETUPS: SetupDevices[] = (['both', 'left', 'none'] as const)
@@ -67,7 +65,7 @@ function kindsOn(view: EditorView, tab: DeviceTabId): string[] {
 }
 
 /** The mode's actions on no control of the setup in this binding set, in the game's order. */
-function expectedFor(scheme: Scheme, set: string): string[] {
+function expectedFor(scheme: Scheme, set: string, g: Game, MODE: string): string[] {
   const setup = setupOf(scheme.devices);
   const placed = new Set(
     ALL_CONTROLS.filter((c) => inSetup(setup, c) && controlSet(scheme, c) === set).flatMap((c) =>
@@ -86,7 +84,7 @@ const offeredBy = (view: EditorView): string[] => [
   ...view.moves.map((m) => m.id),
 ];
 
-const viewOf = (scheme: Scheme, tab: DeviceTabId, selected?: string) =>
+const viewOf = (g: Game, MODE: string, scheme: Scheme, tab: DeviceTabId, selected?: string) =>
   editorView({
     scheme,
     game: g,
@@ -96,37 +94,48 @@ const viewOf = (scheme: Scheme, tab: DeviceTabId, selected?: string) =>
     tab,
   });
 
-const cases = SETUPS.flatMap((devices) =>
-  (['pad', 'keys'] as const).map((output) => ({ devices, output })),
+// Helldivers 2, and the same game with its actions in a mode named __proto__ and four of them
+// named __proto__, constructor, toString and hasOwnProperty.
+const GAMES = [
+  { name: 'Helldivers 2', g: helldivers2, MODE: 'default' },
+  { name: 'hostile ids', g: hostileOneMode, MODE: '__proto__' },
+];
+const cases = GAMES.flatMap(({ name, g, MODE }) =>
+  SETUPS.flatMap((devices) =>
+    (['pad', 'keys'] as const).map((output) => ({ name, g, MODE, devices, output })),
+  ),
 );
 
 describe.each(cases)(
-  '$devices.azerons Azerons, keyboard $devices.keyboard, controller $devices.controller, $output',
-  ({ devices, output }) => {
+  '$name: $devices.azerons Azerons, keyboard $devices.keyboard, controller $devices.controller, $output',
+  ({ g, MODE, devices, output }) => {
     const scheme = setOutput(setDevices(xboxControllerPreset(g), devices, g), output, g);
-    const tabs = viewOf(scheme, 'azerons').tabs.map((t) => t.id);
+    const tabs = viewOf(g, MODE, scheme, 'azerons').tabs.map((t) => t.id);
 
     it.each(tabs)(
       'on the %s tab, each control’s list is its own binding set’s, and a cleared action goes back on it',
       (tab) => {
         const faults: string[] = [];
-        const view = viewOf(scheme, tab);
+        // Nothing lost on the way: the mode is still an entry of the scheme's map, with actions.
+        if (!Object.hasOwn(scheme.map, MODE) || Object.keys(scheme.map[MODE] ?? {}).length === 0)
+          faults.push(`the switches lost mode ${MODE}`);
+        const view = viewOf(g, MODE, scheme, tab);
         for (const kind of kindsOn(view, tab)) {
           const controls = ALL_CONTROLS.filter(
             (c) => c.startsWith(kind) && inSetup(setupOf(scheme.devices), c),
           );
           for (const control of controls) {
             const set = controlSet(scheme, control) ?? '';
-            const list = listFor(viewOf(scheme, tab, control));
-            if (JSON.stringify(list) !== JSON.stringify(expectedFor(scheme, set)))
+            const list = listFor(viewOf(g, MODE, scheme, tab, control));
+            if (JSON.stringify(list) !== JSON.stringify(expectedFor(scheme, set, g, MODE)))
               faults.push(
-                `${control}: lists ${list.length}, its set has ${expectedFor(scheme, set).length} unplaced`,
+                `${control}: lists ${list.length}, its set has ${expectedFor(scheme, set, g, MODE).length} unplaced`,
               );
             const action = shownPresses(scheme, MODE, control).tap;
             if (action === undefined) continue;
             // Click 1: the control (it is selected, as after clearing it); click 2: the action.
             const cleared = clear(scheme, { mode: MODE, control, press: 'tap' });
-            const offered = offeredBy(viewOf(cleared, tab, control));
+            const offered = offeredBy(viewOf(g, MODE, cleared, tab, control));
             if (!offered.includes(action))
               faults.push(`${control}: ${action} isn't offered once cleared`);
             const back = assign(cleared, { mode: MODE, control, press: 'tap' }, action, g);

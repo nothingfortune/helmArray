@@ -538,6 +538,7 @@ export async function applyUnits(plan: Plan, deps: UnitsDeps): Promise<ApplyUnit
   const records = {} as Record<Hand, UnitRecord[]>;
   for (const hand of hands) {
     try {
+      // keyed-write-ok: the key is a hand, left or right, never data
       records[hand] = writableRecordsFor(plan, hand);
     } catch (error) {
       const message = `The ${handName(hand)} unit failed: ${withoutPeriod(messageOf(error))}; nothing on it was changed.`;

@@ -9,6 +9,7 @@ import {
   PAD_CONTROLS,
   helldivers2,
   inSetup,
+  own,
   padSignalOf,
   setupOf,
   resolve,
@@ -51,7 +52,16 @@ import {
   undo,
 } from './editor-model';
 import type { Slot } from './editor-model';
-import { deepFreeze, game, keysScheme, padGame, padScheme, plan } from './editor-fixture';
+import {
+  deepFreeze,
+  game,
+  hostileGame,
+  hostileOneMode,
+  keysScheme,
+  padGame,
+  padScheme,
+  plan,
+} from './editor-fixture';
 
 const slot = (mode: string, control: string, press: Slot['press'] = 'tap'): Slot => ({
   mode,
@@ -1138,125 +1148,136 @@ describe('setPadControl: which Xbox control a button sends', () => {
   });
 });
 
-describe('controller output: what every control shows is what the game does', () => {
-  // Helldivers 2 from the Xbox controller preset, edited by a long run of drags, clears, moves,
-  // chosen Xbox controls and switches of what the Azerons send. After every edit, on every Xbox control something of the setup sends, the action the
-  // controls sending it show is the one the game's controller bindings put on it, and no other
-  // (bar the game's own second uses of one button, such as Climb on a held A next to Interact).
-  const g = helldivers2;
-  // A stick sends the moves: an action a stick sends for is the stick's, not a button's.
-  // The moves too: a stick sends for them, and a button they are dropped on sends the stick's
-  // direction until another action takes their place.
-  const actions = g.actions.map((a) => a.id);
-  const buttons = [
-    ...CYBORG2_LEFT.positions.filter((p) => p.name !== 'stick').map((p) => `L.${p.name}`),
-    ...CYBORG2_RIGHT.positions.filter((p) => p.name !== 'stick').map((p) => `R.${p.name}`),
-  ];
-  const pads = PAD_CONTROLS.filter((c) => !/^[LR]S_/.test(c)).map((c) => `pad.${c}`);
+describe.each([
+  ['Helldivers 2', helldivers2, 'default'],
+  ['a game with hostile ids, in a mode named __proto__', hostileOneMode, '__proto__'],
+] as const)(
+  'controller output: what every control shows is what the game does, on %s',
+  (_name, g, mode) => {
+    // Helldivers 2 from the Xbox controller preset, edited by a long run of drags, clears, moves,
+    // chosen Xbox controls and switches of what the Azerons send. After every edit, on every Xbox control something of the setup sends, the action the
+    // controls sending it show is the one the game's controller bindings put on it, and no other
+    // (bar the game's own second uses of one button, such as Climb on a held A next to Interact).
+    // A stick sends the moves: an action a stick sends for is the stick's, not a button's.
+    // The moves too: a stick sends for them, and a button they are dropped on sends the stick's
+    // direction until another action takes their place.
+    const actions = g.actions.map((a) => a.id);
+    const buttons = [
+      ...CYBORG2_LEFT.positions.filter((p) => p.name !== 'stick').map((p) => `L.${p.name}`),
+      ...CYBORG2_RIGHT.positions.filter((p) => p.name !== 'stick').map((p) => `R.${p.name}`),
+    ];
+    const pads = PAD_CONTROLS.filter((c) => !/^[LR]S_/.test(c)).map((c) => `pad.${c}`);
 
-  /** Deterministic: the same run every time. */
-  function* steps(seed: number, count: number, controls: readonly string[]) {
-    let x = seed;
-    const next = (n: number) => {
-      x = (x * 1103515245 + 12345) % 2147483648;
-      return Math.floor(x / 65536) % n;
-    };
-    for (let i = 0; i < count; i++) {
-      // Mostly drags, clears and moves; now and then a button's Xbox control is chosen, or what
-      // the Azerons send is switched.
-      const kind = next(12);
-      const control = controls[next(controls.length)] ?? '';
-      const other = controls[next(controls.length)] ?? '';
-      const action = actions[next(actions.length)] ?? '';
-      const pad = PAD_CONTROLS[next(PAD_CONTROLS.length)] ?? 'A';
-      yield { kind, control, other, action, pad };
+    /** Deterministic: the same run every time. */
+    function* steps(seed: number, count: number, controls: readonly string[]) {
+      let x = seed;
+      const next = (n: number) => {
+        x = (x * 1103515245 + 12345) % 2147483648;
+        return Math.floor(x / 65536) % n;
+      };
+      for (let i = 0; i < count; i++) {
+        // Mostly drags, clears and moves; now and then a button's Xbox control is chosen, or what
+        // the Azerons send is switched.
+        const kind = next(12);
+        const control = controls[next(controls.length)] ?? '';
+        const other = controls[next(controls.length)] ?? '';
+        const action = actions[next(actions.length)] ?? '';
+        const pad = PAD_CONTROLS[next(PAD_CONTROLS.length)] ?? 'A';
+        yield { kind, control, other, action, pad };
+      }
     }
-  }
 
-  function faults(scheme: Scheme): string[] {
-    const p = plan(scheme, g);
-    const out: string[] = [];
-    // The editor itself never puts two actions on one Xbox control, nor one action on two.
-    const bad = p.findings.filter(
-      (f) => f.rule === 'key-collision' || f.rule === 'pad-bound-twice',
-    );
-    if (bad.length > 0) out.push(`findings: ${bad.map((f) => f.rule).join(', ')}`);
-    // What is wrong is never silent: an error names a control sending the Xbox control.
-    const flagged = (pc: string) =>
-      p.findings.some(
-        (f) =>
-          f.severity === 'error' &&
-          f.control !== undefined &&
-          (padSignalOf(scheme, f.control) === pc ||
-            p.bindings.some(
-              (b) => b.control === f.control && b.signal.kind === 'pad' && b.signal.control === pc,
-            )),
+    function faults(scheme: Scheme): string[] {
+      const p = plan(scheme, g);
+      const out: string[] = [];
+      // The editor itself never puts two actions on one Xbox control, nor one action on two.
+      const bad = p.findings.filter(
+        (f) => f.rule === 'key-collision' || f.rule === 'pad-bound-twice',
       );
-    const nativeOf = (action: string) => g.actions.find((a) => a.id === action)?.native?.pad;
-    // No live Xbox control binds two actions, bar the game's own second uses of one control.
-    for (const pc of new Set(
-      p.gameBindings.flatMap((b) => (b.signal?.kind === 'pad' ? [b.signal.control] : [])),
-    )) {
-      const on = p.gameBindings
-        .filter((b) => b.signal?.kind === 'pad' && b.signal.control === pc)
-        .map((b) => b.action);
-      const moved = on.filter((a) => nativeOf(a) !== pc);
-      if ((moved.length > 1 || (moved.length === 1 && on.length > 1)) && !flagged(pc)) {
-        out.push(`${pc}: binds ${on.join(', ')}, and nothing says so`);
+      if (bad.length > 0) out.push(`findings: ${bad.map((f) => f.rule).join(', ')}`);
+      // What is wrong is never silent: an error names a control sending the Xbox control.
+      const flagged = (pc: string) =>
+        p.findings.some(
+          (f) =>
+            f.severity === 'error' &&
+            f.control !== undefined &&
+            (padSignalOf(scheme, f.control) === pc ||
+              p.bindings.some(
+                (b) =>
+                  b.control === f.control && b.signal.kind === 'pad' && b.signal.control === pc,
+              )),
+        );
+      const nativeOf = (action: string) => g.actions.find((a) => a.id === action)?.native?.pad;
+      // No live Xbox control binds two actions, bar the game's own second uses of one control.
+      for (const pc of new Set(
+        p.gameBindings.flatMap((b) => (b.signal?.kind === 'pad' ? [b.signal.control] : [])),
+      )) {
+        const on = p.gameBindings
+          .filter((b) => b.signal?.kind === 'pad' && b.signal.control === pc)
+          .map((b) => b.action);
+        const moved = on.filter((a) => nativeOf(a) !== pc);
+        if ((moved.length > 1 || (moved.length === 1 && on.length > 1)) && !flagged(pc)) {
+          out.push(`${pc}: binds ${on.join(', ')}, and nothing says so`);
+        }
       }
-    }
-    const controls = [...buttons, ...pads].filter((c) => padSignalOf(scheme, c) !== undefined);
-    for (const pc of new Set(controls.map((c) => padSignalOf(scheme, c)))) {
-      const senders = controls.filter((c) => padSignalOf(scheme, c) === pc);
-      const shown = new Set(senders.map((c) => shownAction(scheme, 'default', c)?.id ?? null));
-      if (shown.size > 1) out.push(`${pc}: shown differently on ${senders.join(', ')}`);
-      const one = [...shown][0] ?? null;
-      const shownNative = one === null ? undefined : nativeOf(one);
-      const bound = p.gameBindings
-        .filter(
-          (b) => b.set === 'controller' && b.signal?.kind === 'pad' && b.signal.control === pc,
-        )
-        .map((b) => b.action)
-        .filter((a) => a === one || nativeOf(a) !== shownNative);
-      const want = one === null ? [] : [one];
-      if (JSON.stringify(bound) !== JSON.stringify(want) && !flagged(String(pc))) {
-        out.push(`${pc}: shows ${String(one)}, the game does ${bound.join(', ') || 'nothing'}`);
+      const controls = [...buttons, ...pads].filter((c) => padSignalOf(scheme, c) !== undefined);
+      for (const pc of new Set(controls.map((c) => padSignalOf(scheme, c)))) {
+        const senders = controls.filter((c) => padSignalOf(scheme, c) === pc);
+        const shown = new Set(senders.map((c) => shownAction(scheme, mode, c)?.id ?? null));
+        if (shown.size > 1) out.push(`${pc}: shown differently on ${senders.join(', ')}`);
+        const one = [...shown][0] ?? null;
+        const shownNative = one === null ? undefined : nativeOf(one);
+        const bound = p.gameBindings
+          .filter(
+            (b) => b.set === 'controller' && b.signal?.kind === 'pad' && b.signal.control === pc,
+          )
+          .map((b) => b.action)
+          .filter((a) => a === one || nativeOf(a) !== shownNative);
+        const want = one === null ? [] : [one];
+        if (JSON.stringify(bound) !== JSON.stringify(want) && !flagged(String(pc))) {
+          out.push(`${pc}: shows ${String(one)}, the game does ${bound.join(', ') || 'nothing'}`);
+        }
       }
+      return out;
     }
-    return out;
-  }
 
-  it.each([
-    ['both Azerons', AZERONS_ONLY, buttons],
-    [
-      'both Azerons and the controller',
-      { ...AZERONS_ONLY, controller: true },
-      [...buttons, ...pads],
-    ],
-    ['the controller only', { ...AZERONS_ONLY, azerons: 'none' as const, controller: true }, pads],
-  ])('holds through 300 edits with %s', (_, devices, controls) => {
-    let scheme: Scheme = { ...xboxControllerPreset(g), devices };
-    if (devices.azerons === 'none') scheme = { ...scheme, padMap: {}, map: { default: {} } };
-    const found: string[] = [];
-    let n = 0;
-    for (const step of steps(7 + controls.length, 300, controls)) {
-      n++;
-      const at = { mode: 'default', control: step.control, press: 'tap' as const };
-      scheme =
-        step.kind < 4
-          ? assign(scheme, at, step.action, g)
-          : step.kind < 7
-            ? clear(scheme, at)
-            : step.kind < 10
-              ? move(scheme, at, { ...at, control: step.other }, g)
-              : step.kind === 10
-                ? setPadControl(scheme, step.control, step.pad, g)
-                : setOutput(scheme, scheme.output === 'pad' ? 'keys' : 'pad', g);
-      for (const fault of faults(scheme)) found.push(`after edit ${n}: ${fault}`);
-    }
-    expect(found).toEqual([]);
-  });
-});
+    it.each([
+      ['both Azerons', AZERONS_ONLY, buttons],
+      [
+        'both Azerons and the controller',
+        { ...AZERONS_ONLY, controller: true },
+        [...buttons, ...pads],
+      ],
+      [
+        'the controller only',
+        { ...AZERONS_ONLY, azerons: 'none' as const, controller: true },
+        pads,
+      ],
+    ])('holds through 300 edits with %s', (_, devices, controls) => {
+      let scheme: Scheme = { ...xboxControllerPreset(g), devices };
+      if (devices.azerons === 'none')
+        scheme = { ...scheme, padMap: {}, map: Object.fromEntries([[mode, {}]]) };
+      const found: string[] = [];
+      let n = 0;
+      for (const step of steps(7 + controls.length, 300, controls)) {
+        n++;
+        const at = { mode: mode, control: step.control, press: 'tap' as const };
+        scheme =
+          step.kind < 4
+            ? assign(scheme, at, step.action, g)
+            : step.kind < 7
+              ? clear(scheme, at)
+              : step.kind < 10
+                ? move(scheme, at, { ...at, control: step.other }, g)
+                : step.kind === 10
+                  ? setPadControl(scheme, step.control, step.pad, g)
+                  : setOutput(scheme, scheme.output === 'pad' ? 'keys' : 'pad', g);
+        for (const fault of faults(scheme)) found.push(`after edit ${n}: ${fault}`);
+      }
+      expect(found).toEqual([]);
+    });
+  },
+);
 
 describe('the sends-nothing fix on a fixed control', () => {
   it('keeps a working tap and takes off only the press that sends nothing', () => {
@@ -1454,7 +1475,6 @@ describe('a switch of output or devices keeps what every control shows', () => {
   // press. Two things a switch may do: a control that showed nothing may come to show an action
   // (it now sends the same Xbox control as a button that has one), and an Azeron button switched
   // to a controller drops its long press and double tap, which a controller button hasn't got.
-  const g = helldivers2;
   const DEVICES: SetupDevices[] = [
     { azerons: 'both', keyboard: false, mouse: false, controller: false },
     { azerons: 'both', keyboard: false, mouse: false, controller: true },
@@ -1483,34 +1503,75 @@ describe('a switch of output or devices keeps what every control shows', () => {
    * The Azerons themselves: to keys, exactly what they showed; to a controller, the same tap, and
    * no long press or double tap, which a controller button hasn't got.
    */
-  function faultsOf(before: Scheme, after: Scheme, outputSwitch: boolean): string[] {
+  function faultsOf(
+    before: Scheme,
+    after: Scheme,
+    outputSwitch: boolean,
+    modes: readonly string[],
+  ): string[] {
     const was = setupOf(before.devices);
     const now = setupOf(after.devices);
     const out: string[] = [];
-    for (const control of everyControl) {
-      if (!inSetup(was, control) || !inSetup(now, control)) continue;
-      const a = shownPresses(before, 'default', control);
-      const b = shownPresses(after, 'default', control);
-      const say = () => `${control}: ${JSON.stringify(a)} became ${JSON.stringify(b)}`;
-      if (
-        !outputSwitch ||
-        after.output === 'keys' ||
-        control.startsWith('key.') ||
-        control.startsWith('mouse.')
-      ) {
-        if (!same(a, b)) out.push(say());
-      } else if (azeron(control)) {
-        if (!same(a.tap === undefined ? {} : { tap: a.tap }, b)) out.push(say());
-      } else if (
-        !(['tap', 'long', 'double'] as const).every((p) => a[p] === undefined || a[p] === b[p])
-      ) {
-        out.push(say());
+    for (const mode of modes)
+      for (const control of everyControl) {
+        if (!inSetup(was, control) || !inSetup(now, control)) continue;
+        const a = shownPresses(before, mode, control);
+        const b = shownPresses(after, mode, control);
+        const say = () => `${mode} ${control}: ${JSON.stringify(a)} became ${JSON.stringify(b)}`;
+        if (
+          !outputSwitch ||
+          after.output === 'keys' ||
+          control.startsWith('key.') ||
+          control.startsWith('mouse.')
+        ) {
+          if (!same(a, b)) out.push(say());
+        } else if (azeron(control)) {
+          if (!same(a.tap === undefined ? {} : { tap: a.tap }, b)) out.push(say());
+        } else if (
+          !(['tap', 'long', 'double'] as const).every((p) => a[p] === undefined || a[p] === b[p])
+        ) {
+          out.push(say());
+        }
       }
-    }
     return out;
   }
 
-  it.each([11, 23, 37])('holds through 200 edits with switches among them (seed %i)', (seed) => {
+  it('keeps every hostile mode and its actions through every switch, as entries of their own', () => {
+    const start = xboxControllerPreset(hostileGame);
+    const faults: string[] = [];
+    const check = (label: string, before: Scheme, after: Scheme, outputSwitch: boolean) => {
+      for (const mode of ['__proto__', 'constructor']) {
+        if (!Object.hasOwn(after.map, mode)) faults.push(`${label}: mode ${mode} is gone`);
+      }
+      faults.push(
+        ...faultsOf(before, after, outputSwitch, ['__proto__', 'constructor']).map(
+          (f) => `${label}: ${f}`,
+        ),
+      );
+    };
+    // The preset puts actions in both modes, the renamed ones among them: Reload, renamed
+    // `constructor`, on the button sending X, in the mode named `__proto__`.
+    expect([
+      Object.keys(own(start.map, 'constructor') ?? {}).length > 0,
+      Object.values(own(start.map, '__proto__') ?? {}).some((p) => p.tap === 'constructor'),
+    ]).toEqual([true, true]);
+    const keys = setOutput(start, 'keys', hostileGame);
+    check('to keys', start, keys, true);
+    check('back to a controller', keys, setOutput(keys, 'pad', hostileGame), true);
+    for (const devices of DEVICES)
+      check(JSON.stringify(devices), start, setDevices(start, devices, hostileGame), false);
+    expect(faults).toEqual([]);
+  });
+
+  it.each([
+    [11, helldivers2],
+    [23, helldivers2],
+    [37, helldivers2],
+    // Modes and actions named __proto__, constructor, toString, hasOwnProperty.
+    [11, hostileGame],
+    [23, hostileGame],
+  ] as const)('holds through 200 edits with switches among them (seed %i, %o)', (seed, g) => {
+    const modes = g.modes.map((m) => m.id);
     let x = seed;
     const next = (n: number) => {
       x = (x * 1103515245 + 12345) % 2147483648;
@@ -1524,15 +1585,16 @@ describe('a switch of output or devices keeps what every control shows', () => {
       const control = everyControl[next(everyControl.length)] ?? '';
       const press = (['tap', 'tap', 'long', 'double'] as const)[next(4)] ?? 'tap';
       const action = actions[next(actions.length)] ?? '';
-      if (kind < 5) scheme = assign(scheme, { mode: 'default', control, press }, action, g);
-      else if (kind < 7) scheme = clear(scheme, { mode: 'default', control, press });
+      const mode = g.actions.find((a) => a.id === action)?.mode ?? 'default';
+      if (kind < 5) scheme = assign(scheme, { mode, control, press }, action, g);
+      else if (kind < 7) scheme = clear(scheme, { mode, control, press });
       else {
         const before = scheme;
         scheme =
           kind === 7
             ? setOutput(scheme, scheme.output === 'pad' ? 'keys' : 'pad', g)
             : setDevices(scheme, DEVICES[next(DEVICES.length)] ?? AZERONS_ONLY, g);
-        for (const fault of faultsOf(before, scheme, kind === 7))
+        for (const fault of faultsOf(before, scheme, kind === 7, modes))
           found.push(`after edit ${i}: ${fault}`);
       }
     }

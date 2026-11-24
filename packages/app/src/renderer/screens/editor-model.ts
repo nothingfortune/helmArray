@@ -404,24 +404,26 @@ export function setDevices(scheme: Scheme, devices: SetupDevices, game: Game): S
     [...KEYBOARD_MOUSE.controls, ...XBOX_PAD.controls].filter((c) => c.sends).map((c) => c.id),
   );
   const out: Scheme = { ...scheme, devices: next };
-  const map: Scheme['map'] = {};
+  // Every record here is keyed by data (mode and control ids, which may be `__proto__`): built as
+  // a Map, and turned into a record with Object.fromEntries, never written by key.
+  const map = new Map<ModeId, ByControl>();
   for (const [mode, byControl] of Object.entries(scheme.map)) {
     // Every control the setup keeps shows what it showed, the tap it showed through its Xbox
     // control included: that control may be one the setup loses.
     const controls = new Set([...Object.keys(byControl), ...Object.keys(scheme.padMap), ...known]);
-    const rows: ByControl = {};
+    const rows: [ControlId, PressMap][] = [];
     for (const control of controls) {
       if (!kept(control)) continue;
       const shown = shownPresses(scheme, mode, control);
-      if (Object.keys(shown).length > 0) Object.assign(rows, withOwn<PressMap>({}, control, shown));
+      if (Object.keys(shown).length > 0) rows.push([control, shown]);
     }
-    map[mode] = rows;
+    map.set(mode, Object.fromEntries(rows));
   }
   // A device the setup gains starts from what the game ships: each action on no control of that
   // binding set in its mode goes on its own key, mouse button or controller button, where nothing
   // of the setup shows or sends anything.
   const gained = (control: ControlId) => inSetup(after, control) && !inSetup(before, control);
-  const withMap: Scheme = { ...out, map };
+  const withMap: Scheme = { ...out, map: Object.fromEntries(map) };
   for (const action of game.actions) {
     const mode = action.mode;
     const key = action.native?.key;
@@ -430,8 +432,8 @@ export function setDevices(scheme: Scheme, devices: SetupDevices, game: Game): S
       key?.kind === 'mouse' ? `mouse.${key.button}` : undefined,
       action.native?.pad === undefined ? undefined : `pad.${action.native.pad}`,
     ];
-    const rows = own(map, mode) ?? {};
     for (const home of homes) {
+      const rows = map.get(mode) ?? {};
       if (home === undefined || !known.has(home) || !gained(home)) continue;
       const set = controlSet(withMap, home);
       const busy = Object.entries(rows).some(
@@ -446,14 +448,10 @@ export function setDevices(scheme: Scheme, devices: SetupDevices, game: Game): S
           (c) => c !== home && padSignalOf(withMap, c) === home.slice(4),
         );
       if (busy || sent) continue;
-      map[mode] = withOwn<PressMap>(rows, home, { tap: action.id });
-      Object.assign(rows, map[mode]);
+      map.set(mode, withOwn<PressMap>(rows, home, { tap: action.id }));
     }
   }
-  return settle(
-    { ...out, map: Object.fromEntries(Object.entries(map).map(([m, r]) => [m, prune(r)])) },
-    game,
-  );
+  return settle({ ...out, map: Object.fromEntries([...map].map(([m, r]) => [m, prune(r)])) }, game);
 }
 
 interface BehaviourPatch {
@@ -750,6 +748,7 @@ function stickFor(
     const pad = STICK_PAD_DIRECTIONS[prefix][direction];
     const key = game.actions.find((a) => a.native?.pad === pad && a.native.key?.kind === 'key')
       ?.native?.key;
+    // keyed-write-ok: the key is a stick direction, one of four names
     if (key !== undefined) directions[direction] = key;
   }
   return Object.keys(directions).length === 0
@@ -774,9 +773,11 @@ export function setOutput(scheme: Scheme, output: Scheme['output'], game: Game):
   const setup = setupOf(scheme.devices);
   // 1. The whole layout as shown, for every control of the setup.
   const pads = XBOX_PAD.controls.filter((c) => c.sends).map((c) => c.id);
-  const shown: Record<ModeId, ByControl> = {};
+  // Keyed by data (mode and control ids, which may be `__proto__`): Maps and entry lists, turned
+  // into records with Object.fromEntries, never written by key.
+  const shown = new Map<ModeId, ByControl>();
   for (const [mode, byControl] of Object.entries(scheme.map)) {
-    const rows: ByControl = {};
+    const rows: [ControlId, PressMap][] = [];
     for (const control of new Set([
       ...Object.keys(byControl),
       ...Object.keys(scheme.padMap),
@@ -784,37 +785,37 @@ export function setOutput(scheme: Scheme, output: Scheme['output'], game: Game):
     ])) {
       if (!inSetup(setup, control) || isStick(control)) continue;
       const presses = shownPresses(scheme, mode, control);
-      if (Object.keys(presses).length > 0)
-        Object.assign(rows, withOwn<PressMap>({}, control, presses));
+      if (Object.keys(presses).length > 0) rows.push([control, presses]);
     }
-    shown[mode] = rows;
+    shown.set(mode, Object.fromEntries(rows));
   }
   // 2. The new maps, built from it. The Azeron buttons keep what they showed, as their own: all
   // of it with keys, the tap with a controller. With keys the controller's buttons keep what they
   // showed, which may have been an Azeron button's; with a controller they keep their own. Every
   // other control keeps its own presses, untouched.
-  const map: Scheme['map'] = {};
-  for (const [mode, byControl] of Object.entries(scheme.map)) {
-    const rows: ByControl = {};
-    for (const [control, presses] of Object.entries(byControl)) {
-      if (!isAzeron(control) && !(control.startsWith('pad.') && output === 'keys'))
-        Object.assign(rows, withOwn<PressMap>({}, control, { ...presses }));
-    }
-    for (const [control, presses] of Object.entries(own(shown, mode) ?? {})) {
-      if (isAzeron(control)) {
-        const kept: PressMap =
-          output === 'keys'
-            ? { ...presses }
-            : presses.tap === undefined
-              ? {}
-              : { tap: presses.tap };
-        Object.assign(rows, withOwn<PressMap>({}, control, kept));
-      } else if (control.startsWith('pad.') && output === 'keys') {
-        Object.assign(rows, withOwn<PressMap>({}, control, { ...presses }));
+  const map: Scheme['map'] = Object.fromEntries(
+    Object.entries(scheme.map).map(([mode, byControl]) => {
+      const rows: [ControlId, PressMap][] = Object.entries(byControl)
+        .filter(
+          ([control]) => !isAzeron(control) && !(control.startsWith('pad.') && output === 'keys'),
+        )
+        .map(([control, presses]) => [control, { ...presses }]);
+      for (const [control, presses] of Object.entries(shown.get(mode) ?? {})) {
+        if (isAzeron(control)) {
+          const kept: PressMap =
+            output === 'keys'
+              ? { ...presses }
+              : presses.tap === undefined
+                ? {}
+                : { tap: presses.tap };
+          rows.push([control, kept]);
+        } else if (control.startsWith('pad.') && output === 'keys') {
+          rows.push([control, { ...presses }]);
+        }
       }
-    }
-    map[mode] = prune(rows);
-  }
+      return [mode, prune(Object.fromEntries(rows))];
+    }),
+  );
   let behaviour: Scheme['behaviour'] = { ...scheme.behaviour };
   for (const prefix of ['L', 'R'] as const) {
     const id = `${prefix}.stick`;
@@ -870,10 +871,14 @@ function choosePads(scheme: Scheme, game: Game): Scheme['padMap'] {
       const id = own(own(scheme.map, mode) ?? {}, button)?.tap;
       return id === undefined ? [] : [[mode, id] as const];
     });
+    // A control fits the button when, in every mode, it carries nothing or the button's own
+    // action: never another action, nor one in a mode the button is empty in, which the button
+    // would then show (and do) too.
+    const tapIn = new Map(taps);
     const fits = (pad: PadControl) =>
-      taps.every(([mode, id]) => {
+      modes.every((mode) => {
         const there = carries.get(pad)?.get(mode);
-        return there === undefined || there === id;
+        return there === undefined || there === tapIn.get(mode);
       });
     const nativeOf = (id: ActionId) => game.actions.find((a) => a.id === id)?.native?.pad;
     const free = (pad: PadControl) => !sticks.has(pad) && (carries.get(pad)?.size ?? 0) === 0;

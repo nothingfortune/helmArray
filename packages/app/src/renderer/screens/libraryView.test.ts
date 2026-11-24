@@ -331,21 +331,34 @@ describe('the card names, for each unit, the scheme last written to it', () => {
     { azerons: 'left', keyboard: false, mouse: true, controller: false },
     { azerons: 'none', keyboard: true, mouse: true, controller: false },
   ];
-  const GAMES = ['alpha', 'beta'];
+  const PLAIN = { games: ['alpha', 'beta'], schemes: ['alpha-1', 'alpha-2', 'beta-1', 'beta-2'] };
+  // Game and scheme ids that are also names on every object.
+  const HOSTILE = {
+    games: ['__proto__', 'constructor'],
+    schemes: ['toString', 'hasOwnProperty', '__proto__', 'constructor'],
+  };
 
-  it.each([3, 17, 29, 41])('holds through 150 applies and edits (seed %i)', (seed) => {
+  it.each([
+    [3, PLAIN],
+    [17, PLAIN],
+    [29, PLAIN],
+    [41, PLAIN],
+    [3, HOSTILE],
+    [17, HOSTILE],
+  ])('holds through 150 applies and edits (seed %i, ids %o)', (seed, ids) => {
+    const GAMES = ids.games;
     let x = seed;
     const next = (n: number) => {
       x = (x * 1103515245 + 12345) % 2147483648;
       // The high bits: an LCG's low bits repeat in a short cycle.
       return Math.floor(x / 65536) % n;
     };
-    const schemes = GAMES.flatMap((gameId) =>
-      [1, 2].map((n) => ({
+    const schemes = GAMES.flatMap((gameId, g) =>
+      [0, 1].map((n) => ({
         gameId,
         ref: {
           ...XBOX,
-          id: `${gameId}-${n}`,
+          id: ids.schemes[g * 2 + n] ?? `${gameId}-${n}`,
           name: `${gameId} ${n}`,
           devices: { ...AZERONS_ONLY },
         },
@@ -375,6 +388,7 @@ describe('the card names, for each unit, the scheme last written to it', () => {
             at,
           },
         );
+        // keyed-write-ok: the key is a hand, left or right
         for (const hand of hands) truth[hand] = s.ref.id;
         lastApply.set(s.gameId, { schemeId: s.ref.id, at });
       }
