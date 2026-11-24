@@ -1,9 +1,16 @@
 // Repeated findings, grouped by role: "4 movement actions aren't on a button".
 import { describe, expect, it } from 'vitest';
 import type { Scheme } from '@helmarray/core';
-import { BUILT_IN_DEVICES, blankKeysScheme, helldivers2, resolve } from '@helmarray/core';
+import {
+  BUILT_IN_DEVICES,
+  blankKeysScheme,
+  helldivers2,
+  resolve,
+  xboxControllerPreset,
+} from '@helmarray/core';
+import { clear } from './editor-model';
 import { groupChecks } from './check-groups';
-import type { CheckItem } from './check-groups';
+import type { CheckGroup, CheckItem } from './check-groups';
 import { editorView } from './editor-view';
 import { game, keysScheme } from './editor-fixture';
 
@@ -70,5 +77,48 @@ describe('groupChecks', () => {
     );
     const fire = rows.filter((r) => r.finding.action === 'fire_primary');
     expect(groupChecks(fire, helldivers2).map((i) => i.kind)).toEqual(['row']);
+  });
+});
+
+describe('the group’s fix, through the gate', () => {
+  // 16 required actions on every Xbox control a button may send, and two more on none.
+  const PADS = ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'BACK', 'START', 'LS', 'RS'] as const;
+  const DPAD = ['DPAD_UP', 'DPAD_DOWN', 'DPAD_LEFT', 'DPAD_RIGHT'] as const;
+  const crowded = {
+    id: 'crowded',
+    name: 'Crowded',
+    modes: [{ id: 'default', name: 'Default' }],
+    actions: [...PADS, ...DPAD, null, null].map((pad, i) => ({
+      id: `a${i}`,
+      name: `Action ${i}`,
+      mode: 'default',
+      role: 'combat' as const,
+      required: true,
+      native: {
+        key: { kind: 'key' as const, code: 'ABCDEFGHIJKLMNOPQR'.charAt(i) as 'A' },
+        ...(pad === null ? {} : { pad }),
+      },
+    })),
+  };
+  const groupOf = (scheme: Scheme) =>
+    checksOf(scheme, crowded).find((i): i is CheckGroup => i.kind === 'group');
+
+  it('offers none when every controller button is in use', () => {
+    const group = groupOf(xboxControllerPreset(crowded));
+    expect([group?.rows.length, group?.fix]).toEqual([2, undefined]);
+  });
+
+  it('offers none when its fixes, one after another, would leave one of them', () => {
+    // One button freed (its own action, a5, joins the two): each could go on it, but not all.
+    const freed = clear(xboxControllerPreset(crowded), {
+      mode: 'default',
+      control: 'L.index_1',
+      press: 'tap',
+    });
+    const group = groupOf(freed);
+    expect([group?.rows.map((r) => r.fix?.label), group?.fix]).toEqual([
+      ['Put it on a button', 'Put it on a button', 'Put it on a button'],
+      undefined,
+    ]);
   });
 });

@@ -20,6 +20,7 @@ import type {
   StickDirection,
 } from '@helmarray/core';
 import {
+  BUILT_IN_DEVICES,
   KEYBOARD_MOUSE,
   PAD_CONTROLS,
   PRESSES,
@@ -30,6 +31,7 @@ import {
   own,
   padSignalOf,
   placedIn,
+  resolve,
   setupOf,
   stickActions,
   stickDirections,
@@ -41,7 +43,7 @@ import { handPrefix, positionName, positionOf } from '../unit/layout';
 import { isAcceptable, isStick, keyLabelOf, pressesOf, shownAction } from './editor-model';
 import { groupChecks } from './check-groups';
 import type { CheckItem } from './check-groups';
-import { fixFor } from './fixes';
+import { offerFor, settlesAll } from './fixes';
 import type { Fix } from './fixes';
 
 // ---- Signals, as words for a caption ----
@@ -208,7 +210,10 @@ export interface FindingRow {
   finding: Finding;
   /** True when the player may keep it: only the checks can be kept. */
   canKeep: boolean;
+  /** Its fix, only when applying it removes the finding and adds no error (THE FIX GATE). */
   fix?: Fix;
+  /** Why its rule's fix isn't offered here, in one plain sentence: it can't act, or wouldn't do. */
+  why?: string;
   /** The player's reason, for a finding that is kept. */
   kept?: string;
 }
@@ -826,8 +831,9 @@ export function editorView(input: EditorViewInput): EditorView {
     };
     if (finding.accepted !== undefined) row.kept = finding.accepted;
     else {
-      const fix = fixFor(finding, scheme, game, plan);
-      if (fix !== undefined) row.fix = fix;
+      const offer = offerFor(finding, scheme, game, plan);
+      if (offer !== null && 'fix' in offer) row.fix = offer.fix;
+      else if (offer !== null) row.why = offer.why;
     }
     return row;
   });
@@ -885,7 +891,18 @@ export function editorView(input: EditorViewInput): EditorView {
     moves,
     onStick,
     findings: open,
-    checks: groupChecks(open, game),
+    // A group's one fix goes through the gate too: all of its findings gone, no new error.
+    checks: groupChecks(open, game, (fix, members) => {
+      const made = fix.apply(scheme);
+      return (
+        made !== scheme &&
+        settlesAll(
+          members.map((r) => r.finding),
+          plan,
+          resolve(made, game, BUILT_IN_DEVICES),
+        )
+      );
+    }),
     kept: rows.filter((r) => r.kept !== undefined),
   };
 }

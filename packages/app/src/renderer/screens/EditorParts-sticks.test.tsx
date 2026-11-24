@@ -2,7 +2,7 @@
 // the side panel, the actions on the stick, and the controller's stick rows.
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import type { Scheme } from '@helmarray/core';
+import type { Game, PadControl, Scheme } from '@helmarray/core';
 import {
   BUILT_IN_DEVICES,
   blankKeysScheme,
@@ -119,5 +119,39 @@ describe('the controller’s sticks', () => {
       <DeviceArea view={v} selected={undefined} onSelect={none} onDropAction={none} />,
     );
     expect(html).toContain('Move forward, Move back, Strafe left, Strafe right');
+  });
+});
+
+describe('a check whose fix can’t act', () => {
+  it('says why in one sentence, and draws no fix button', () => {
+    const pads = ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'BACK', 'START', 'LS', 'RS'];
+    const crowded: Game = {
+      id: 'crowded',
+      name: 'Crowded',
+      modes: [{ id: 'default', name: 'Default' }],
+      actions: [...pads, 'DPAD_UP', 'DPAD_DOWN', 'DPAD_LEFT', 'DPAD_RIGHT', null].map((pad, i) => ({
+        id: `a${i}`,
+        name: `Action ${i}`,
+        mode: 'default',
+        role: 'combat',
+        required: true,
+        native: pad === null ? {} : { pad: pad as PadControl },
+      })),
+    };
+    const scheme = xboxControllerPreset(crowded);
+    const v = editorView({
+      scheme,
+      game: crowded,
+      plan: resolve(scheme, crowded, BUILT_IN_DEVICES),
+      mode: 'default',
+    });
+    const html = renderToStaticMarkup(
+      <Checks view={v} onFix={none} onKeep={none} onFlag={none} onFixAll={none} onKeepAll={none} />,
+    );
+    expect([
+      html.includes('Every controller button is in use; clear one first.'),
+      html.includes('Put it on a button'),
+      html.includes('Keep, I know'),
+    ]).toEqual([true, false, true]);
   });
 });

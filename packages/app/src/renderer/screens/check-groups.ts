@@ -42,7 +42,12 @@ const ROLE_WORDS: Readonly<Record<Role, string>> = {
  * The findings in the order given, with every two or more of a grouped rule about actions of one
  * role, in one mode, in one group at the place of the first. Anything else stays a row of its own.
  */
-export function groupChecks(rows: readonly FindingRow[], game: Game): CheckItem[] {
+export function groupChecks(
+  rows: readonly FindingRow[],
+  game: Game,
+  /** Whether the group's one fix settles all its findings (the fix gate); without it, trusted. */
+  works: (fix: Fix, rows: readonly FindingRow[]) => boolean = () => true,
+): CheckItem[] {
   const roleOf = (row: FindingRow): Role | null =>
     game.actions.find((a) => a.id === row.finding.action)?.role ?? null;
   const groupKey = (row: FindingRow): string | null =>
@@ -65,12 +70,18 @@ export function groupChecks(rows: readonly FindingRow[], game: Game): CheckItem[
     }
     if (placed.has(key)) continue;
     placed.add(key);
-    out.push(groupOf(key, group, roleOf(row), game));
+    out.push(groupOf(key, group, roleOf(row), game, works));
   }
   return out;
 }
 
-function groupOf(key: string, rows: FindingRow[], role: Role | null, game: Game): CheckGroup {
+function groupOf(
+  key: string,
+  rows: FindingRow[],
+  role: Role | null,
+  game: Game,
+  works: (fix: Fix, rows: readonly FindingRow[]) => boolean,
+): CheckGroup {
   const rule = rows[0]?.finding.rule ?? '';
   const words = GROUPED[rule] ?? { rest: '', fix: '' };
   const mode = rows[0]?.finding.mode;
@@ -90,10 +101,11 @@ function groupOf(key: string, rows: FindingRow[], role: Role | null, game: Game)
     canKeep: rows.every((r) => r.canKeep),
   };
   if (fixes.every((f): f is Fix => f !== undefined)) {
-    group.fix = {
+    const fix: Fix = {
       label: words.fix,
-      apply: (scheme: Scheme) => fixes.reduce((s, fix) => fix.apply(s), scheme),
+      apply: (scheme: Scheme) => fixes.reduce((s, f) => f.apply(s), scheme),
     };
+    if (works(fix, rows)) group.fix = fix;
   }
   return group;
 }

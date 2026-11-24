@@ -233,3 +233,61 @@ for (const [width, height] of [
     expect(layout).toEqual({ rows: 1, scrolls: false, unitsInView: [true, true] });
   });
 }
+
+// Codex, on #106: with every Xbox control a button may send in use, "Put it on a button" did
+// nothing. It is offered only when it works; until then the check says why.
+test('a required action with every controller button in use says so, and is fixed once one is free', async ({
+  helm,
+}) => {
+  const { page } = helm;
+  await page.evaluate(async () => {
+    const helm = (
+      window as unknown as {
+        helm: {
+          saveGame(game: unknown): Promise<void>;
+          createScheme(gameId: string, preset: string): Promise<{ id: string }>;
+          setActive(gameId: string, schemeId: string): Promise<void>;
+        };
+      }
+    ).helm;
+    const pads = ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'BACK', 'START', 'LS', 'RS'];
+    const all = [...pads, 'DPAD_UP', 'DPAD_DOWN', 'DPAD_LEFT', 'DPAD_RIGHT', null];
+    await helm.saveGame({
+      id: 'crowded',
+      name: 'Crowded',
+      modes: [{ id: 'default', name: 'Default' }],
+      actions: all.map((pad, i) => ({
+        id: `a${i}`,
+        name: `Action ${i}`,
+        mode: 'default',
+        role: 'combat',
+        required: true,
+        ...(pad === null ? {} : { native: { pad } }),
+      })),
+    });
+    const made = await helm.createScheme('crowded', 'xbox');
+    await helm.setActive('crowded', made.id);
+  });
+  await page.getByRole('button', { name: 'Look again' }).click();
+  await page.locator('.tile', { hasText: 'Crowded' }).locator('.tile-button').click();
+  await expect(page.getByRole('heading', { name: 'Crowded' })).toBeVisible();
+
+  const last = row(page, /^Action 16/);
+  await expect(last).toContainText('Every controller button is in use; clear one first.');
+  await expect(last.getByRole('button', { name: 'Put it on a button' })).toHaveCount(0);
+
+  // One button cleared: its own action and Action 16 can each go on it, so each offers the fix.
+  await leftUnit(page)
+    .getByRole('button', { name: /, index 1$/ })
+    .click();
+  await page.getByRole('button', { name: 'Clear tap' }).click();
+  // The two are one line now; its own fix isn't offered, as only one of them can go.
+  const group = row(page, "2 combat actions aren't on a button.");
+  await expect(group).toBeVisible();
+  await expect(group.getByRole('button', { name: 'Put them on buttons' })).toHaveCount(0);
+  await checks(page).getByText('Show each').click();
+  await last.getByRole('button', { name: 'Put it on a button' }).click();
+  await expect(last).toHaveCount(0);
+  // On the first empty button that can send it, the freed Xbox control; that button is selected.
+  await expect(page.locator('.ed-panel-title')).toHaveText('Action 16');
+});

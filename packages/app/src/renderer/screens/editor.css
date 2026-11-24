@@ -233,6 +233,9 @@
   background: var(--color-raised);
   border-color: var(--color-line-key);
 }
+.ed-check-why {
+  color: var(--color-secondary);
+}
 .ed-check-subject {
   font-weight: 600;
 }

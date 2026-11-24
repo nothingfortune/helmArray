@@ -62,7 +62,10 @@ function CheckRow({
         className={`dot tone-${row.finding.severity === 'error' ? 'error' : 'warning'}`}
         aria-hidden="true"
       />
-      <span className="ed-check-text">{row.finding.message}</span>
+      <span className="ed-check-text">
+        {row.finding.message}
+        {row.why !== undefined && <span className="ed-check-why"> {row.why}</span>}
+      </span>
       {row.fix && (
         <button type="button" className="btn ed-fix" onClick={() => onFix(row)}>
           {row.fix.label}

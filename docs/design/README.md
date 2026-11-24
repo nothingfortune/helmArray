@@ -74,6 +74,9 @@ and has not drawn them on the canvas yet:
   to Xbox Y"), and after Apply the same lines as the bind sheet.
 - **Recent games** in the Editor's bar, after the game's name: a muted "Recent" and up to three
   games as ghost buttons, each opening that game's scheme in one click (J3).
+- **A check with no fix it can offer** says why after its sentence, in the secondary colour ("Every
+  controller button is in use; clear one first."). A fix button is drawn only when applying it
+  removes the finding and adds no error.
 - **The checks' groups**: findings of one rule about actions of one role are one line ("**4
   movement actions** aren't on a button.") with one fix for them all, and *Show each* opens them.
 - **The stick in the side panel** lists its four directions read only (each with its action and
