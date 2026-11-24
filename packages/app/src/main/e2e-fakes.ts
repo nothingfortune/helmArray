@@ -4,7 +4,13 @@
 //
 // Loaded only by a test run, through a dynamic import, so a normal run never loads it.
 
-import { FakeUnit, REPORT_LENGTH, decodeStoredRecord } from '@helmarray/azeron';
+import {
+  Command,
+  FakeUnit,
+  REPORT_LENGTH,
+  decodeStoredRecord,
+  parseHostReport,
+} from '@helmarray/azeron';
 import type { Backends, E2eConfig } from './e2e-seam';
 import { E2E_UNIT_IDS, isInside } from './e2e-seam';
 import type { HidBackend, HidDevice, HidDeviceInfo } from './hid-transport';
@@ -71,7 +77,22 @@ export interface FakeUnitView {
   }[];
   /** How many reports the unit was sent, in all. */
   reportsReceived: number;
+  /**
+   * How many of them change what the unit holds or runs: a write, a name, a copy, a switch, a
+   * delete. The running-slot ask and every read are not counted, so a unit no one wrote to stays
+   * at what it was however often it was looked at.
+   */
+  writesReceived: number;
 }
+
+/** The commands that change a unit: everything the app sends that is not a read. */
+const WRITES: ReadonlySet<number> = new Set([
+  Command.CHECK_PROFILE,
+  Command.PROFILE_NAME,
+  Command.OBM_COPY,
+  Command.SWITCH_PROFILE,
+  Command.DELETE_PROFILE,
+]);
 
 /** What a test drives and looks at from outside the app, through `electronApp.evaluate`. */
 export interface E2eControl {
@@ -143,6 +164,8 @@ export function fakeBackends(config: E2eConfig): Backends {
         }),
       })),
     reportsReceived: unit.received.length,
+    writesReceived: unit.received.filter((frame) => WRITES.has(parseHostReport(frame).command))
+      .length,
   });
   const control: E2eControl = {
     units: () => [view('left', left), view('right', right)],

@@ -37,6 +37,7 @@ describe('the versions', () => {
     expect(currentVersion('game')).toBe(MIGRATIONS.game.length + 1);
     expect(currentVersion('settings')).toBe(MIGRATIONS.settings.length + 1);
     expect(currentVersion('applied')).toBe(MIGRATIONS.applied.length + 1);
+    expect(currentVersion('units')).toBe(MIGRATIONS.units.length + 1);
   });
 });
 

@@ -2,13 +2,15 @@ import { useRef, useState } from 'react';
 import { Popover } from 'radix-ui';
 import type { AppState, LibraryEntry } from '../../shared/api';
 import { coverUrl } from '../../shared/cover';
-import { START, runMake, step } from './libraryFlow';
+import { START, runMake, runPick, step } from './libraryFlow';
 import type { FlowEvent, FlowState } from './libraryFlow';
 import {
   chosenScheme,
   currentCard,
   defaultChoices,
   filterEntries,
+  heldSchemes,
+  setupWords,
   statusLine,
   summary,
 } from './libraryView';
@@ -50,7 +52,7 @@ function Art({ entry, kind }: { entry: LibraryEntry; kind: 'portrait' | 'header'
 function Choices({ entry, send }: { entry: LibraryEntry; send: Send }) {
   return (
     <div className="choices">
-      <span className="hint">Start from</span>
+      <span className="hint">{entry.schemes.length > 0 ? 'New from' : 'Start from'}</span>
       {defaultChoices(entry).map(({ preset, label }) => (
         <button
           key={preset}
@@ -81,18 +83,19 @@ function EditGame({ entry, onOpenGame }: { entry: LibraryEntry; onOpenGame: Open
 
 function Tile({
   entry,
-  state,
+  onUnits,
   flow,
   send,
   onOpenGame,
 }: {
   entry: LibraryEntry;
-  state: AppState | null;
+  /** The schemes the units hold, by their record. */
+  onUnits: ReadonlySet<string>;
   flow: FlowState;
   send: Send;
   onOpenGame: OpenGame;
 }) {
-  const status = statusLine(entry, state);
+  const status = statusLine(entry, onUnits);
   const body = (
     <span className={`cover${entry.hasCover ? '' : ' cover-empty'}`}>
       <Art entry={entry} kind="portrait" />
@@ -175,22 +178,24 @@ function Tile({
       <EditGame entry={entry} onOpenGame={onOpenGame} />
       <Popover.Root>
         <Popover.Trigger asChild>
-          <button type="button" className="btn ghost small">
-            Other scheme
+          <button type="button" className="btn ghost small" aria-label={`${entry.name} schemes`}>
+            {entry.schemes.length > 1 ? `${entry.schemes.length} schemes` : 'Schemes'}
           </button>
         </Popover.Trigger>
         <Popover.Portal>
           <Popover.Content className="popover" sideOffset={8} aria-label={`${entry.name} schemes`}>
             <div className="choices">
-              <span className="hint">Open</span>
+              <span className="hint">Pick one to apply</span>
               {entry.schemes.map((scheme) => (
                 <button
                   key={scheme.id}
                   type="button"
                   className="btn"
-                  onClick={() => send({ type: 'open', entry, schemeId: scheme.id })}
+                  aria-current={scheme.id === entry.activeSchemeId ? 'true' : undefined}
+                  onClick={() => send({ type: 'pick', entry, schemeId: scheme.id })}
                 >
                   {scheme.name}
+                  <span className="choice-note">{setupWords(scheme)}</span>
                 </button>
               ))}
             </div>
@@ -225,7 +230,12 @@ export function Library({
     setFlow(next.state);
     const command = next.command;
     if (command?.type === 'open-editor') onOpenEditor(command.schemeId);
-    else if (command?.type === 'make-and-open') {
+    else if (command?.type === 'pick-and-open') {
+      void runPick(window.helm, command.gameId, command.schemeId).then((outcome) => {
+        if (outcome.ok) onOpenEditor(outcome.schemeId);
+        else send({ type: 'failed', message: outcome.message });
+      });
+    } else if (command?.type === 'make-and-open') {
       void runMake(window.helm, command.gameId, command.preset).then((outcome) => {
         if (outcome.ok) {
           send({ type: 'finished' });
@@ -237,6 +247,7 @@ export function Library({
 
   const entries = library.entries ?? [];
   const card = currentCard(entries, state);
+  const held = heldSchemes(state);
   const shown = filterEntries(entries, query);
   const editing = card?.scheme ?? null;
 
@@ -253,13 +264,7 @@ export function Library({
         <div className="current-body">
           <div className="current-text">
             <span className="eyebrow">On your Azerons now</span>
-            <span className="current-title">
-              {card
-                ? card.scheme
-                  ? `${card.entry.name} · ${card.scheme.name}`
-                  : card.entry.name
-                : 'Nothing yet'}
-            </span>
+            <span className="current-title">{card ? card.title : 'Nothing yet'}</span>
             <span className="hint">{card ? card.detail : 'Pick a game below to start.'}</span>
           </div>
           {card !== null && editing !== null && (
@@ -335,7 +340,7 @@ export function Library({
             <Tile
               key={`${entry.appId ?? ''}/${entry.gameId ?? ''}/${entry.name}`}
               entry={entry}
-              state={state}
+              onUnits={held}
               flow={flow}
               send={send}
               onOpenGame={onOpenGame}

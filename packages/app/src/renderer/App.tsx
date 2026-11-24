@@ -26,6 +26,10 @@ export function App({ state }: { state: AppState | null }) {
             setApplying(false);
             setScreen({ name: 'library' });
           }}
+          onOpenScheme={(schemeId) => {
+            setApplying(false);
+            setScreen({ name: 'editor', schemeId });
+          }}
           onApply={() => setApplying(true)}
           historyOff={applying}
           keysKept={keysKept}

@@ -9,6 +9,7 @@ const state = (label: string): AppState => ({
   question: null,
   activeGameId: null,
   activeSchemeId: null,
+  onUnits: { left: null, right: null },
 });
 
 /** A fake `helm`: the test decides when state() answers and pushes states itself. */

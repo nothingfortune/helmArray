@@ -1,6 +1,6 @@
 // A small two-mode game and schemes on it, for the editor's tests. Not shipped: nothing in the
 // app imports this file.
-import { AZERONS_ONLY, BUILT_IN_DEVICES, resolve } from '@helmarray/core';
+import { AZERONS_ONLY, BUILT_IN_DEVICES, helldivers2, resolve } from '@helmarray/core';
 import type { Action, Game, PadControl, Plan, Role, Scheme, Signal } from '@helmarray/core';
 
 const act = (
@@ -114,4 +114,43 @@ export const padGame: Game = {
     const pad = PAD_DEFAULTS[a.id];
     return pad === undefined ? a : { ...a, native: { ...a.native, pad } };
   }),
+};
+
+/** Ids that are also names on every object: a record keyed by data must keep them as entries. */
+export const HOSTILE_IDS = ['__proto__', 'constructor', 'toString', 'hasOwnProperty'] as const;
+
+/**
+ * Helldivers 2 with hostile ids: its actions dealt into two modes named `__proto__` and
+ * `constructor`, and four of the actions on buttons renamed to the hostile ids. Whatever a
+ * transform does to a record keyed by mode or action id, it must do to these as entries.
+ */
+export const hostileGame: Game = (() => {
+  const renamed: Record<string, string> = Object.fromEntries([
+    ['interact', '__proto__'],
+    ['reload', 'constructor'],
+    ['crouch', 'toString'],
+    ['fire_primary', 'hasOwnProperty'],
+  ]);
+  const modes = [
+    { id: '__proto__', name: 'Proto' },
+    { id: 'constructor', name: 'Constructor' },
+  ];
+  return {
+    ...helldivers2,
+    id: 'hostile',
+    name: 'Hostile',
+    modes,
+    actions: helldivers2.actions.map((a, i) => ({
+      ...a,
+      id: Object.hasOwn(renamed, a.id) ? (renamed[a.id] ?? a.id) : a.id,
+      mode: modes[i % 2]?.id ?? 'default',
+    })),
+  };
+})();
+
+/** The hostile game with every action in one mode, `__proto__`. */
+export const hostileOneMode: Game = {
+  ...hostileGame,
+  modes: [{ id: '__proto__', name: 'Proto' }],
+  actions: hostileGame.actions.map((a) => ({ ...a, mode: '__proto__' })),
 };

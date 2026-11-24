@@ -3,6 +3,7 @@ import { Dialog } from 'radix-ui';
 import type { AppState } from '../../shared/api';
 import { plainReason } from '../screens/libraryFlow';
 import { START, drawerView, previewKey, reduce } from './applyFlow';
+import type { GameSection } from './applyFlow';
 import './apply.css';
 
 export interface ApplyDrawerProps {
@@ -14,6 +15,28 @@ export interface ApplyDrawerProps {
   onApplied?(): void;
   /** The app state: when a unit or the Azeron app changes, what is ready is looked at again. */
   state: AppState | null;
+}
+
+/** The game's half: the bindings to set, by set and mode where there is more than one. */
+function Game({ section }: { section: GameSection }) {
+  return (
+    <section className="apply-unit" aria-label={section.title}>
+      <div className="apply-unit-head">
+        <h3 className="section-title">{section.title}</h3>
+        <span className="hint">{section.summary}</span>
+      </div>
+      {section.groups.map((group) => (
+        <div key={group.label ?? ''} className="apply-group">
+          {group.label !== null && <span className="apply-group-label">{group.label}</span>}
+          {group.lines.map((line) => (
+            <p key={line} className="apply-line kind-game">
+              {line}
+            </p>
+          ))}
+        </div>
+      ))}
+    </section>
+  );
 }
 
 function Mark({ ok }: { ok: boolean }) {
@@ -132,6 +155,7 @@ export function ApplyDrawer({ schemeId, open, onClose, onApplied, state }: Apply
                 ))}
               </section>
             )}
+            {view.sheet !== null && <Game section={view.sheet} />}
 
             {view.checks.length > 0 && (
               <section aria-label="What is ready">
@@ -160,6 +184,8 @@ export function ApplyDrawer({ schemeId, open, onClose, onApplied, state }: Apply
                 ))}
               </section>
             ))}
+
+            {view.game !== null && <Game section={view.game} />}
 
             {view.progress !== null && (
               <div className="apply-progress">

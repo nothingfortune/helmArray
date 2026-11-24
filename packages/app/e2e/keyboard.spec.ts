@@ -4,7 +4,12 @@
 import { expect, test } from './helm';
 import {
   applyInDrawer,
+  chooseDevice,
+  deviceTab,
   drawer,
+  gameHalf,
+  leftUnit,
+  schemePicker,
   keepEveryCheck,
   startFrom,
   startWithChecks,
@@ -50,6 +55,99 @@ test.describe('keyboard: Tab order and visible focus', () => {
     await expect(applyInDrawer(page)).toBeEnabled();
     const stops = await walkTabOrder(page);
     expect(stops.map((s) => s.label)).toEqual(expect.arrayContaining(['Cancel', 'Apply']));
+    expect(stops.every((s) => s.inDialog)).toBe(true);
+    expect(unseen(stops)).toEqual([]);
+    await expect(drawer(page)).toBeVisible();
+  });
+});
+
+test.describe('keyboard: the setups', () => {
+  test('the Scheme picker keeps the focus inside it and shows it', async ({ helm }) => {
+    const { page } = helm;
+    await startFrom(page, 'Xbox controller');
+    await schemePicker(page).click();
+    await expect(page.getByRole('button', { name: 'Copy this one' })).toBeVisible();
+    const stops = await walkTabOrder(page);
+    expect(stops.map((s) => s.label)).toEqual(
+      expect.arrayContaining([
+        'Xbox controller',
+        "Game's own keys",
+        'Copy this one',
+        'Delete this scheme',
+      ]),
+    );
+    expect(stops.every((s) => s.inDialog)).toBe(true);
+    expect(unseen(stops)).toEqual([]);
+  });
+
+  test('the device chooser', async ({ helm }) => {
+    const { page } = helm;
+    await startFrom(page, 'Xbox controller');
+    await page.getByRole('button', { name: 'Devices' }).click();
+    await expect(page.getByRole('dialog', { name: 'Devices' })).toBeVisible();
+    const stops = await walkTabOrder(page);
+    expect(stops.every((s) => s.inDialog)).toBe(true);
+    expect(stops.length).toBeGreaterThanOrEqual(3);
+    expect(unseen(stops)).toEqual([]);
+  });
+
+  test('the Azerons tab: the header’s new controls, both units and the Xbox control a button sends', async ({
+    helm,
+  }) => {
+    const { page } = helm;
+    await startFrom(page, 'Xbox controller');
+    await leftUnit(page).getByRole('button', { name: 'Reload, middle 1' }).click();
+    // The walk starts from the top of the page, not from the button just clicked.
+    await page.getByRole('heading', { name: 'Helldivers 2' }).click();
+    const stops = await walkTabOrder(page);
+    expect(stops.map((s) => s.label)).toEqual(
+      expect.arrayContaining([
+        'Scheme: Xbox controller',
+        'Azerons',
+        'Devices',
+        'Keys',
+        'Controller',
+        expect.stringMatching(/^Xbox A/),
+      ]),
+    );
+    expect(unseen(stops)).toEqual([]);
+  });
+
+  test('the Keyboard tab', async ({ helm }) => {
+    const { page } = helm;
+    await startFrom(page, 'Xbox controller');
+    await chooseDevice(page, 'Keyboard and mouse');
+    await deviceTab(page, 'Keyboard').click();
+    const stops = await walkTabOrder(page);
+    expect(stops.map((s) => s.label)).toEqual(
+      expect.arrayContaining(['R, Reload', 'T, not used', 'Left, Fire']),
+    );
+    expect(unseen(stops)).toEqual([]);
+  });
+
+  test('the Controller tab', async ({ helm }) => {
+    const { page } = helm;
+    await startFrom(page, 'Xbox controller');
+    await chooseDevice(page, 'Xbox controller');
+    await deviceTab(page, 'Controller').click();
+    const stops = await walkTabOrder(page);
+    expect(stops.map((s) => s.label)).toEqual(
+      expect.arrayContaining(['X, Reload', 'L stick, Stick', 'LT, Aim']),
+    );
+    expect(unseen(stops)).toEqual([]);
+  });
+
+  test('the Apply drawer with the game’s bindings to set', async ({ helm }) => {
+    const { page } = helm;
+    await startFrom(page, 'Xbox controller');
+    const left = leftUnit(page);
+    await left
+      .getByRole('button', { name: 'Reload, middle 1' })
+      .dragTo(left.getByRole('button', { name: 'Empty, middle 2' }));
+    await page.getByRole('button', { name: 'Apply', exact: true }).click();
+    await expect(gameHalf(page)).toContainText('Set Reload to Xbox Y');
+    await expect(applyInDrawer(page)).toBeEnabled();
+    const stops = await walkTabOrder(page);
     expect(stops.every((s) => s.inDialog)).toBe(true);
     expect(unseen(stops)).toEqual([]);
     await expect(drawer(page)).toBeVisible();

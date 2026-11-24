@@ -22,6 +22,25 @@ export async function startFrom(page: Page, preset: 'Xbox controller' | "Game's 
   await expect(page.getByRole('heading', { name: 'Helldivers 2' })).toBeVisible();
 }
 
+/** A device tab of the Editor: Azerons, Keyboard, Controller. */
+export const deviceTab = (page: Page, name: string): Locator =>
+  page.getByRole('group', { name: 'Device' }).getByRole('button', { name, exact: true });
+/** "Azerons send: Keys | Controller". */
+export const azeronsSend = (page: Page): Locator =>
+  page.getByRole('group', { name: 'Azerons send' });
+/** "Scheme: Main ▾", which opens the Scheme picker. */
+export const schemePicker = (page: Page): Locator =>
+  page.getByRole('button', { name: /^Scheme: / });
+/** The Apply drawer's game half, before Apply. */
+export const gameHalf = (page: Page): Locator => drawer(page).getByLabel("In the game's controls");
+
+/** Opens the device chooser and picks one thing in it (two clicks), then closes it. */
+export async function chooseDevice(page: Page, label: string) {
+  await page.getByRole('button', { name: 'Devices' }).click();
+  await page.getByRole('dialog', { name: 'Devices' }).getByLabel(label, { exact: true }).click();
+  await page.keyboard.press('Escape');
+}
+
 /** The left unit's board in the Editor. */
 export const leftUnit = (page: Page) => page.locator('.unit[data-hand="left"]');
 

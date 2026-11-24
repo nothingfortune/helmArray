@@ -14,14 +14,15 @@ export interface LibraryInput {
   games: readonly GameEntry[];
   schemes: ReadonlyMap<string, readonly Scheme[]>;
   activeSchemeOf(gameId: string): string | null;
-  /** The scheme of the game applied last, and when; null when none was. */
-  appliedOf?(gameId: string): { schemeId: string; at: number } | null;
+  /** The scheme of the game applied last, when, and its changes since; null when none was. */
+  appliedOf?(gameId: string): { schemeId: string; at: number; changes: number } | null;
 }
 
 const refOf = (scheme: Scheme): LibrarySchemeRef => ({
   id: scheme.id,
   name: scheme.name,
   output: scheme.output,
+  devices: { ...scheme.devices },
 });
 
 const hasNativeKeys = (game: Game): boolean =>
@@ -103,6 +104,8 @@ export interface LibraryDeps {
   listSchemes(gameId: string): Promise<Scheme[]>;
   activeSchemeOf(gameId: string): string | null;
   lastApplied(gameId: string): Promise<{ schemeId: string; at: number } | null>;
+  /** How many changes a scheme has had since it was last applied (the sync pill's count). */
+  changesOf?(schemeId: string): Promise<number>;
 }
 
 export interface LibraryService {
@@ -131,11 +134,15 @@ export function createLibraryService(deps: LibraryDeps): LibraryService {
       const library = await steam(refresh);
       const games = await deps.games();
       const schemes = new Map<string, readonly Scheme[]>();
-      const applied = new Map<string, { schemeId: string; at: number }>();
+      const applied = new Map<string, { schemeId: string; at: number; changes: number }>();
       for (const { game } of games) {
-        schemes.set(game.id, await deps.listSchemes(game.id));
+        const list = await deps.listSchemes(game.id);
+        schemes.set(game.id, list);
         const last = await deps.lastApplied(game.id);
-        if (last) applied.set(game.id, last);
+        // A scheme no longer there (deleted, the game keeping what it holds) has no status line.
+        if (last && list.some((s) => s.id === last.schemeId)) {
+          applied.set(game.id, { ...last, changes: (await deps.changesOf?.(last.schemeId)) ?? 0 });
+        }
       }
       return mergeLibrary({
         steam: library.games,

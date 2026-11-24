@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { UnitsHeld } from '@helmarray/core';
+import { AZERONS_ONLY } from '@helmarray/core';
 import type { AppState } from '../shared/api';
 import { createCoordinator } from './coordinator';
 import type { DevicesSnapshot, UnitSnapshot } from './devices';
@@ -10,7 +12,10 @@ const LEFT = 49229;
 const RIGHT = 29993;
 const BLOCK = 'Close the Azeron app first: it talks to the units too.';
 
-async function bench(saved: Record<string, 'left' | 'right'> = {}) {
+async function bench(
+  saved: Record<string, 'left' | 'right'> = {},
+  unitsHeld?: () => Promise<UnitsHeld>,
+) {
   const active = { gameId: null as string | null, schemeId: null as string | null };
   const stored: { value: unknown } = { value: Object.keys(saved).length ? saved : undefined };
   const storage: HandsStorage = {
@@ -45,6 +50,7 @@ async function bench(saved: Record<string, 'left' | 'right'> = {}) {
     readLog: (lines) => Promise.resolve([`last ${lines}`]),
     active: () => ({ ...active }),
     trace: (unit, line) => traces.push(`${unit} ${line}`),
+    ...(unitsHeld === undefined ? {} : { unitsHeld }),
   });
   helm.onState((state) => states.push(state));
 
@@ -71,6 +77,47 @@ const AZERON_OPEN = processState(['explorer.exe', 'Azeron Software.exe']);
 describe('the coordinator', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
+
+  it('says what each unit holds, from the record read afresh each time', async () => {
+    const write = {
+      schemeId: 'hd2-xbox',
+      gameId: 'helldivers2',
+      schemeName: 'Xbox controller',
+      devices: { ...AZERONS_ONLY },
+      output: 'pad' as const,
+      at: 5,
+      profile: {
+        deviceId: 'cyborg2',
+        hand: 'left' as const,
+        pins: [],
+        stick: { mode: 'keys' as const, angle: 0, invertX: false },
+      },
+    };
+    let held: UnitsHeld = { left: null, right: null };
+    const b = await bench({}, () => Promise.resolve(held));
+    b.helm.start();
+    await settle();
+    const before = b.helm.state().onUnits;
+    held = { left: write, right: null };
+    await b.helm.plansChanged();
+    expect([
+      before,
+      b.helm.state().onUnits.left?.schemeId,
+      b.helm.state().onUnits.left?.check,
+    ]).toEqual([{ left: null, right: null }, 'hd2-xbox', 'unknown']);
+    b.helm.stop();
+  });
+
+  it('says no unit holds anything, and why in the log, when the record can’t be read', async () => {
+    const b = await bench({}, () => Promise.reject(new Error('disk gone')));
+    b.helm.start();
+    await settle();
+    expect([b.helm.state().onUnits, b.traces.some((t) => t.includes('disk gone'))]).toEqual([
+      { left: null, right: null },
+      true,
+    ]);
+    b.helm.stop();
+  });
 
   it('tells the listeners when the active game or scheme changes', async () => {
     const b = await bench();

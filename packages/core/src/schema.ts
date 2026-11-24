@@ -4,7 +4,7 @@
 
 import { clone } from './clone';
 import type { AppSettings, Game, Scheme } from './model';
-import type { Plan } from './plan';
+import type { Plan, UnitsHeld } from './plan';
 import { AZERONS_ONLY, DEFAULT_TURBO_INTERVAL } from './model';
 
 /** Rules that no longer exist: the editor's findings about the game's fixed pad bindings (M4). */
@@ -18,6 +18,8 @@ export interface StoredKinds {
   settings: AppSettings;
   /** The plan last applied for one scheme (applied/<schemeId>.json). */
   applied: Plan;
+  /** What each unit was last written with (units.json). */
+  units: UnitsHeld;
 }
 export type StoredKind = keyof StoredKinds;
 
@@ -58,6 +60,7 @@ export const MIGRATIONS: Readonly<Record<StoredKind, readonly Migration[]>> = {
   ],
   game: [],
   settings: [],
+  units: [],
   applied: [
     // 1 → 2: game bindings. A plan saved before them claims none; its bind sheet rows (key output
     // only, so keys) say which set they are in, and that the shipped binding wasn't recorded.
@@ -89,6 +92,7 @@ const NAMES: Record<StoredKind, string> = {
   game: 'game',
   settings: 'settings file',
   applied: 'applied plan',
+  units: 'record of what the units hold',
 };
 
 /** Run the migrations from `version` up to the current one. Exposed for tests. */

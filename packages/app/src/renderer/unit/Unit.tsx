@@ -4,17 +4,13 @@
 // fitting in ./label.ts, both pure and tested. The Library, the editor and Play view all draw
 // their units with this one component.
 import { useEffect, useRef, useState } from 'react';
-import type { CSSProperties, DragEvent } from 'react';
-import type { ControlId, Hand, Role } from '@helmarray/core';
+import type { CSSProperties } from 'react';
+import type { ControlId, Hand, Press, Role } from '@helmarray/core';
 import { fitLabel } from './label';
-import {
-  ACTION_DRAG_TYPE,
-  UNIT_HEIGHT,
-  UNIT_WIDTH,
-  dragCarriesAction,
-  unitLayout,
-  unitScale,
-} from './layout';
+import { roleVars } from './role';
+import { dragFrom, dropHandlers } from '../devices/drag';
+import type { DropAction } from '../devices/drag';
+import { UNIT_HEIGHT, UNIT_WIDTH, unitLayout, unitScale } from './layout';
 import type { ChipPlace, KeyPlace, StickDirection } from './layout';
 import './unit.css';
 
@@ -22,6 +18,10 @@ export interface UnitKey {
   /** The action's name in the game's words. */
   label: string;
   role?: Role;
+  /** The action's id: a key with one can be dragged to another control. */
+  action?: string;
+  /** The press that action is on (a button with only a long press shows that). Defaults to tap. */
+  press?: Press;
 }
 
 /** What the stick's four directions send, shown as chips around it. */
@@ -44,22 +44,15 @@ export interface UnitProps {
   /** Controls that clash with another assignment. */
   conflicts?: ReadonlySet<ControlId>;
   onSelect?: (id: ControlId) => void;
-  /** An action dragged from the action list and dropped on a control. */
-  onDropAction?: (control: ControlId, actionId: string) => void;
+  /**
+   * An action dropped on a control: from the action list, or dragged off another control (`from`),
+   * which moves it. Without it nothing is a drop target and no key can be dragged.
+   */
+  onDropAction?: DropAction;
   /** Fixed scale. Without it the board fills its container's width. */
   scale?: number;
   className?: string;
 }
-
-const ROLE_COLOURS: Record<Role, { dot: string; tint: string }> = {
-  combat: { dot: 'var(--color-combat)', tint: 'var(--color-combat-tint)' },
-  movement: { dot: 'var(--color-movement)', tint: 'var(--color-movement-tint)' },
-  ability: { dot: 'var(--color-ability)', tint: 'var(--color-ability-tint)' },
-  travel: { dot: 'var(--color-travel)', tint: 'var(--color-travel-tint)' },
-  menu: { dot: 'var(--color-menu)', tint: 'var(--color-menu-tint)' },
-};
-// An action with no role yet: a plain key, not a guess at a colour.
-const NO_ROLE = { dot: 'var(--color-muted)', tint: 'var(--color-raised)' };
 
 const DIRECTION_WORD: Record<StickDirection, string> = {
   up: 'Up',
@@ -75,11 +68,6 @@ const place = (p: { x: number; y: number; w: number; h: number }): CSSProperties
   width: px(p.w),
   height: px(p.h),
 });
-
-function roleVars(role: Role | undefined): CSSProperties {
-  const c = role === undefined ? NO_ROLE : ROLE_COLOURS[role];
-  return { '--role': c.dot, '--tint': c.tint } as CSSProperties;
-}
 
 export function Unit({
   hand,
@@ -108,27 +96,12 @@ export function Unit({
   }, [fixed]);
   const s = unitScale(scale, hostWidth);
 
-  const dropHandlers = (id: ControlId) =>
-    onDropAction === undefined
+  const drops = (id: ControlId) =>
+    onDropAction === undefined ? {} : dropHandlers(id, onDropAction, setDropTarget);
+  const drags = (id: ControlId, action: UnitKey | undefined) =>
+    onDropAction === undefined || action?.action === undefined
       ? {}
-      : {
-          onDragOver: (e: DragEvent) => {
-            if (!dragCarriesAction(e.dataTransfer.types)) return;
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'copy';
-            setDropTarget(id);
-          },
-          onDragLeave: (e: DragEvent) => {
-            // Moving onto the key's own label is not leaving the key.
-            if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDropTarget(null);
-          },
-          onDrop: (e: DragEvent) => {
-            e.preventDefault();
-            setDropTarget(null);
-            const actionId = e.dataTransfer.getData(ACTION_DRAG_TYPE);
-            if (actionId !== '') onDropAction(id, actionId);
-          },
-        };
+      : { draggable: true, onDragStart: dragFrom(id, action.action, action.press ?? 'tap') };
 
   const stateClasses = (id: ControlId): string[] => [
     ...(selected === id ? ['is-selected'] : []),
@@ -172,7 +145,7 @@ export function Unit({
           aria-label={`${dirs.length > 0 ? `Stick, ${dirs.join(', ')}` : 'Stick, empty'}${stateWords(k.id)}`}
           aria-current={selected === k.id ? 'true' : undefined}
           onClick={() => onSelect?.(k.id)}
-          {...dropHandlers(k.id)}
+          {...drops(k.id)}
         />
       );
     }
@@ -185,7 +158,8 @@ export function Unit({
         aria-label={`${assigned ? action.label : 'Empty'}, ${k.name.toLowerCase()}${stateWords(k.id)}`}
         aria-current={selected === k.id ? 'true' : undefined}
         onClick={() => onSelect?.(k.id)}
-        {...dropHandlers(k.id)}
+        {...drops(k.id)}
+        {...drags(k.id, action)}
       >
         <span className="ul" style={{ fontSize: px(fit.fontSize) }}>
           {text}

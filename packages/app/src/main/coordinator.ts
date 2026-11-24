@@ -2,6 +2,7 @@
 // works out the new `AppState`, tells the listeners, and keeps the hand finder and the devices
 // service in step. Pure: everything it touches is handed in, so tests run it over fakes.
 
+import type { UnitsHeld } from '@helmarray/core';
 import type { AppState, Hand } from '../shared/api';
 import type { ActivePlans } from './active-plans';
 import { composeAppState, pendingAsk } from './app-state';
@@ -28,6 +29,8 @@ export interface CoordinatorDeps {
    * state is worked out. Without it the pill has nothing to compare the units with.
    */
   plans?(): Promise<ActivePlans>;
+  /** What each unit was last written with, read afresh each time the state is worked out. */
+  unitsHeld?(): Promise<UnitsHeld>;
   /**
    * True while something is writing to the units (an Apply): the state is not worked out then,
    * so the pill never shows a half-done write. Whoever was writing asks for it afterwards
@@ -122,6 +125,12 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
       // Without the plans the pill can't compare: it says it hasn't checked, and the log why.
       trace(`reading the plans failed: ${messageOf(error)}`);
     }
+    let held: UnitsHeld | undefined;
+    try {
+      held = await deps.unitsHeld?.();
+    } catch (error) {
+      trace(`reading what the units hold failed: ${messageOf(error)}`);
+    }
     const snapshot = devices.snapshot();
     const ids = idsOf(snapshot);
     let hands: HandsResult;
@@ -141,6 +150,7 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
       writeBlock,
       active: deps.active?.(),
       plans,
+      held,
       now: (deps.now ?? Date.now)(),
     });
     const json = JSON.stringify(next);

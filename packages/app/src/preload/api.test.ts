@@ -13,6 +13,7 @@ const STATE: AppState = {
   question: null,
   activeGameId: null,
   activeSchemeId: null,
+  onUnits: { left: null, right: null },
 };
 
 function bridge() {
@@ -125,6 +126,8 @@ describe('window.helm', () => {
       await api.getScheme('skiff-own-keys');
       await api.listSchemes('skiff');
       await api.createScheme('skiff', 'xbox');
+      await api.copyScheme('skiff-own-keys');
+      await api.deleteScheme('skiff-own-keys');
       await api.saveScheme(scheme);
       await api.setActive('skiff', 'skiff-own-keys');
       await api.setActive('skiff', null);
@@ -137,6 +140,8 @@ describe('window.helm', () => {
         [CHANNELS.getScheme, ['skiff-own-keys']],
         [CHANNELS.listSchemes, ['skiff']],
         [CHANNELS.createScheme, ['skiff', 'xbox']],
+        [CHANNELS.copyScheme, ['skiff-own-keys']],
+        [CHANNELS.deleteScheme, ['skiff-own-keys']],
         [CHANNELS.saveScheme, [scheme]],
         [CHANNELS.setActive, ['skiff', 'skiff-own-keys']],
         [CHANNELS.setActive, ['skiff', null]],
@@ -152,6 +157,7 @@ describe('window.helm', () => {
         [CHANNELS.listGames, [{ game: { id: 'skiff' }, builtIn: true }]],
         [CHANNELS.getScheme, scheme],
         [CHANNELS.createScheme, scheme],
+        [CHANNELS.copyScheme, scheme],
       ]);
       const ipc: IpcBridge = {
         invoke: (channel) => Promise.resolve(answers.get(channel) ?? 'something'),
@@ -162,7 +168,9 @@ describe('window.helm', () => {
       expect(await api.listGames()).toEqual([{ game: { id: 'skiff' }, builtIn: true }]);
       expect(await api.getScheme('x')).toBe(scheme);
       expect(await api.createScheme('skiff', 'keys')).toBe(scheme);
+      expect(await api.copyScheme('x')).toBe(scheme);
       expect(await api.saveScheme(scheme)).toBeUndefined();
+      expect(await api.deleteScheme('x')).toBeUndefined();
       expect(await api.setActive('skiff', null)).toBeUndefined();
       expect([await api.saveGame(game), await api.deleteGame('skiff')]).toEqual([
         undefined,

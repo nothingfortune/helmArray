@@ -5,6 +5,7 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 import noCrossPackageRelative from './eslint/no-cross-package-relative.js';
+import noKeyedWriteOnLiteral from './eslint/no-keyed-write-on-literal.js';
 
 const nodeBuiltins = [...builtinModules, ...builtinModules.map((name) => `node:${name}`)];
 
@@ -125,13 +126,25 @@ export default tseslint.config(
   ...tseslint.configs.stylistic,
   {
     languageOptions: { globals: { ...globals.node } },
-    plugins: { helm: { rules: { 'no-cross-package-relative': noCrossPackageRelative } } },
+    plugins: {
+      helm: {
+        rules: {
+          'no-cross-package-relative': noCrossPackageRelative,
+          'no-keyed-write-on-literal': noKeyedWriteOnLiteral,
+        },
+      },
+    },
     rules: {
       'helm/no-cross-package-relative': 'error',
       '@typescript-eslint/consistent-type-imports': 'error',
       '@typescript-eslint/no-explicit-any': 'error',
       eqeqeq: 'error',
     },
+  },
+  {
+    // Records keyed by data are never written by key onto an object literal (__proto__ is lost).
+    files: ['packages/core/src/**', 'packages/app/src/**'],
+    rules: { 'helm/no-keyed-write-on-literal': 'error' },
   },
   {
     files: ['packages/app/src/renderer/**'],

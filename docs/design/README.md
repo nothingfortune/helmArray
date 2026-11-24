@@ -53,4 +53,19 @@ and are the owner's to settle before the milestone that builds them:
 The setups model (01-features.md, *Setups*, 2026-11-19) follows the Editor board's *Scheme*
 picker, *Azerons | Keyboard* toggle and *Azerons send: Keys | Controller*. Two parts are not
 drawn yet: a *Controller* device in that toggle, and a setup of the **left** Azeron with the
-mouse (the right unit not drawn, or drawn idle). M4.5 builds them to the canvas's style.
+mouse (the right unit not drawn, or drawn idle). M4.5 built them in the app, to the canvas's style,
+and has not drawn them on the canvas yet:
+
+- **The Controller tab** draws the Play view's controller (`PlayPad`) with its controls as rows
+  either side, scaled for editing; the rows are what is clicked and dropped on.
+- **The mouse** is drawn with the keyboard, as `PlayKeys` has it, and in a left Azeron + mouse
+  setup beside the left unit, where the right one was. The right unit is not drawn.
+- **Devices ▾**, beside the device tabs: which Azerons (both, left + mouse, none), keyboard and
+  mouse, Xbox controller.
+- **The Scheme picker's contents**: the game's setups, *New from* (Xbox controller, Game's own
+  keys, Copy this one), the name, and *Delete this scheme* behind a confirmation.
+- **"Azerons send"** as a visible label before *Keys | Controller*.
+- **In the side panel**, *Sends* is a choice of Xbox control for an Azeron button in controller
+  output.
+- **The Apply drawer's game half**, "In the game's controls", one line per binding ("Set Reload
+  to Xbox Y"), and after Apply the same lines as the bind sheet.

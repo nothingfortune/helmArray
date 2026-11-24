@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  AZERONS_ONLY,
   BUILT_IN_DEVICES,
   currentVersion,
   resolve,
@@ -9,9 +10,9 @@ import {
   xboxControllerPreset,
 } from '@helmarray/core';
 import type { Game, Scheme } from '@helmarray/core';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AUTOSAVE_MS, DataStore, StoreError, isSafeId, isScheme } from './store';
-import type { StoreProblem } from './store';
+import type { DataStoreOptions, StoreProblem } from './store';
 
 const SKIFF: Game = {
   id: 'skiff',
@@ -35,20 +36,50 @@ beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'helm-store-'));
 });
 afterEach(async () => {
-  vi.useRealTimers();
   await rm(root, { recursive: true, force: true });
 });
 
 let counter = 0;
-async function openStore(builtIn: readonly Game[] = [SKIFF, ARBORETUM]) {
+async function openStore(
+  builtIn: readonly Game[] = [SKIFF, ARBORETUM],
+  schedule?: DataStoreOptions['schedule'],
+) {
   const problems: StoreProblem[] = [];
   const data = await DataStore.open({
     root,
     builtInGames: builtIn,
     onProblem: (problem) => problems.push(problem),
     newId: () => `id${++counter}`,
+    ...(schedule === undefined ? {} : { schedule }),
   });
   return { data, problems };
+}
+
+/**
+ * A clock the test moves by hand, for the store's autosave. `advance` runs every job that falls
+ * due and waits for each to finish: the job is the write itself, so when `advance` returns the
+ * file is on disk, with no polling and no real time involved.
+ */
+function handClock() {
+  let now = 0;
+  let jobs: { at: number; job: () => Promise<void>; live: boolean }[] = [];
+  return {
+    schedule(job: () => Promise<void>, ms: number) {
+      const entry = { at: now + ms, job, live: true };
+      jobs.push(entry);
+      return () => {
+        entry.live = false;
+      };
+    },
+    /** How many writes are waiting. */
+    waiting: () => jobs.filter((j) => j.live).length,
+    async advance(ms: number) {
+      now += ms;
+      const due = jobs.filter((j) => j.live && j.at <= now);
+      jobs = jobs.filter((j) => j.live && j.at > now);
+      await Promise.all(due.map((j) => j.job()));
+    },
+  };
 }
 
 const path = (...parts: string[]) => join(root, ...parts);
@@ -561,42 +592,54 @@ describe('reading schemes', () => {
 describe('autosaving a scheme', () => {
   const edit = (scheme: Scheme, name: string): Scheme => ({ ...scheme, name });
 
-  beforeEach(() => {
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-  });
-
   it('writes a moment after the last change, once, with the last change', async () => {
-    const { data } = await openStore();
+    const clock = handClock();
+    const { data } = await openStore(undefined, clock.schedule);
     const scheme = await data.createSchemeFromPreset('skiff', 'xbox');
     const file = ['schemes', `${scheme.id}.json`] as const;
 
     data.saveScheme(edit(scheme, 'One'));
-    await vi.advanceTimersByTimeAsync(AUTOSAVE_MS - 100);
+    await clock.advance(AUTOSAVE_MS - 100);
     data.saveScheme(edit(scheme, 'Two'));
-    await vi.advanceTimersByTimeAsync(AUTOSAVE_MS - 1);
-    // Not yet: each change starts the wait again.
+    await clock.advance(AUTOSAVE_MS - 1);
+    // Not yet: each change starts the wait again, and calls off the one before.
     expect((await readJson(...file))['name']).toBe('Xbox controller');
+    expect(clock.waiting()).toBe(1);
 
-    await vi.advanceTimersByTimeAsync(1);
-    await vi.waitFor(async () => expect((await readJson(...file))['name']).toBe('Two'));
+    await clock.advance(1);
+    // The write ran to its end inside `advance`: the file holds the last change.
+    expect((await readJson(...file))['name']).toBe('Two');
+    expect(clock.waiting()).toBe(0);
   });
 
   it('keeps each scheme’s wait apart', async () => {
-    const { data } = await openStore();
+    const clock = handClock();
+    const { data } = await openStore(undefined, clock.schedule);
     const a = await data.createSchemeFromPreset('skiff', 'xbox');
     const b = await data.createSchemeFromPreset('skiff', 'keys');
     data.saveScheme(edit(a, 'A edited'));
-    await vi.advanceTimersByTimeAsync(AUTOSAVE_MS - 100);
+    await clock.advance(AUTOSAVE_MS - 100);
     data.saveScheme(edit(b, 'B edited'));
-    await vi.advanceTimersByTimeAsync(100);
-    await vi.waitFor(async () =>
-      expect((await readJson('schemes', `${a.id}.json`))['name']).toBe('A edited'),
-    );
+    await clock.advance(100);
+    expect((await readJson('schemes', `${a.id}.json`))['name']).toBe('A edited');
     expect((await readJson('schemes', `${b.id}.json`))['name']).toBe("Game's own keys");
+    await clock.advance(AUTOSAVE_MS);
+    expect((await readJson('schemes', `${b.id}.json`))['name']).toBe('B edited');
+  });
+
+  it('with no scheduler handed in, an edit still waits, and flush writes it', async () => {
+    const { data } = await openStore();
+    const scheme = await data.createSchemeFromPreset('skiff', 'xbox');
+    data.saveScheme(edit(scheme, 'On time'));
+    expect((await readJson('schemes', `${scheme.id}.json`))['name']).toBe('Xbox controller');
+    // The default scheduler is a timer: flush calls it off and writes at once.
+    await data.flush();
+    expect((await readJson('schemes', `${scheme.id}.json`))['name']).toBe('On time');
   });
 
   it('answers a read with the edit that is still waiting', async () => {
-    const { data } = await openStore();
+    // A clock that never moves: the edit stays waiting, and nothing writes after the test.
+    const { data } = await openStore(undefined, handClock().schedule);
     const scheme = await data.createSchemeFromPreset('skiff', 'xbox');
     data.saveScheme(edit(scheme, 'Waiting'));
     expect((await data.getScheme(scheme.id))?.name).toBe('Waiting');
@@ -605,7 +648,8 @@ describe('autosaving a scheme', () => {
   });
 
   it('takes a copy: changing the scheme afterwards changes nothing waiting', async () => {
-    const { data } = await openStore();
+    // A clock that never moves: the edit stays waiting, and nothing writes after the test.
+    const { data } = await openStore(undefined, handClock().schedule);
     const scheme = await data.createSchemeFromPreset('skiff', 'xbox');
     const mine = edit(scheme, 'Mine');
     data.saveScheme(mine);
@@ -614,7 +658,8 @@ describe('autosaving a scheme', () => {
   });
 
   it('flush writes what is waiting at once, and nothing is written twice after', async () => {
-    const { data } = await openStore();
+    const clock = handClock();
+    const { data } = await openStore(undefined, clock.schedule);
     const scheme = await data.createSchemeFromPreset('skiff', 'xbox');
     data.saveScheme(edit(scheme, 'Before quit'));
     await data.flush();
@@ -624,7 +669,8 @@ describe('autosaving a scheme', () => {
       ['schemes', `${scheme.id}.json`],
       JSON.stringify({ schemaVersion: currentVersion('scheme'), ...scheme, name: 'By hand' }),
     );
-    await vi.advanceTimersByTimeAsync(AUTOSAVE_MS * 2);
+    expect(clock.waiting()).toBe(0);
+    await clock.advance(AUTOSAVE_MS * 2);
     expect((await readJson('schemes', `${scheme.id}.json`))['name']).toBe('By hand');
   });
 
@@ -821,8 +867,8 @@ describe('the settings', () => {
   });
 
   it('accept a scheme whose edit is still waiting to be written', async () => {
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    const { data } = await openStore();
+    const clock = handClock();
+    const { data } = await openStore(undefined, clock.schedule);
     data.saveScheme({ ...xboxControllerPreset(SKIFF), id: 'fresh' });
     await data.setActive('skiff', 'fresh');
     expect(data.active().schemeId).toBe('fresh');
@@ -857,6 +903,155 @@ describe('the settings', () => {
     const { data, problems } = await openStore();
     expect(data.active()).toEqual({ gameId: null, schemeId: null });
     expect(problems).toHaveLength(1);
+  });
+});
+
+describe('copying a scheme', () => {
+  it('makes a new scheme of the same game with everything, the keys it was given included', async () => {
+    // The edit waits on a clock that never moves: the copy is of the edit, not of the file.
+    const clock = handClock();
+    const { data } = await openStore(undefined, clock.schedule);
+    const scheme = await data.createSchemeFromPreset('skiff', 'keys');
+    const dealt = {
+      ...scheme,
+      ledger: { 'L.index_1': { tap: { kind: 'key' as const, code: 'F13' as const } } },
+    };
+    data.saveScheme(dealt);
+    const copy = await data.copyScheme(scheme.id);
+    expect([copy.id === scheme.id, copy.name, copy.gameId, copy.ledger]).toEqual([
+      false,
+      "Game's own keys copy",
+      'skiff',
+      dealt.ledger,
+    ]);
+    expect((await readJson('schemes', `${copy.id}.json`))['name']).toBe("Game's own keys copy");
+  });
+
+  it('gives a second copy a name of its own', async () => {
+    const { data } = await openStore();
+    const scheme = await data.createSchemeFromPreset('skiff', 'xbox');
+    await data.copyScheme(scheme.id);
+    expect((await data.copyScheme(scheme.id)).name).toBe('Xbox controller copy 2');
+  });
+
+  it('refuses a scheme that is not there', async () => {
+    const { data } = await openStore();
+    await expect(data.copyScheme('missing')).rejects.toThrow('There is no such scheme.');
+  });
+});
+
+describe('deleting a scheme', () => {
+  it('removes its file and its applied plan, and the game no longer lists it', async () => {
+    const { data } = await openStore();
+    const keep = await data.createSchemeFromPreset('skiff', 'xbox');
+    const gone = await data.createSchemeFromPreset('skiff', 'keys');
+    await data.saveApplied(gone.id, resolve(gone, SKIFF, BUILT_IN_DEVICES));
+    await data.saveApplied(keep.id, resolve(keep, SKIFF, BUILT_IN_DEVICES));
+    await data.deleteScheme(gone.id);
+    expect([
+      (await data.listSchemes('skiff')).map((s) => s.id),
+      await exists('schemes', `${gone.id}.json`),
+      await exists('applied', `${gone.id}.json`),
+      await data.getScheme(gone.id),
+    ]).toEqual([[keep.id], false, false, null]);
+  });
+
+  it('calls off an edit still waiting, so the file never comes back', async () => {
+    const clock = handClock();
+    const { data } = await openStore(undefined, clock.schedule);
+    const scheme = await data.createSchemeFromPreset('skiff', 'xbox');
+    data.saveScheme({ ...scheme, name: 'Waiting' });
+    await data.deleteScheme(scheme.id);
+    await clock.advance(AUTOSAVE_MS);
+    await data.flush();
+    expect([clock.waiting(), await exists('schemes', `${scheme.id}.json`)]).toEqual([0, false]);
+  });
+
+  it('leaves the game with no active scheme when it was the active one', async () => {
+    const { data } = await openStore();
+    const scheme = await data.createSchemeFromPreset('skiff', 'xbox');
+    await data.setActive('skiff', scheme.id);
+    await data.deleteScheme(scheme.id);
+    expect([data.active(), data.activeSchemeOf('skiff')]).toEqual([
+      { gameId: 'skiff', schemeId: null },
+      null,
+    ]);
+    expect((await openStore()).data.activeSchemeOf('skiff')).toBeNull();
+  });
+
+  it('keeps what the game holds when the scheme deleted is the one applied to it last', async () => {
+    const { data } = await openStore();
+    const older = await data.createSchemeFromPreset('skiff', 'keys');
+    const last = await data.createSchemeFromPreset('skiff', 'xbox');
+    const lastPlan = resolve(last, SKIFF, BUILT_IN_DEVICES);
+    await data.saveApplied(older.id, resolve(older, SKIFF, BUILT_IN_DEVICES));
+    // A moment later, so the order of the two applies is plain from the files.
+    await new Promise((r) => setTimeout(r, 20));
+    await data.saveApplied(last.id, lastPlan);
+    await data.deleteScheme(last.id);
+    const holds = await data.lastApplied('skiff');
+    expect(holds?.schemeId === older.id).toBe(false);
+    expect(await data.getApplied(holds?.schemeId ?? '')).toEqual(lastPlan);
+  });
+
+  it('a later apply of another scheme is what the game holds after that', async () => {
+    const { data } = await openStore();
+    const gone = await data.createSchemeFromPreset('skiff', 'xbox');
+    const next = await data.createSchemeFromPreset('skiff', 'keys');
+    await data.saveApplied(gone.id, resolve(gone, SKIFF, BUILT_IN_DEVICES));
+    await data.deleteScheme(gone.id);
+    await new Promise((r) => setTimeout(r, 20));
+    await data.saveApplied(next.id, resolve(next, SKIFF, BUILT_IN_DEVICES));
+    expect((await data.lastApplied('skiff'))?.schemeId).toBe(next.id);
+  });
+
+  it('refuses a scheme that is not there, and an id that is no id', async () => {
+    const { data } = await openStore();
+    await expect(data.deleteScheme('missing')).rejects.toThrow('There is no such scheme.');
+    await expect(data.deleteScheme('../x')).rejects.toThrow('There is no such scheme.');
+  });
+});
+
+describe('what the units hold', () => {
+  const who = (schemeId: string, at: number) => ({
+    schemeId,
+    gameId: 'skiff',
+    schemeName: schemeId,
+    devices: { ...AZERONS_ONLY },
+    output: 'pad' as const,
+    at,
+  });
+  const planOf = () => resolve(xboxControllerPreset(SKIFF), SKIFF, BUILT_IN_DEVICES);
+  const both = [
+    { hand: 'left' as const, status: 'applied' },
+    { hand: 'right' as const, status: 'applied' },
+  ];
+
+  it('is nothing before any unit was written', async () => {
+    const { data } = await openStore();
+    expect(await data.unitsHeld()).toEqual({ left: null, right: null });
+  });
+
+  it('keeps each unit’s last write, across a restart: a left-only apply leaves the right one', async () => {
+    const { data } = await openStore();
+    const plan = planOf();
+    await data.recordApply(plan, both, who('a', 1));
+    await data.recordApply(
+      { units: { left: unitOf(plan, 'left') } },
+      [{ hand: 'left', status: 'applied' }],
+      who('b', 2),
+    );
+    const again = await (await openStore()).data.unitsHeld();
+    expect([again.left?.schemeId, again.right?.schemeId, again.right?.at]).toEqual(['b', 'a', 1]);
+  });
+
+  it('is nothing, reported, when its file is damaged', async () => {
+    await writeRaw(['units.json'], '{');
+    const { data, problems } = await openStore();
+    expect([await data.unitsHeld(), problems.map((p) => p.file)]).toEqual([
+      { left: null, right: null },
+      ['units.json'],
+    ]);
   });
 });
 

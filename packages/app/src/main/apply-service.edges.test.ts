@@ -411,7 +411,7 @@ describe('a setup with no Azeron', () => {
     const { fingerprint } = await service.preview(noUnit.id);
     expect(await service.apply(noUnit.id, fingerprint)).toEqual({
       ok: true,
-      message: 'This setup uses no Azeron.',
+      message: 'Applied. This scheme uses no Azeron, so none was written.',
       units: [],
     });
     expect(touched).toEqual({ holds: 0, looks: 0 });
@@ -431,7 +431,7 @@ describe('a setup with no Azeron', () => {
     expect(await service.apply(noUnit.id, fingerprint)).toEqual({
       ok: false,
       message:
-        "The setup is applied, but helmArray couldn't keep a note of it (disk full), so it can't say they are in sync.",
+        "The scheme is applied, but helmArray couldn't keep a note of it (disk full), so it can't say they are in sync.",
       units: [],
     });
   });

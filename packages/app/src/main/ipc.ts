@@ -32,6 +32,8 @@ export interface HelmHandlers {
   getScheme(id: string): Promise<Scheme | null>;
   listSchemes(gameId: string): Promise<Scheme[]>;
   createScheme(gameId: string, preset: Preset): Promise<Scheme>;
+  copyScheme(schemeId: string): Promise<Scheme>;
+  deleteScheme(schemeId: string): Promise<void>;
   saveScheme(scheme: Scheme): Promise<void>;
   setActive(gameId: string, schemeId: string | null): Promise<void>;
   previewApply(schemeId: string): Promise<ApplyPreview>;
@@ -81,6 +83,12 @@ export function registerHelmIpc(ipc: IpcRegistry, handlers: HelmHandlers): () =>
       throw new TypeError('createScheme: the preset must be "xbox" or "keys".');
     return handlers.createScheme(game, preset as Preset);
   });
+  ipc.handle(CHANNELS.copyScheme, (_event, schemeId) =>
+    handlers.copyScheme(idArg('copyScheme', schemeId)),
+  );
+  ipc.handle(CHANNELS.deleteScheme, (_event, schemeId) =>
+    handlers.deleteScheme(idArg('deleteScheme', schemeId)),
+  );
   ipc.handle(CHANNELS.saveScheme, (_event, scheme) => {
     if (!isScheme(scheme)) throw new TypeError("saveScheme: that isn't a scheme.");
     return handlers.saveScheme(scheme);
@@ -120,6 +128,8 @@ export function registerHelmIpc(ipc: IpcRegistry, handlers: HelmHandlers): () =>
       CHANNELS.getScheme,
       CHANNELS.listSchemes,
       CHANNELS.createScheme,
+      CHANNELS.copyScheme,
+      CHANNELS.deleteScheme,
       CHANNELS.saveScheme,
       CHANNELS.setActive,
       CHANNELS.previewApply,

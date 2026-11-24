@@ -8,7 +8,9 @@
 //                       the app and are never written.
 //   schemes/<id>.json   one scheme
 //   settings.json       the active game, and the active scheme of each game
-//   applied/<id>.json   the plan last applied for scheme <id>
+//   units.json          what each unit was last written with: which scheme, of which game, when
+//   applied/<id>.json   the plan last applied for scheme <id>; `<game>.held.json`, what a game
+//                       holds after the scheme applied to it last was deleted
 //
 // Rules the store keeps:
 // - A write is atomic: the bytes go to a temp file that is then renamed over the real one.
@@ -22,10 +24,21 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import type { AppSettings, Game, Plan, Scheme, StoredKind, StoredKinds } from '@helmarray/core';
-import { AZERON_USES } from '@helmarray/core';
+import type {
+  AppSettings,
+  ApplyWho,
+  Game,
+  Hand,
+  Plan,
+  Scheme,
+  StoredKind,
+  StoredKinds,
+  UnitsHeld,
+} from '@helmarray/core';
+import { AZERON_USES, NOTHING_HELD, recordApply } from '@helmarray/core';
 import {
   DEFAULT_SETTINGS,
+  copyScheme,
   currentVersion,
   gameKeysPreset,
   gameProblem,
@@ -57,6 +70,12 @@ export interface DataStoreOptions {
   builtInGames: readonly Game[];
   /** Wait after the last `saveScheme` of a scheme before it is written. */
   debounceMs?: number;
+  /**
+   * Runs `job` after `ms`, and returns the way to call it off. The job is the write itself, so a
+   * test's scheduler can wait for it to finish instead of looking at the disk until it has.
+   * Defaults to `setTimeout`.
+   */
+  schedule?(job: () => Promise<void>, ms: number): () => void;
   /** Told of every file that couldn't be read or written. Must not throw. */
   onProblem?(problem: StoreProblem): void;
   /** A short unique text, for new scheme ids and for names of quarantined files. */
@@ -129,11 +148,27 @@ const isPlan = (value: unknown): value is Plan =>
   isRecord(value['ledger']) &&
   Array.isArray(value['findings']);
 
+/** One unit's last write: absent, or a scheme, its game, when, and the profile written. */
+const isUnitWrite = (value: unknown) =>
+  value === null ||
+  (isRecord(value) &&
+    typeof value['schemeId'] === 'string' &&
+    typeof value['gameId'] === 'string' &&
+    typeof value['schemeName'] === 'string' &&
+    isDevices(value['devices']) &&
+    (value['output'] === 'pad' || value['output'] === 'keys') &&
+    typeof value['at'] === 'number' &&
+    isRecord(value['profile']));
+
+const isUnitsHeld = (value: unknown): value is UnitsHeld =>
+  isRecord(value) && isUnitWrite(value['left']) && isUnitWrite(value['right']);
+
 const CHECKS: { [K in StoredKind]: (value: unknown) => value is StoredKinds[K] } = {
   scheme: isScheme,
   game: isGame,
   settings: isSettings,
   applied: isPlan,
+  units: isUnitsHeld,
 };
 
 const THING: Record<StoredKind, string> = {
@@ -141,6 +176,7 @@ const THING: Record<StoredKind, string> = {
   game: 'game',
   settings: 'settings file',
   applied: 'applied plan',
+  units: 'record of what the units hold',
 };
 
 // --- reading and writing files --------------------------------------------------------------
@@ -220,12 +256,24 @@ async function writeAtomic(path: string, text: string): Promise<void> {
 
 // --- the store ------------------------------------------------------------------------------
 
-type Timer = ReturnType<typeof setTimeout>;
+/**
+ * The applied plan a game keeps once the scheme applied to it last is deleted: never a scheme's
+ * id (those end in `-<preset>-<id>`), and safe as a file name whatever the game's id.
+ */
+const heldId = (gameId: string): string =>
+  `${gameId.slice(0, MAX_ID_LENGTH - '.held'.length)}.held`;
+
+/** The app's scheduler: a timer, its job's promise left to run (the job reports its own failure). */
+const timerSchedule = (job: () => Promise<void>, ms: number): (() => void) => {
+  const timer = setTimeout(() => void job(), ms);
+  return () => clearTimeout(timer);
+};
 
 export class DataStore {
   private readonly root: string;
   private readonly builtIn: readonly Game[];
   private readonly debounceMs: number;
+  private readonly schedule: (job: () => Promise<void>, ms: number) => () => void;
   private readonly onProblem: (problem: StoreProblem) => void;
   private readonly newId: () => string;
 
@@ -236,19 +284,22 @@ export class DataStore {
   /** Schemes edited and not yet safely on disk: what a read of them must give back. */
   /** The settings are changed one call at a time. */
   private settingsTurn: Promise<unknown> = Promise.resolve();
+  private unitsTurn: Promise<unknown> = Promise.resolve();
   private createTurn: Promise<unknown> = Promise.resolve();
   /** Changes still under way, for `flush()` to wait for. */
   private readonly ops = new Set<Promise<void>>();
   private readonly unsaved = new Map<string, Scheme>();
-  private readonly timers = new Map<string, Timer>();
-  /** Games edited and not yet safely on disk, and their autosave waits: kept apart from schemes'. */
+  /** The way to call off each scheme's waiting write. */
+  private readonly timers = new Map<string, () => void>();
+  /** Games edited and not yet safely on disk, and the way to call off each one's waiting write. */
   private readonly unsavedGames = new Map<string, Game>();
-  private readonly gameTimers = new Map<string, Timer>();
+  private readonly gameTimers = new Map<string, () => void>();
 
   private constructor(options: DataStoreOptions) {
     this.root = options.root;
     this.builtIn = options.builtInGames;
     this.debounceMs = options.debounceMs ?? AUTOSAVE_MS;
+    this.schedule = options.schedule ?? timerSchedule;
     this.onProblem = options.onProblem ?? (() => undefined);
     this.newId = options.newId ?? (() => randomUUID().slice(0, 8));
   }
@@ -424,13 +475,12 @@ export class DataStore {
     if (problem !== null) throw new StoreError(problem);
     const copy = structuredClone(game);
     this.unsavedGames.set(copy.id, copy);
-    const earlier = this.gameTimers.get(copy.id);
-    if (earlier !== undefined) clearTimeout(earlier);
+    this.gameTimers.get(copy.id)?.();
     this.gameTimers.set(
       copy.id,
-      setTimeout(() => {
+      this.schedule(() => {
         this.gameTimers.delete(copy.id);
-        void this.writeGame(copy.id);
+        return this.writeGame(copy.id);
       }, this.debounceMs),
     );
   }
@@ -454,8 +504,7 @@ export class DataStore {
    */
   deleteGame(gameId: string): Promise<void> {
     if (!isSafeId(gameId)) return Promise.reject(new StoreError('There is no such game.'));
-    const timer = this.gameTimers.get(gameId);
-    if (timer !== undefined) clearTimeout(timer);
+    this.gameTimers.get(gameId)?.();
     this.gameTimers.delete(gameId);
     const waiting = this.unsavedGames.delete(gameId);
     const builtIn = this.builtIn.some((game) => game.id === gameId);
@@ -562,6 +611,68 @@ export class DataStore {
     return copy;
   }
 
+  /** *Copy a scheme*: everything, the keys it was given included, under a name of its own. */
+  copyScheme(schemeId: string): Promise<Scheme> {
+    const run = this.createTurn.then(async () => {
+      const scheme = await this.getScheme(schemeId);
+      if (scheme === null) throw new StoreError('There is no such scheme.');
+      const suffix = `-copy-${this.newId()}`;
+      const id = `${scheme.gameId.slice(0, Math.max(1, MAX_ID_LENGTH - suffix.length))}${suffix}`;
+      const copy = copyScheme(
+        scheme,
+        id,
+        await this.freeName(scheme.gameId, `${scheme.name} copy`),
+      );
+      await this.put('scheme', `schemes/${copy.id}.json`, copy);
+      return copy;
+    });
+    this.createTurn = run.catch(() => undefined);
+    return this.track(run);
+  }
+
+  /**
+   * Deletes a scheme: its file, any edit of it still waiting, and the game's choice of it as the
+   * active one. Its applied plan goes too, unless it is what the game holds (the scheme applied
+   * to it last): then the plan is kept as the game's own (`<game>.held`), so the next Apply still
+   * measures the game's bindings against what the game really has.
+   */
+  deleteScheme(schemeId: string): Promise<void> {
+    const run = this.settingsTurn.then(() => this.removeScheme(schemeId));
+    this.settingsTurn = run.catch(() => undefined);
+    return this.track(run);
+  }
+
+  private async removeScheme(schemeId: string): Promise<void> {
+    const scheme = isSafeId(schemeId) ? await this.getScheme(schemeId) : null;
+    if (scheme === null) throw new StoreError('There is no such scheme.');
+    this.timers.get(schemeId)?.();
+    this.timers.delete(schemeId);
+    this.unsaved.delete(schemeId);
+    const holds = (await this.lastApplied(scheme.gameId))?.schemeId === schemeId;
+    const applied = join(this.root, 'applied', `${schemeId}.json`);
+    // In the write queue: a write of this scheme already under way finishes first.
+    await this.enqueue(async () => {
+      if (holds) await rename(applied, join(this.root, 'applied', `${heldId(scheme.gameId)}.json`));
+      else await rm(applied, { force: true });
+      await rm(join(this.root, 'schemes', `${schemeId}.json`), { force: true });
+    });
+    if (own(this.settings.activeScheme, scheme.gameId) !== schemeId) return;
+    const before = this.settings;
+    const next: AppSettings = {
+      ...before,
+      activeScheme: Object.fromEntries(
+        Object.entries(before.activeScheme).filter(([id]) => id !== scheme.gameId),
+      ),
+    };
+    this.settings = next;
+    try {
+      await this.put('settings', 'settings.json', next);
+    } catch (error) {
+      if (this.settings === next) this.settings = before;
+      throw error;
+    }
+  }
+
   /** `Xbox controller`, or `Xbox controller 2` when the game already has a scheme by that name. */
   private async freeName(gameId: string, name: string): Promise<string> {
     const used = new Set((await this.listSchemes(gameId)).map((scheme) => scheme.name));
@@ -578,13 +689,12 @@ export class DataStore {
     if (!isScheme(scheme)) throw new StoreError("That isn't a scheme helmArray can save.");
     const copy = structuredClone(scheme);
     this.unsaved.set(copy.id, copy);
-    const earlier = this.timers.get(copy.id);
-    if (earlier !== undefined) clearTimeout(earlier);
+    this.timers.get(copy.id)?.();
     this.timers.set(
       copy.id,
-      setTimeout(() => {
+      this.schedule(() => {
         this.timers.delete(copy.id);
-        void this.writeScheme(copy.id);
+        return this.writeScheme(copy.id);
       }, this.debounceMs),
     );
   }
@@ -604,7 +714,7 @@ export class DataStore {
 
   /** Writes every waiting edit now, and waits for all writes to finish. Used on quit. */
   async flush(): Promise<void> {
-    for (const timer of [...this.timers.values(), ...this.gameTimers.values()]) clearTimeout(timer);
+    for (const cancel of [...this.timers.values(), ...this.gameTimers.values()]) cancel();
     this.timers.clear();
     this.gameTimers.clear();
     // A change still looking things up isn't queued to write yet: wait for it first.
@@ -695,20 +805,48 @@ export class DataStore {
   /**
    * Which of this game's schemes was applied last, and when (milliseconds since 1970), or null
    * when none was. The units hold one layout, so this is the layout they hold; the order is the
-   * time each applied plan's file was written, which only a successful apply does.
+   * time each applied plan's file was written, which only a successful apply does. A deleted
+   * scheme the game still holds answers by its kept plan's id (`<game>.held`), which names no
+   * scheme.
    */
   async lastApplied(gameId: string): Promise<{ schemeId: string; at: number } | null> {
     let best: { schemeId: string; at: number } | null = null;
-    for (const scheme of await this.listSchemes(gameId)) {
-      if ((await this.getApplied(scheme.id)) === null) continue;
+    const ids = [...(await this.listSchemes(gameId)).map((s) => s.id), heldId(gameId)];
+    for (const id of ids) {
+      if ((await this.getApplied(id)) === null) continue;
       let at: number;
       try {
-        at = (await stat(join(this.root, 'applied', `${scheme.id}.json`))).mtimeMs;
+        at = (await stat(join(this.root, 'applied', `${id}.json`))).mtimeMs;
       } catch {
         continue;
       }
-      if (best === null || at > best.at) best = { schemeId: scheme.id, at };
+      if (best === null || at > best.at) best = { schemeId: id, at };
     }
     return best;
+  }
+
+  // What the units hold -------------------------------------------------------------------------
+
+  /** What each unit was last written with. Nothing when no unit ever was, or it can't be read. */
+  async unitsHeld(): Promise<UnitsHeld> {
+    const found = await this.read('units', 'units.json');
+    return found.status === 'ok' ? found.value : { ...NOTHING_HELD };
+  }
+
+  /**
+   * After an apply: each unit of the plan that came out holding it now holds this scheme; every
+   * other unit keeps its last write (`recordApply`). One change at a time, in the order asked.
+   */
+  recordApply(
+    plan: Pick<Plan, 'units'>,
+    outcomes: readonly { hand: Hand; status: string }[],
+    who: ApplyWho,
+  ): Promise<void> {
+    const run = this.unitsTurn.then(async () => {
+      const next = recordApply(await this.unitsHeld(), plan, outcomes, who);
+      await this.put('units', 'units.json', next);
+    });
+    this.unitsTurn = run.catch(() => undefined);
+    return this.track(run);
   }
 }

@@ -299,7 +299,7 @@ function sendsNothing(ctx: Context): Finding[] {
     if (!known) {
       why = 'is on a control none of your devices has';
     } else if (!inSetup(ctx.setup, control)) {
-      why = "is on a control this setup doesn't use";
+      why = "is on a control this scheme doesn't use";
     } else if (known.azeron && known.button) {
       if (ctx.pins.get(control)?.presses[press] || flagged.has(control)) continue;
       why =
@@ -444,7 +444,7 @@ function mixedInput(ctx: Context): Finding[] {
       rule: 'mixed-input',
       severity: 'warning',
       message:
-        'This setup mixes an Xbox controller with keyboard and mouse. Some games stutter switching between the two.',
+        'This scheme mixes an Xbox controller with keyboard and mouse. Some games stutter switching between the two.',
     });
   }
   // A stick sending into the other set from the units' buttons (`setupSends`, the one place).

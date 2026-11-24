@@ -22,6 +22,8 @@ export interface LibrarySchemeRef {
   id: string;
   name: string;
   output: Scheme['output'];
+  /** What the setup plays with. */
+  devices: Scheme['devices'];
 }
 
 /**
@@ -41,10 +43,16 @@ export interface LibraryEntry {
   /** This game's own active scheme (not only the active game's), or null. */
   activeSchemeId: string | null;
   /**
-   * The scheme of this game applied last and when (ms since 1970), or null when none was. The
-   * units hold the layout of the most recent apply over all games.
+   * The scheme of this game applied last and when (ms since 1970), or null when none was: the
+   * setup the game holds. Not what the units hold (a setup with no Azeron writes none, and a left
+   * Azeron + mouse setup only the left one): that is `AppState.onUnits`.
    */
-  applied: { schemeId: string; at: number } | null;
+  applied: {
+    schemeId: string;
+    at: number;
+    /** How many changes that scheme has had since: 0 when the game holds it as it is. */
+    changes: number;
+  } | null;
   /** True when some action has a key the game ships with: "Game's own keys" can be offered. */
   nativeKeys: boolean;
   /** Whether a portrait cover and a header image can be had for `coverUrl`. */
@@ -98,6 +106,24 @@ export type HandQuestion =
   /** One new unit on its own: the user says which hand it is. */
   | { kind: 'choose'; unitId: number; prompt: string };
 
+/**
+ * What one unit holds: the apply that last wrote it, and whether the unit, read now, agrees.
+ * `holds`: it was read and runs that layout; `differs`: it was read and runs something else;
+ * `unknown`: it isn't connected or hasn't been read, so this is only the last write.
+ */
+export interface UnitHolds {
+  schemeId: string;
+  gameId: string;
+  /** The scheme's name when it was applied. */
+  schemeName: string;
+  /** What that setup played with when it was applied. */
+  devices: Scheme['devices'];
+  output: Scheme['output'];
+  /** When it was applied, ms since 1970. */
+  at: number;
+  check: 'holds' | 'differs' | 'unknown';
+}
+
 export interface AppState {
   /** Left first, then right, then units not yet placed. Units not plugged in have no chip. */
   devices: DeviceChip[];
@@ -109,6 +135,8 @@ export interface AppState {
   activeGameId: string | null;
   /** The active scheme of that game, or null when it has none. */
   activeSchemeId: string | null;
+  /** What each unit holds, by the apply that last wrote it; null for one never written. */
+  onUnits: { left: UnitHolds | null; right: UnitHolds | null };
 }
 
 /** One line of "what's ready" in the Apply drawer: a check or a cross, with one sentence. */
@@ -235,6 +263,13 @@ export interface HelmApi {
   listSchemes(gameId: string): Promise<Scheme[]>;
   /** Copies a preset into a new scheme of that game, saved at once, and gives it back. */
   createScheme(gameId: string, preset: Preset): Promise<Scheme>;
+  /** *Copy a scheme*: a new scheme of the same game with everything in it, saved at once. */
+  copyScheme(schemeId: string): Promise<Scheme>;
+  /**
+   * Deletes a scheme. A game whose active scheme it was is left with none; what the game holds
+   * (if it was the one applied to it last) is kept.
+   */
+  deleteScheme(schemeId: string): Promise<void>;
   /** Saves an edited scheme. Edits are written a moment later, together; quitting writes them. */
   saveScheme(scheme: Scheme): Promise<void>;
   /**
@@ -275,6 +310,8 @@ export const CHANNELS = {
   getScheme: 'helm:get-scheme',
   listSchemes: 'helm:list-schemes',
   createScheme: 'helm:create-scheme',
+  copyScheme: 'helm:copy-scheme',
+  deleteScheme: 'helm:delete-scheme',
   saveScheme: 'helm:save-scheme',
   setActive: 'helm:set-active',
   listLibrary: 'helm:list-library',
