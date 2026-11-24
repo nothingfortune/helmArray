@@ -6,8 +6,8 @@
 //                   difference, or a record the app can't read back, which counts as one:
 //                   never "in sync" about something not checked). Outranks pending changes,
 //                   because it says the units aren't what the person thinks they are.
-//   2. paused       The Azeron app is open, so helmArray has let go of the units: nothing can be
-//                   read or written until it closes. The units are still plugged in (their chips
+//   2. paused       The Azeron app is open and the setup uses a unit, so helmArray has let go of
+//                   the units it uses: nothing can be read or written until it closes. The units are still plugged in (their chips
 //                   stay); what they hold is not known, and edits wait for the app to close.
 //   3. not-applied  Edits in the editor haven't been applied. True whatever the units show.
 //   4. unknown      Nothing above, but the pill can't promise anything: a unit isn't
@@ -80,7 +80,9 @@ export function syncState(input: SyncInput): SyncState {
     };
   }
 
-  if (input.azeronOpen === true) {
+  // The Azeron app blocks only the units: a setup that uses none (the keyboard, the controller)
+  // is applied as ever, and keeps its own words.
+  if (input.azeronOpen === true && HANDS.some((hand) => judged(input[hand]))) {
     return { kind: 'paused', label: 'Azeron app is open', tone: 'warning' };
   }
 

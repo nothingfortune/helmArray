@@ -240,7 +240,7 @@ describe('the app state', () => {
         reason,
       );
       expect([state.sync, state.devices.map((c) => [c.hand, c.state])]).toEqual([
-        { label: 'Azeron app is open', tone: 'warning' },
+        { label: 'Azeron app is open', tone: 'warning', paused: true },
         [
           ['left', 'paused'],
           ['right', 'paused'],

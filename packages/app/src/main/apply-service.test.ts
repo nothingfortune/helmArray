@@ -1018,6 +1018,22 @@ describe('the game half of the Apply drawer', () => {
     expect(keepSheet.mock.calls).toEqual([['skiff', 'Skiff', preview.game.rows]]);
   });
 
+  it('works the state out only once the rows are kept, so the windows are told once', async () => {
+    const order: string[] = [];
+    r = await rig({
+      scheme: single,
+      keepSheet: async () => {
+        await new Promise<void>((done) => queueMicrotask(done));
+        await Promise.resolve();
+        order.push('kept');
+      },
+      settled: () => void order.push('settled'),
+    });
+    const preview = await r.service.preview(single.id);
+    await r.service.apply(single.id, preview.fingerprint);
+    expect(order).toEqual(['kept', 'settled']);
+  });
+
   it('keeps nothing when the apply is refused', async () => {
     const keepSheet = vi.fn(() => Promise.resolve());
     r = await rig({ scheme: single, keepSheet, azeron: () => Promise.resolve(true) });

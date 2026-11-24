@@ -110,6 +110,11 @@ export interface SyncPill {
    * app being open says first): the Editor's *Apply 3*. Counted as the person made them.
    */
   changes?: number;
+  /**
+   * The Azeron app is open and the active setup uses a unit: what it blocks is this setup. The band
+   * under the header says so only then; a setup with no Azeron is not blocked.
+   */
+  paused?: true;
 }
 
 /** A question the app must ask to tell the hands apart, or null. */

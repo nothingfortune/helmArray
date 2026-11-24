@@ -32,7 +32,8 @@ export function App({ state }: { state: AppState | null }) {
           setApplying(true);
         }}
       />
-      {state !== null && state.writeBlock !== null && (
+      {/* Only when the Azeron app blocks the setup: one with no Azeron isn't. */}
+      {state !== null && state.writeBlock !== null && state.sync.paused === true && (
         <WriteBlockLine sentence={state.writeBlock} />
       )}
       {state !== null && (

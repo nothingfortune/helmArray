@@ -397,7 +397,12 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
         const blocked = findingChecks(plan).find((c) => !c.ok);
         if (blocked) return refused(blocked.text);
         const problem = await remember(schemeId, game.id, plan, fingerprint);
-        return keep({ ok: problem === null, message: problem ?? NO_UNIT_SENTENCE, units: [] });
+        // Awaited here, inside the try: the state is worked out (finally) only once it is kept.
+        return await keep({
+          ok: problem === null,
+          message: problem ?? NO_UNIT_SENTENCE,
+          units: [],
+        });
       }
 
       const open = await azeronOpen();
@@ -450,7 +455,7 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
         slot: u.slot,
       }));
       if (outcome.problem !== null) return { ok: false, message: outcome.problem, units };
-      return keep({ ok: outcome.result.ok, message: outcome.result.message, units });
+      return await keep({ ok: outcome.result.ok, message: outcome.result.message, units });
     } catch (error) {
       trace(`apply failed unexpectedly: ${messageOf(error)}`);
       return refused(`helmArray couldn't apply: ${sentence(messageOf(error))}`);

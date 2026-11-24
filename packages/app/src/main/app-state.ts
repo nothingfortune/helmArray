@@ -144,7 +144,8 @@ export function composeAppState(input: AppStateInput): AppState {
     nothingApplied: plans.active && plans.applied === null,
     azeronOpen: writeBlock !== null,
   };
-  const { label, tone } = syncState(syncInput);
+  const judged = syncState(syncInput);
+  const { label, tone } = judged;
   const detail = syncDetail(syncInput);
   return {
     devices: chips,
@@ -153,6 +154,7 @@ export function composeAppState(input: AppStateInput): AppState {
       tone,
       ...(detail !== undefined && { detail }),
       ...(changes > 0 && { changes }),
+      ...(judged.kind === 'paused' && { paused: true as const }),
     },
     writeBlock,
     question: questionOf(pendingAsk(devices, hands)),
