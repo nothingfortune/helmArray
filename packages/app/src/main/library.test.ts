@@ -51,7 +51,9 @@ describe('the merged library', () => {
     });
     expect(entries).toEqual([
       {
-        name: 'HELLDIVERS™ 2',
+        // helmArray's name for the game, not Steam's trademarked capitals.
+        name: 'Helldivers 2',
+        inSteam: true,
         appId: '553850',
         gameId: 'helldivers2',
         schemes: [
@@ -60,6 +62,7 @@ describe('the merged library', () => {
         activeSchemeId: hd2Scheme.id,
         applied: null,
         nativeKeys: true,
+        shipsDefaults: true,
         hasCover: true,
         hasHeader: true,
         actionCount: helldivers2.actions.length,
@@ -76,12 +79,14 @@ describe('the merged library', () => {
     }).find((e) => e.appId === '1');
     expect(entry).toEqual({
       name: 'Unknown Game',
+      inSteam: true,
       appId: '1',
       gameId: null,
       schemes: [],
       activeSchemeId: null,
       applied: null,
       nativeKeys: false,
+      shipsDefaults: false,
       hasCover: true,
       hasHeader: false,
       actionCount: 0,
@@ -95,9 +100,11 @@ describe('the merged library', () => {
       schemes: none,
       activeSchemeOf: () => null,
     });
-    expect(entries.map((e) => [e.name, e.appId, e.gameId, e.hasCover, e.hasHeader])).toEqual([
-      ['Helldivers 2', '553850', 'helldivers2', false, false],
-      ['Zed Racing', null, 'by-hand', false, false],
+    expect(
+      entries.map((e) => [e.name, e.appId, e.gameId, e.hasCover, e.hasHeader, e.inSteam]),
+    ).toEqual([
+      ['Helldivers 2', '553850', 'helldivers2', false, false, false],
+      ['Zed Racing', null, 'by-hand', false, false, false],
     ]);
   });
 
@@ -110,7 +117,8 @@ describe('the merged library', () => {
     });
     expect(entries).toHaveLength(1);
     expect(entries[0]?.gameId).toBe('skiff');
-    expect(entries[0]?.name).toBe('Skiff (Steam)');
+    // The game's name is helmArray's: Steam's is only for a game helmArray doesn't know.
+    expect(entries[0]?.name).toBe('Skiff');
   });
 
   it('lists known games first and unsupported ones after, each by name', () => {
@@ -132,6 +140,26 @@ describe('the merged library', () => {
     });
     expect(entries.find((e) => e.gameId === 'helldivers2')?.nativeKeys).toBe(true);
     expect(entries.find((e) => e.gameId === 'skiff')?.nativeKeys).toBe(false);
+  });
+
+  it('says defaults are found for a game shipping a key or an Xbox control, not otherwise', () => {
+    // Skiff ships its boost on Xbox A and on no key.
+    const bare: Game = {
+      ...SKIFF,
+      id: 'bare',
+      actions: SKIFF.actions.map((a) => ({ ...a, native: {} })),
+    };
+    const entries = mergeLibrary({
+      steam: [],
+      games: [HD2, { game: SKIFF, builtIn: false }, { game: bare, builtIn: false }],
+      schemes: none,
+      activeSchemeOf: () => null,
+    });
+    expect(Object.fromEntries(entries.map((e) => [e.gameId, e.shipsDefaults]))).toEqual({
+      helldivers2: true,
+      skiff: true,
+      bare: false,
+    });
   });
 
   it('ignores an active scheme id that is not one of the game schemes', () => {
@@ -293,7 +321,10 @@ describe('the library service', () => {
 
 describe('the action count', () => {
   it('counts the actions of a game helmArray knows, and is 0 for a game added with none yet', () => {
-    const empty = { ...HD2, game: { ...HD2.game, id: 'empty', steamAppId: 7, actions: [] } };
+    const empty = {
+      ...HD2,
+      game: { ...HD2.game, id: 'empty', name: 'Empty', steamAppId: 7, actions: [] },
+    };
     const entries = mergeLibrary({
       steam: [steam('553850', 'HELLDIVERS™ 2'), steam('7', 'Empty'), steam('8', 'Unknown')],
       games: [HD2, empty],
@@ -302,7 +333,7 @@ describe('the action count', () => {
     });
     expect(entries.map((e) => [e.name, e.actionCount])).toEqual([
       ['Empty', 0],
-      ['HELLDIVERS™ 2', helldivers2.actions.length],
+      ['Helldivers 2', helldivers2.actions.length],
       ['Unknown', 0],
     ]);
   });

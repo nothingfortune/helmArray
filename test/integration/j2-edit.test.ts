@@ -65,8 +65,9 @@ describe('J2: moving Fire to another button of the right unit', () => {
     ]).toEqual([true, false]);
   });
 
-  it('the pill says two buttons changed and are not applied, before any Apply', () => {
-    expect(pillAfterEdit).toBe('2 changes not applied');
+  it('the pill counts the move as one change not applied, before any Apply', () => {
+    // Fire left one button for another: one drag, one change, though two buttons differ.
+    expect(pillAfterEdit).toBe('1 change not applied');
   });
 
   it('the drawer offers a write to the right unit only', () => {

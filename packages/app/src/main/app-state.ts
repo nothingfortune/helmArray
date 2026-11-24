@@ -16,11 +16,14 @@ import type { SyncInput } from './sync-state';
 
 /**
  * The question to put to the person now, or null. Nothing is asked while a unit is still
- * connecting: a unit that has yet to answer could be the second one, and a single unit asked
+ * connecting, or let go of for the Azeron app: a unit that has yet to answer could be the second one, and a single unit asked
  * about "outright" would then be asked about twice.
  */
 export function pendingAsk(devices: DevicesSnapshot, hands: HandsResult): HandQuestion | null {
-  return devices.units.some((unit) => unit.state === 'connecting') ? null : hands.ask;
+  // Nor while the Azeron app has the units: a press can't be seen, and a unit can't be read.
+  return devices.units.some((unit) => unit.state === 'connecting' || unit.state === 'paused')
+    ? null
+    : hands.ask;
 }
 
 const RANK = { left: 0, right: 1, unknown: 2 } as const;
@@ -131,17 +134,24 @@ export function composeAppState(input: AppStateInput): AppState {
   const setupPlan = plans.applied ?? plans.current;
   const used = (hand: 'left' | 'right') =>
     setupPlan === null || setupPlan.units[hand] !== undefined;
+  const changes = plans.active ? pendingChanges(plans.applied, plans.current) : 0;
   const syncInput: SyncInput = {
     left: { used: used('left'), connected: there('left'), verdict: verdicts.left },
     right: { used: used('right'), connected: there('right'), verdict: verdicts.right },
-    pendingChanges: plans.active ? pendingChanges(plans.applied, plans.current) : 0,
+    pendingChanges: changes,
     nothingApplied: plans.active && plans.applied === null,
+    azeronOpen: writeBlock !== null,
   };
   const { label, tone } = syncState(syncInput);
   const detail = syncDetail(syncInput);
   return {
     devices: chips,
-    sync: { label, tone, ...(detail !== undefined && { detail }) },
+    sync: {
+      label,
+      tone,
+      ...(detail !== undefined && { detail }),
+      ...(changes > 0 && { changes }),
+    },
     writeBlock,
     question: questionOf(pendingAsk(devices, hands)),
     activeGameId: active?.gameId ?? null,

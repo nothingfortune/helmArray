@@ -88,6 +88,12 @@
   border-color: var(--color-line);
   cursor: default;
 }
+/* Applied: nothing to do, so not amber; it still opens the drawer. */
+.ed-primary.is-done {
+  background: var(--color-raised);
+  color: var(--color-muted);
+  border-color: var(--color-line);
+}
 
 .ed-state {
   margin: var(--space-32) var(--space-24);

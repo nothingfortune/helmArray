@@ -6,12 +6,15 @@
 //                   difference, or a record the app can't read back, which counts as one:
 //                   never "in sync" about something not checked). Outranks pending changes,
 //                   because it says the units aren't what the person thinks they are.
-//   2. not-applied  Edits in the editor haven't been applied. True whatever the units show.
-//   3. unknown      Nothing above, but the pill can't promise anything: a unit isn't
+//   2. paused       The Azeron app is open, so helmArray has let go of the units: nothing can be
+//                   read or written until it closes. The units are still plugged in (their chips
+//                   stay); what they hold is not known, and edits wait for the app to close.
+//   3. not-applied  Edits in the editor haven't been applied. True whatever the units show.
+//   4. unknown      Nothing above, but the pill can't promise anything: a unit isn't
 //                   connected, hasn't been read, or nothing was ever applied for the scheme
 //                   to compare it with. A disconnected unit can't be in sync, and what it
 //                   last held is stale, so it is ignored in step 1.
-//   4. in-sync      Both units connected, both read, both match, nothing pending.
+//   5. in-sync      Both units connected, both read, both match, nothing pending.
 //
 // Only the units the setup uses are judged: for *left Azeron + mouse* the right unit is neither
 // connected nor not, and what it holds is nothing to the pill.
@@ -39,12 +42,16 @@ export interface SyncInput {
   pendingChanges: number;
   /** A scheme is active but nothing was ever applied for it: there is nothing to compare with. */
   nothingApplied?: boolean;
+  /** The Azeron app is open: helmArray has let go of the units until it closes. */
+  azeronOpen?: boolean;
 }
 
-export type SyncTone = 'ok' | 'warning' | 'error';
+/** `plain`: nothing to act on (nothing has been asked of the person yet). */
+export type SyncTone = 'ok' | 'warning' | 'error' | 'plain';
 
 export type SyncKind =
   | { kind: 'in-sync' }
+  | { kind: 'paused' }
   | { kind: 'not-applied'; count: number }
   | { kind: 'differs'; hands: Hand[] }
   | { kind: 'unknown'; reason: 'not-connected' | 'not-read' | 'nothing-applied'; hands: Hand[] };
@@ -71,6 +78,10 @@ export function syncState(input: SyncInput): SyncState {
       label: differing.length === 2 ? 'Units differ' : `${name(differing[0])} unit differs`,
       tone: 'error',
     };
+  }
+
+  if (input.azeronOpen === true) {
+    return { kind: 'paused', label: 'Azeron app is open', tone: 'warning' };
   }
 
   const count = Number.isFinite(input.pendingChanges) ? Math.trunc(input.pendingChanges) : 0;
@@ -109,7 +120,7 @@ export function syncState(input: SyncInput): SyncState {
       reason: 'not-read',
       hands: unread,
       label: 'Not checked yet',
-      tone: 'warning',
+      tone: 'plain',
     };
   }
 
@@ -137,7 +148,15 @@ export function syncDetail(input: SyncInput): string | undefined {
 
 const STICK = { left: 'L.stick', right: 'R.stick' } as const;
 
-/** Every position (and stick) a plan says something about, by control id, with what it says. */
+/** The unit a control id is on (`L.index_1`, `R.stick`), or undefined for a key, a mouse button or the controller. */
+const unitOfControl = (control: string): Hand | undefined =>
+  control.startsWith('L.') ? 'left' : control.startsWith('R.') ? 'right' : undefined;
+
+/**
+ * Every unit position (and stick) a plan says something about, by control id, with what it says.
+ * Only the units' own controls: a key, a mouse button or the controller's own button is written
+ * nowhere, so what changes for one is what the game is told, counted from the game's rows.
+ */
 function says(plan: Plan | null): Map<string, string[]> {
   const out = new Map<string, string[]>();
   const add = (control: string, what: unknown) =>
@@ -149,45 +168,65 @@ function says(plan: Plan | null): Map<string, string[]> {
     for (const pin of unit.pins) if (Object.keys(pin.presses).length > 0) add(pin.control, pin);
     add(STICK[hand], unit.stick);
   }
-  for (const binding of plan.bindings) add(binding.control, binding);
+  for (const binding of plan.bindings) {
+    if (unitOfControl(binding.control) !== undefined) add(binding.control, binding);
+  }
   return out;
 }
 
+/** The actions a control carries in a plan, each as `mode|action`. */
+const carried = (plan: Plan | null, control: string): string[] =>
+  (plan?.bindings ?? []).filter((b) => b.control === control).map((b) => `${b.mode}|${b.action}`);
+
 /**
- * How many buttons (a stick counts as one) the scheme now says differently from the plan last
- * applied: its positions on the units and what the game is told they do, each button once. With
- * nothing applied yet, it is how many say anything at all. A scheme that did not resolve
- * (`current` null) counts as one change: whatever it says, it can't be said to be applied.
+ * How many changes the scheme has that aren't applied: the unit buttons (a stick counts as one)
+ * the person edited, each once, and each action the game is to be told differently that no edited
+ * button accounts for.
  *
- * The game's bindings that differ from what was applied count too, one per action.
+ * A drag is one change. A button whose only change is that its action left for another edited
+ * button is the far end of that move, not an edit of its own (whatever it then stops sending
+ * comes with the move), and an action the game is told about because it came or went with an
+ * edited button is that edit, not another.
+ *
+ * Only what Apply would change counts. A unit the setup no longer uses is not written, so nothing
+ * on it is an edit (the actions it carried still count, through the game). A key, a mouse button
+ * or the controller's own button is written nowhere: what changes for one is what the game is
+ * told, so a device that only takes the game's own bindings counts nothing.
+ *
+ * With nothing applied yet, it is the buttons the scheme puts an action on and the game's
+ * bindings it changes: a stick's behaviour, and a button sending something with no action on it,
+ * are nothing the person put there. A scheme that did not resolve (`current` null) counts as one
+ * change: whatever it says, it can't be said to be applied.
  */
 export function pendingChanges(applied: Plan | null, current: Plan | null): number {
   if (current === null) return 1;
   const before = says(applied);
   const now = says(current);
-  const changed = new Set<string>();
+  const changed: string[] = [];
   for (const control of new Set([...before.keys(), ...now.keys()])) {
-    const a = (before.get(control) ?? []).join('|');
-    const b = (now.get(control) ?? []).join('|');
-    if (a === b) continue;
-    // Nothing applied: only what the scheme puts on a button counts, not a stick's default
-    // behaviour, so a scheme with nothing on it has nothing to apply.
-    if (applied === null && control.endsWith('.stick')) continue;
-    changed.add(control);
+    const hand = unitOfControl(control);
+    if (hand === undefined || current.units[hand] === undefined) continue;
+    if ((before.get(control) ?? []).join('|') === (now.get(control) ?? []).join('|')) continue;
+    if (applied === null && carried(current, control).length === 0) continue;
+    changed.push(control);
   }
-  // The game's bindings: until helmArray writes game files (M5) a row is set by hand from the
-  // drawer, so one that differs from what was last applied is a change not applied, each action
-  // once. A row a changed button already accounts for (its action came or went with the button)
-  // is that change, not another.
+  // Where each action is now, among the edited buttons.
+  const landed = new Set(changed.flatMap((control) => carried(current, control)));
+  const edits = changed.filter((control) => {
+    const was = carried(applied, control);
+    const moveSource =
+      carried(current, control).length === 0 &&
+      was.length > 0 &&
+      was.every((action) => landed.has(action));
+    return !moveSource;
+  });
   const explained = new Set(
-    [...(applied?.bindings ?? []), ...current.bindings]
-      .filter((b) => changed.has(b.control))
-      .map((b) => `${b.mode}|${b.action}`),
+    changed.flatMap((control) => [...carried(applied, control), ...carried(current, control)]),
   );
   const rows = new Set(
     gameRowsChanged(current, applied)
-      .filter((b) => !explained.has(`${b.mode}|${b.action}`))
-      .map((b) => `${b.set}|${b.mode}|${b.action}`),
+      .map((b) => `${b.mode}|${b.action}`)
+      .filter((action) => !explained.has(action)),
   );
-  return changed.size + rows.size;
+  return edits.length + rows.size;
 }

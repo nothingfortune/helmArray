@@ -32,8 +32,10 @@ export interface LibrarySchemeRef {
  * Plain data: no file paths ever reach a window; covers are fetched by `coverUrl`.
  */
 export interface LibraryEntry {
-  /** Steam's name for the game, or the known game's own name when Steam doesn't list it. */
+  /** helmArray's name for a game it knows ("Helldivers 2"), else Steam's. */
   name: string;
+  /** Steam lists the game as installed. */
+  inSteam: boolean;
   /** The Steam app id, or null for a game added by hand that isn't on Steam. */
   appId: string | null;
   /** The id of helmArray's game definition, or null when helmArray doesn't know the game. */
@@ -55,6 +57,8 @@ export interface LibraryEntry {
   } | null;
   /** True when some action has a key the game ships with: "Game's own keys" can be offered. */
   nativeKeys: boolean;
+  /** True when some action has a key or an Xbox control the game ships it on: defaults found. */
+  shipsDefaults: boolean;
   /** Whether a portrait cover and a header image can be had for `coverUrl`. */
   hasCover: boolean;
   hasHeader: boolean;
@@ -74,7 +78,11 @@ export interface DeviceChip {
   hand: Hand | 'unknown';
   /** The unit's permanent id, so a question can name the unit it is about. */
   unitId: number | null;
-  state: 'connecting' | 'ready' | 'failed';
+  /**
+   * `paused`: plugged in, and let go of while the Azeron app is open: not talked to until it
+   * closes, so nothing of what it holds is known.
+   */
+  state: 'connecting' | 'ready' | 'failed' | 'paused';
   /** Firmware once the unit has answered. */
   firmware: number | null;
   /** Why it failed, in one plain sentence. */
@@ -88,7 +96,8 @@ export interface DeviceChip {
   running: number | null;
 }
 
-export type SyncTone = 'ok' | 'warning' | 'error';
+/** `plain`: nothing to act on. */
+export type SyncTone = 'ok' | 'warning' | 'error' | 'plain';
 
 /** The sync pill: its words and its colour. Read from the units, never inferred. */
 export interface SyncPill {
@@ -96,6 +105,11 @@ export interface SyncPill {
   tone: SyncTone;
   /** When a unit differs: which, and how much of it. For a tooltip. */
   detail?: string;
+  /**
+   * The active scheme's changes not applied, when it has any, whatever the label says (the Azeron
+   * app being open says first): the Editor's *Apply 3*. Counted as the person made them.
+   */
+  changes?: number;
 }
 
 /** A question the app must ask to tell the hands apart, or null. */

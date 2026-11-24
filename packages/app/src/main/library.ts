@@ -27,6 +27,8 @@ const refOf = (scheme: Scheme): LibrarySchemeRef => ({
 
 const hasNativeKeys = (game: Game): boolean =>
   game.actions.some((a) => a.native?.key !== undefined);
+const shipsDefaults = (game: Game): boolean =>
+  game.actions.some((a) => a.native?.key !== undefined || a.native?.pad !== undefined);
 
 /**
  * One entry per Steam game and per known game, matched on the Steam app id. Known games come
@@ -50,13 +52,16 @@ export function mergeLibrary(input: LibraryInput): LibraryEntry[] {
       return applied && list.some((s) => s.id === applied.schemeId) ? applied : null;
     };
     return {
-      name: steam?.name ?? game?.name ?? '',
+      // helmArray's name for a game it knows; Steam's (often in capitals and ™) only otherwise.
+      name: game?.name ?? steam?.name ?? '',
+      inSteam: steam !== undefined,
       appId,
       gameId: game?.id ?? null,
       schemes,
       activeSchemeId: active !== null && schemes.some((s) => s.id === active) ? active : null,
       applied: appliedIn(game, schemes),
       nativeKeys: game ? hasNativeKeys(game) : false,
+      shipsDefaults: game ? shipsDefaults(game) : false,
       hasCover: steam?.cover !== undefined,
       hasHeader: steam?.header !== undefined,
       actionCount: game?.actions.length ?? 0,

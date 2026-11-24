@@ -242,8 +242,8 @@ describe('a left Azeron + mouse setup applied after both units were written', ()
 
   it('the card names the latest write, and the right unit’s other scheme', () => {
     expect([card?.title, card?.detail, card?.held]).toEqual([
-      'HELLDIVERS 2 · Xbox controller copy',
-      'Applied · Left Azeron + mouse · Right unit: HELLDIVERS 2 · Xbox controller',
+      'Helldivers 2 · Xbox controller copy',
+      'Applied · Left Azeron + mouse · Right unit: Helldivers 2 · Xbox controller',
       { left: left.id, right: both.id },
     ]);
   });

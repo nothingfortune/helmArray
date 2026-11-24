@@ -198,6 +198,12 @@ describe('the app state', () => {
     expect(pendingAsk({ units: [unit('a', LEFT)] }, hands)).toEqual(hands.ask);
   });
 
+  it('asks nothing while the Azeron app has the units', () => {
+    const paused = [unit('a', LEFT, { state: 'paused' })];
+    const hands = handsFor([LEFT], known({}));
+    expect([hands.ask === null, pendingAsk({ units: paused }, hands)]).toEqual([false, null]);
+  });
+
   it('passes the write block through', () => {
     const reason = 'Close the Azeron app first: it talks to the units too.';
     expect(compose([], {}, reason).writeBlock).toBe(reason);
@@ -209,7 +215,25 @@ describe('the app state', () => {
         [LEFT]: 'left',
         [RIGHT]: 'right',
       });
-      expect(state.sync).toEqual({ label: 'Not checked yet', tone: 'warning' });
+      // Nothing was asked of anyone yet: a plain pill, not a warning to act on.
+      expect(state.sync).toEqual({ label: 'Not checked yet', tone: 'plain' });
+    });
+
+    it('says the Azeron app is open, and keeps the units it let go as chips', () => {
+      const reason = 'Close the Azeron app first: it talks to the units too.';
+      const paused = (path: string, id: number) => unit(path, id, { state: 'paused' });
+      const state = compose(
+        [paused('a', LEFT), paused('b', RIGHT)],
+        { [LEFT]: 'left', [RIGHT]: 'right' },
+        reason,
+      );
+      expect([state.sync, state.devices.map((c) => [c.hand, c.state])]).toEqual([
+        { label: 'Azeron app is open', tone: 'warning' },
+        [
+          ['left', 'paused'],
+          ['right', 'paused'],
+        ],
+      ]);
     });
 
     it('never says In sync, whatever is plugged in', () => {

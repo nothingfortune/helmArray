@@ -67,16 +67,19 @@ function Choices({ entry, send }: { entry: LibraryEntry; send: Send }) {
   );
 }
 
-/** *Edit game*: the game's modes and actions, on the Game screen. */
+/**
+ * *Edit actions*: the game's actions and modes, on the Game screen. Named for what it opens, so it
+ * doesn't read as the scheme the tile opens.
+ */
 function EditGame({ entry, onOpenGame }: { entry: LibraryEntry; onOpenGame: OpenGame }) {
   return (
     <button
       type="button"
       className="btn ghost small"
-      aria-label={`Edit game: ${entry.name}`}
+      aria-label={`Edit actions: ${entry.name}`}
       onClick={() => onOpenGame(gameTarget(entry))}
     >
-      Edit game
+      Edit actions
     </button>
   );
 }
@@ -183,9 +186,15 @@ function Tile({
           </button>
         </Popover.Trigger>
         <Popover.Portal>
-          <Popover.Content className="popover" sideOffset={8} aria-label={`${entry.name} schemes`}>
+          <Popover.Content
+            className="popover"
+            side="right"
+            align="start"
+            sideOffset={8}
+            aria-label={`${entry.name} schemes`}
+          >
             <div className="choices">
-              <span className="hint">Pick one to apply</span>
+              <span className="hint">Open a scheme</span>
               {entry.schemes.map((scheme) => (
                 <button
                   key={scheme.id}
@@ -215,7 +224,7 @@ export function Library({
 }: {
   state: AppState | null;
   onOpenEditor: (schemeId: string) => void;
-  /** The Game screen: *Set up*, *Edit game* and *Add a game*. */
+  /** The Game screen: *Set up*, *Edit actions* and *Add a game*. */
   onOpenGame: OpenGame;
 }) {
   const library = useLibrary();

@@ -75,7 +75,14 @@ export function heldSchemes(state: Pick<AppState, 'onUnits'> | null): Set<string
 export function statusLine(entry: LibraryEntry, onUnits: ReadonlySet<string>): StatusLine {
   if (entry.gameId === null) return { text: 'Not supported yet', tone: 'unsupported' };
   const count = entry.schemes.length;
-  if (count === 0) return { text: 'Not set up', tone: 'plain' };
+  // "Set up" is the button that adds a game's data: a game with data and no scheme is not "not
+  // set up", it has no scheme yet.
+  if (count === 0) {
+    return {
+      text: entry.shipsDefaults ? 'Defaults found · not set up' : 'No scheme yet',
+      tone: 'plain',
+    };
+  }
   const applied = appliedScheme(entry);
   if (applied !== null && entry.applied !== null) {
     const label = setupLabel(entry, applied);
@@ -106,10 +113,17 @@ export function filterEntries(entries: readonly LibraryEntry[], query: string): 
     : entries.filter((e) => e.name.toLowerCase().includes(wanted));
 }
 
-/** The line beside "Games". */
+/**
+ * The line beside "Games": where they come from and how many have a scheme. "From Steam" only
+ * when Steam lists every one of them; otherwise how many there are.
+ */
 export function summary(entries: readonly LibraryEntry[]): string {
   const withScheme = entries.filter((e) => e.schemes.length > 0).length;
-  return `From Steam · ${withScheme} with a scheme`;
+  if (entries.length > 0 && entries.every((e) => e.inSteam)) {
+    return `From Steam · ${withScheme} with a scheme`;
+  }
+  const games = entries.length === 1 ? '1 game' : `${entries.length} games`;
+  return `${games} · ${withScheme} with a scheme`;
 }
 
 export interface CurrentCard {
@@ -162,6 +176,11 @@ export function currentCard(
   if (latest !== null) {
     const shown = named(latest);
     const notes = [`Applied · ${setupWords(latest)}`];
+    // The same count as the tile and the pill: the scheme the units hold, edited since.
+    const since = shown.entry?.applied;
+    if (since?.schemeId === latest.schemeId && since.changes > 0) {
+      notes.push(`${changesWord(since.changes)} not applied`);
+    }
     for (const h of holds) {
       if (h.schemeId !== latest.schemeId) notes.push(`${HAND_WORD[h.hand]}: ${named(h).title}`);
       if (h.check === 'differs') notes.push(`${HAND_WORD[h.hand]} differs`);

@@ -46,6 +46,7 @@ import {
   Unplaced,
 } from './EditorParts';
 import type { PickerActions } from './EditorParts';
+import type { ApplyButton } from '../apply/applyButton';
 import './editor.css';
 
 export interface EditorProps {
@@ -71,6 +72,8 @@ export interface EditorProps {
    * and a later edit would give buttons other keys.
    */
   keysKept?: number;
+  /** What the Apply button says: "Apply 3", or "Applied" once in sync. Plain "Apply" without it. */
+  applyButton?: ApplyButton;
 }
 
 type Load =
@@ -90,6 +93,7 @@ function EditorLoader({
   onApply,
   historyOff,
   keysKept,
+  applyButton,
 }: EditorProps) {
   const [load, setLoad] = useState<Load>({ kind: 'loading' });
 
@@ -125,6 +129,7 @@ function EditorLoader({
         onApply={onApply}
         historyOff={historyOff === true}
         keysKept={keysKept ?? 0}
+        applyButton={applyButton ?? { label: 'Apply', done: false }}
       />
     );
   }
@@ -159,6 +164,7 @@ interface BodyProps {
   onApply: (() => void) | undefined;
   historyOff: boolean;
   keysKept: number;
+  applyButton: ApplyButton;
 }
 
 function EditorBody({
@@ -169,6 +175,7 @@ function EditorBody({
   onApply,
   historyOff,
   keysKept,
+  applyButton,
 }: BodyProps) {
   const [history, setHistory] = useState<History<Scheme>>(() => startHistory(loaded));
   const historyRef = useRef(history);
@@ -409,8 +416,12 @@ function EditorBody({
               </Tooltip.Portal>
             </Tooltip.Root>
           ) : (
-            <button type="button" className="btn ed-primary" onClick={onApply}>
-              Apply
+            <button
+              type="button"
+              className={`btn ed-primary${applyButton.done ? ' is-done' : ''}`}
+              onClick={onApply}
+            >
+              {applyButton.label}
             </button>
           )}
         </div>

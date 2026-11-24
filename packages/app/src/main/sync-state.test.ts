@@ -1,5 +1,7 @@
 import type { Verdict } from '@helmarray/azeron';
 import { describe, expect, it } from 'vitest';
+import type { Plan, Press, Scheme } from '@helmarray/core';
+import { BUILT_IN_DEVICES, helldivers2, resolve, xboxControllerPreset } from '@helmarray/core';
 import { pendingChanges, syncDetail, syncState, type HandSync } from './sync-state';
 
 const clean: Verdict = { differences: [], unchecked: [] };
@@ -131,7 +133,7 @@ describe('syncState', () => {
       reason: 'not-read',
       hands: ['right'],
       label: 'Not checked yet',
-      tone: 'warning',
+      tone: 'plain',
     });
   });
 
@@ -202,8 +204,142 @@ describe('syncDetail', () => {
   });
 });
 
+describe('syncState while the Azeron app is open', () => {
+  it('says the Azeron app is open, not that the units are away', () => {
+    expect(syncState({ left: away, right: away, pendingChanges: 0, azeronOpen: true })).toEqual({
+      kind: 'paused',
+      label: 'Azeron app is open',
+      tone: 'warning',
+    });
+  });
+
+  it('says the Azeron app is open over changes not applied: they wait for it to close', () => {
+    expect(
+      syncState({ left: unread, right: unread, pendingChanges: 3, azeronOpen: true }).label,
+    ).toBe('Azeron app is open');
+  });
+
+  it('still says a unit differs first', () => {
+    expect(
+      syncState({ left: wrong, right: matching, pendingChanges: 0, azeronOpen: true }).kind,
+    ).toBe('differs');
+  });
+});
+
+describe('syncState, before anything is read', () => {
+  it('says Not checked yet in a plain tone: there is nothing to act on', () => {
+    expect(syncState({ left: unread, right: unread, pendingChanges: 0 })).toMatchObject({
+      label: 'Not checked yet',
+      tone: 'plain',
+    });
+  });
+});
+
 describe('pendingChanges', () => {
   it('counts one change for a scheme that did not resolve', () => {
     expect(pendingChanges(null, null)).toBe(1);
+  });
+});
+
+// The count is of the buttons the person edited: a drag is one change, wherever the action came
+// from. A device that only takes the game's own bindings changes nothing anywhere, and counts
+// nothing.
+describe('pendingChanges, counting edits', () => {
+  const game = helldivers2;
+  const preset = xboxControllerPreset(game);
+  const planOf = (scheme: Scheme): Plan => resolve(scheme, game, BUILT_IN_DEVICES);
+  const applied = planOf(preset);
+  const mode = game.modes[0]?.id ?? '';
+  const withMap = (
+    scheme: Scheme,
+    edit: (map: Record<string, Partial<Record<Press, string>>>) => void,
+  ): Scheme => {
+    const map = structuredClone(scheme.map[mode] ?? {});
+    edit(map);
+    return { ...scheme, map: { ...scheme.map, [mode]: map } };
+  };
+  /** Reload off the left middle 1, which then sends nothing, as the editor's `clear` does. */
+  const reloadOff = (scheme: Scheme): Scheme => {
+    const out = withMap(scheme, (map) => delete map['L.middle_1']);
+    const padMap = { ...out.padMap };
+    delete padMap['L.middle_1'];
+    return { ...out, padMap };
+  };
+
+  it('counts nothing for the scheme as it was applied', () => {
+    expect(pendingChanges(applied, planOf(preset))).toBe(0);
+  });
+
+  it('counts an action dragged from the list onto an empty button once', () => {
+    const next = withMap(preset, (map) => (map['L.middle_2'] = { tap: 'jump' }));
+    expect(pendingChanges(applied, planOf(next))).toBe(1);
+  });
+
+  it('counts an action moved from one button to another once, not once per button', () => {
+    const next = withMap(reloadOff(preset), (map) => (map['L.middle_2'] = { tap: 'reload' }));
+    expect(pendingChanges(applied, planOf(next))).toBe(1);
+  });
+
+  it('counts an action dropped on a taken button once: the action it pushed off goes with it', () => {
+    const next = withMap(preset, (map) => (map['L.middle_1'] = { tap: 'jump' }));
+    expect(pendingChanges(applied, planOf(next))).toBe(1);
+  });
+
+  it('counts an action taken off a button once', () => {
+    expect(pendingChanges(applied, planOf(reloadOff(preset)))).toBe(1);
+  });
+
+  it('counts turbo turned on for a button once', () => {
+    const next: Scheme = {
+      ...preset,
+      behaviour: { ...preset.behaviour, 'L.middle_1': { turbo: { interval: 20 } } },
+    };
+    expect(pendingChanges(applied, planOf(next))).toBe(1);
+  });
+
+  it('counts a button with no action that stops sending its Xbox control once', () => {
+    const padMap = { ...preset.padMap };
+    delete padMap['L.middle_2'];
+    expect(pendingChanges(applied, planOf({ ...preset, padMap }))).toBe(1);
+  });
+
+  /** The keyboard and mouse added, each action on the key or mouse button the game ships it on. */
+  const withKeyboard = (scheme: Scheme): Scheme =>
+    withMap({ ...scheme, devices: { ...scheme.devices, keyboard: true, mouse: true } }, (map) => {
+      for (const action of game.actions) {
+        const key = action.native?.key;
+        if (key?.kind === 'key') map[`key.${key.code}`] = { tap: action.id };
+        if (key?.kind === 'mouse') map[`mouse.${key.button}`] = { tap: action.id };
+      }
+    });
+
+  it("counts nothing for the keyboard added with the game's own keys on it", () => {
+    expect(pendingChanges(applied, planOf(withKeyboard(preset)))).toBe(0);
+  });
+
+  it('counts an action put on a key the game does not ship it on', () => {
+    const next = withMap(withKeyboard(preset), (map) => {
+      delete map['key.Space'];
+      map['key.J'] = { tap: 'jump' };
+    });
+    expect(pendingChanges(applied, planOf(next))).toBe(1);
+  });
+
+  it("counts the right unit's actions, not its buttons, when the setup drops it", () => {
+    // Melee and Menu were on the right unit; it is no longer written, and the game loses them.
+    const left = withMap(
+      { ...preset, devices: { ...preset.devices, azerons: 'left', mouse: true } },
+      (map) => {
+        delete map['R.stick_press'];
+        delete map['R.thumb_aux_upper'];
+      },
+    );
+    expect(pendingChanges(applied, planOf(left))).toBe(2);
+  });
+
+  it('with nothing applied, counts each action on a button, and no empty button', () => {
+    // The preset's left middle 2 sends Xbox Y with no action on it: nothing the person put there.
+    const keys: Scheme = { ...preset, output: 'keys', padMap: {} };
+    expect([pendingChanges(null, applied), pendingChanges(null, planOf(keys))]).toEqual([15, 15]);
   });
 });

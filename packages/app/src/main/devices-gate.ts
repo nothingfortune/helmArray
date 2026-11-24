@@ -9,6 +9,11 @@
 export interface Switchable {
   start(): void;
   stop(): Promise<void>;
+  /**
+   * Stops as `stop` does, but keeps the units still plugged in, without talking to them: the
+   * Azeron app is open, not the units gone. Without it the service is stopped.
+   */
+  pause?(): Promise<void>;
 }
 
 export interface DevicesGate {
@@ -23,6 +28,7 @@ export function createDevicesGate(
   onError?: (error: unknown) => void,
 ): DevicesGate {
   let running = false; // whether the service is started
+  let paused = false; // whether it is paused (only with a service that can pause)
   let done = false;
   let queue: Promise<void> = Promise.resolve();
 
@@ -32,7 +38,13 @@ export function createDevicesGate(
     if (done) return;
     if (want && !running) {
       running = true;
+      paused = false;
       devices.start();
+    } else if (!want && devices.pause !== undefined && !paused) {
+      // Also at the first look, with the Azeron app already open: the units are still listed.
+      running = false;
+      paused = true;
+      await devices.pause();
     } else if (!want && running) {
       running = false;
       await devices.stop();
@@ -57,8 +69,9 @@ export function createDevicesGate(
       done = true;
       queue = queue
         .then(async () => {
-          if (running) {
+          if (running || paused) {
             running = false;
+            paused = false;
             await devices.stop();
           }
         })

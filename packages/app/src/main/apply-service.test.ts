@@ -277,6 +277,21 @@ describe('Apply as the windows ask for it', () => {
       expect(preview.checks.some((c) => /hasn't been read yet/.test(c.text))).toBe(true);
     });
 
+    it('never calls a unit let go for the Azeron app connected, when the app has just closed', async () => {
+      r = await rig();
+      // Paused (the app was open), and the preview's look finds it closed before the units are back.
+      await r.devices.pause();
+      const preview = await r.service.preview(scheme.id);
+      expect([preview.ready, preview.checks.filter((c) => /Azeron/.test(c.text))]).toEqual([
+        false,
+        [
+          { ok: true, text: 'The Azeron app is closed.' },
+          { ok: false, text: "The left Azeron hasn't been read yet." },
+          { ok: false, text: "The right Azeron hasn't been read yet." },
+        ],
+      ]);
+    });
+
     it('does not trust a look at the programs that failed', async () => {
       r = await rig({ azeron: () => Promise.reject(new Error('tasklist failed')) });
       const preview = await r.service.preview(scheme.id);
