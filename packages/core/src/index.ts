@@ -13,5 +13,7 @@ export * from './checks';
 export * from './signal';
 export * from './schema';
 export * from './setup';
+export * from './sticks';
+export * from './placed';
 export * from './games/helldivers2';
 export * from './game-data';

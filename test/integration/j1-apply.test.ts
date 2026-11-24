@@ -101,9 +101,10 @@ describe('J1: the Xbox controller preset on Helldivers 2, applied', () => {
   });
 });
 
-// A scheme with errors nobody kept. The Xbox controller preset has none on Helldivers 2 now (the
-// game ships its pad defaults), so this uses the game's own keys, with nothing placed: it has the
-// same six missing required actions, and its two sticks send nothing.
+// A scheme with errors nobody kept. Neither preset has any on Helldivers 2 now (the game ships its
+// pad defaults, and the game's own keys preset places every action), so this uses a game's own
+// keys scheme as that preset made it before it placed anything: it has the six missing required
+// actions, and its two sticks send nothing.
 describe('J1: a scheme whose errors were not kept', () => {
   let world: World;
 
@@ -117,7 +118,7 @@ describe('J1: a scheme whose errors were not kept', () => {
   });
 
   it('is not ready to apply, and the drawer says why in the game’s words', async () => {
-    const fresh = await world.createScheme('keys');
+    const fresh = await world.createBlankKeysScheme();
     const preview = await world.helm.previewApply(fresh.id);
     expect(preview.checks.filter((check) => !check.ok).map((check) => check.text)).toEqual([
       'Move forward is needed to play Default, and it is on no button.',
@@ -133,14 +134,14 @@ describe('J1: a scheme whose errors were not kept', () => {
   });
 
   it('is refused by Apply itself, whatever the drawer showed', async () => {
-    const fresh = await world.createScheme('keys');
+    const fresh = await world.createBlankKeysScheme();
     const preview = await world.helm.previewApply(fresh.id);
     const result = await world.helm.apply(fresh.id, preview.fingerprint);
     expect([result.ok, result.units]).toEqual([false, []]);
   });
 
   it('writes nothing to either unit when Apply is pressed on it, though both were read', async () => {
-    const fresh = await world.createScheme('keys');
+    const fresh = await world.createBlankKeysScheme();
     const preview = await world.helm.previewApply(fresh.id);
     await world.helm.apply(fresh.id, preview.fingerprint);
     const sent = [world.left, world.right].map((unit) => unit.commands());

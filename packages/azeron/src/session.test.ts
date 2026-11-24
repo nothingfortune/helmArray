@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Game, Scheme } from '@helmarray/core';
-import { BUILT_IN_DEVICES, CYBORG2_LEFT, gameKeysPreset, resolve, unitOf } from '@helmarray/core';
+import { BUILT_IN_DEVICES, CYBORG2_LEFT, blankKeysScheme, resolve, unitOf } from '@helmarray/core';
 import { FakeUnit, storedFromWritten } from './fake';
 import { unitRecords } from './profile';
 import type { ButtonRecord, UnitRecord } from './records';
@@ -31,7 +31,7 @@ const game: Game = {
   file: { format: 'elite-binds' },
 };
 const scheme: Scheme = {
-  ...gameKeysPreset(game),
+  ...blankKeysScheme(game),
   writeGameFile: false,
   map: {
     ship: {

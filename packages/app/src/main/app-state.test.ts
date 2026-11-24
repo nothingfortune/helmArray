@@ -10,7 +10,7 @@ import {
   AZERONS_ONLY,
   BUILT_IN_DEVICES,
   CYBORG2_LEFT,
-  gameKeysPreset,
+  blankKeysScheme,
   helldivers2,
   resolve,
   unitOf,
@@ -272,7 +272,7 @@ describe('what a unit holds', () => {
 
   it('differs when the unit read runs something else', async () => {
     const other = profile({
-      ...gameKeysPreset(helldivers2),
+      ...blankKeysScheme(helldivers2),
       map: { default: { 'L.index_1': { tap: 'reload' } } },
     });
     expect(holdsOf(write(profile()), await running(other))?.check).toBe('differs');

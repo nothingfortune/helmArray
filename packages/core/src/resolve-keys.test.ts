@@ -3,7 +3,7 @@ import { BUILT_IN_DEVICES } from './devices/index';
 import type { Game, Scheme, Signal, StickDirections } from './model';
 import type { Plan } from './plan';
 import { KEY_POOL, formatCanName } from './pool';
-import { copyScheme, gameKeysPreset } from './presets/keys';
+import { copyScheme, blankKeysScheme } from './presets/keys';
 import { resolve } from './resolve';
 import { CHECK_RULES } from './checks';
 
@@ -83,7 +83,7 @@ const keyedSticks: Scheme['behaviour'] = {
 
 function scheme(over: Partial<Scheme> = {}): Scheme {
   return {
-    ...gameKeysPreset(game),
+    ...blankKeysScheme(game),
     writeGameFile: true,
     ...over,
     behaviour: { ...keyedSticks, ...over.behaviour },

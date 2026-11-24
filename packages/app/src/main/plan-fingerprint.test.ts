@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Game, Scheme } from '@helmarray/core';
-import { BUILT_IN_DEVICES, gameKeysPreset, resolve } from '@helmarray/core';
+import { BUILT_IN_DEVICES, blankKeysScheme, resolve } from '@helmarray/core';
 import { canonical, planFingerprint } from './plan-fingerprint';
 
 const game: Game = {
@@ -14,7 +14,7 @@ const game: Game = {
   file: { format: 'elite-binds' },
 };
 const scheme: Scheme = {
-  ...gameKeysPreset(game),
+  ...blankKeysScheme(game),
   map: { ship: { 'L.index_1': { tap: 'boost' }, 'R.index_1': { tap: 'fire' } } },
 };
 const plan = (s: Scheme) => resolve(s, game, BUILT_IN_DEVICES);

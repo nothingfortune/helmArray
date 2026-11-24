@@ -10,7 +10,7 @@ import {
   BUILT_IN_DEVICES,
   CYBORG2_LEFT,
   CYBORG2_RIGHT,
-  gameKeysPreset,
+  blankKeysScheme,
   helldivers2,
   resolve,
   unitOf,
@@ -44,7 +44,7 @@ const game: Game = {
   file: { format: 'elite-binds' },
 };
 const base: Scheme = {
-  ...gameKeysPreset(game),
+  ...blankKeysScheme(game),
   writeGameFile: false,
   accepted: [
     { rule: 'stick-no-directions', control: 'L.stick', reason: 'No stick' },

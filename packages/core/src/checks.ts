@@ -19,7 +19,8 @@ import { hasAction } from './game-data';
 import { own } from './own';
 import { signalId } from './signal';
 import type { Setup } from './setup';
-import { inSetup, setsUsed, setupOf, setupSends, stickModeOf, stickSends } from './setup';
+import { isPlaced } from './placed';
+import { inSetup, setupOf, setupSends, stickModeOf } from './setup';
 
 /** Every check, in the order its findings are listed. */
 export const CHECK_RULES = [
@@ -328,33 +329,18 @@ function sendsNothing(ctx: Context): Finding[] {
 
 /**
  * A required action that is on no button in its mode. The game is rebound to the setup, so an
- * action is reached only by a control of the setup carrying it, or by a stick of the setup sending
- * what the game ships it on (a key stick's direction keys; an Xbox stick, the Azerons' or the
+ * action is reached only by a control of the setup carrying it, or by a stick of the setup that the
+ * game's bindings put it on (a key stick's direction keys; an Xbox stick, the Azerons' or the
  * controller's, and its four directions). What a button happens to send is never enough: the
- * game's controller bindings follow the setup, not the other way round.
+ * game's controller bindings follow the setup, not the other way round. Whether it is placed is
+ * `isPlaced`'s to say, the one place every view asks.
  */
 function missingRequired(ctx: Context): Finding[] {
-  const onButton = new Set<string>();
-  for (const p of placed(ctx)) {
-    if (inSetup(ctx.setup, p.control)) onButton.add(`${p.mode}|${p.action}`);
-  }
-  const used = setsUsed(ctx.scheme);
-  const stickSent = stickSends(ctx.scheme);
-  const reached = (signal: Signal | undefined) =>
-    signal !== undefined && stickSent.has(signalId(signal));
   const out: Finding[] = [];
   for (const mode of ctx.game.modes) {
     for (const action of ctx.game.actions) {
       if (action.mode !== mode.id || !action.required) continue;
-      if (onButton.has(`${mode.id}|${action.id}`)) continue;
-      if (used.includes('keyboard') && reached(action.native?.key)) continue;
-      const pad = action.native?.pad;
-      if (
-        used.includes('controller') &&
-        pad !== undefined &&
-        reached({ kind: 'pad', control: pad })
-      )
-        continue;
+      if (isPlaced(ctx.scheme, ctx.game, ctx.plan, mode.id, action.id)) continue;
       out.push({
         rule: 'missing-required',
         severity: 'error',

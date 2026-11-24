@@ -12,7 +12,14 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Game, Hand, Plan, Scheme } from '@helmarray/core';
-import { BUILT_IN_DEVICES, CYBORG2_LEFT, CYBORG2_RIGHT, resolve, unitOf } from '@helmarray/core';
+import {
+  BUILT_IN_DEVICES,
+  CYBORG2_LEFT,
+  CYBORG2_RIGHT,
+  blankKeysScheme,
+  resolve,
+  unitOf,
+} from '@helmarray/core';
 import { encodeRecord, storedFromWritten, toHex, unitRecords } from '@helmarray/azeron';
 import type { FakeUnitOptions } from '@helmarray/azeron';
 import { createHelmApi } from '../../../packages/app/src/preload/api';
@@ -368,11 +375,24 @@ export class World {
   }
 
   /**
-   * A "Game's own keys" scheme with the six actions Helldivers 2 needs to start put on buttons
-   * (four on the left unit, two on the right), and the stick findings kept: ready to apply.
+   * A "Game's own keys" scheme as the preset made it before it placed anything (and as a scheme
+   * saved then still is): key output, no button carrying an action, the sticks not set. Saved, as
+   * the store has it.
+   */
+  async createBlankKeysScheme(): Promise<Scheme> {
+    const created = await this.createScheme('keys');
+    const blank: Scheme = { ...created, map: blankKeysScheme(await this.game()).map, behaviour: {} };
+    await this.helm.saveScheme(blank);
+    return this.scheme(created.id);
+  }
+
+  /**
+   * A blank "Game's own keys" scheme (`createBlankKeysScheme`) with the six actions Helldivers 2
+   * needs to start put on buttons (four on the left unit, two on the right), and the stick findings
+   * kept: ready to apply.
    */
   async createKeysScheme(): Promise<Scheme> {
-    const created = await this.createScheme('keys');
+    const created = await this.createBlankKeysScheme();
     const game = await this.game();
     const placed = KEYS_PLACEMENTS.reduce(
       (scheme, [control, action]) =>

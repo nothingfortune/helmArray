@@ -1,4 +1,4 @@
-import { gameKeysPreset } from '@helmarray/core';
+import { blankKeysScheme } from '@helmarray/core';
 import type { Game } from '@helmarray/core';
 import { describe, expect, it } from 'vitest';
 import type { AppState } from '../shared/api';
@@ -117,7 +117,7 @@ describe('window.helm', () => {
       modes: [{ id: 'ship', name: 'Ship' }],
       actions: [],
     };
-    const scheme = gameKeysPreset(game);
+    const scheme = blankKeysScheme(game);
 
     it('asks each question over its own channel, with its arguments', async () => {
       const b = bridge();

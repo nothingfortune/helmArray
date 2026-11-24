@@ -18,8 +18,6 @@ import type {
   Press,
   Scheme,
   SetupDevices,
-  StickBehaviour,
-  StickDirections,
 } from '@helmarray/core';
 import {
   BUILT_IN_DEVICES,
@@ -29,12 +27,12 @@ import {
   XBOX_PAD,
   PAD_CONTROLS,
   PRESSES,
-  STICK_DIRECTIONS,
   controlSet,
   inSetup,
   own,
   padSignalOf,
   setupOf,
+  stickForOutput,
   stickPadsOf,
   withOwn,
 } from '@helmarray/core';
@@ -722,47 +720,14 @@ export function isTextEntry(target: {
 const isAzeron = (control: ControlId): boolean =>
   control.startsWith('L.') || control.startsWith('R.');
 
-const STICK_PAD_DIRECTIONS = {
-  L: { up: 'LS_UP', down: 'LS_DOWN', left: 'LS_LEFT', right: 'LS_RIGHT' },
-  R: { up: 'RS_UP', down: 'RS_DOWN', left: 'RS_LEFT', right: 'RS_RIGHT' },
-} as const;
-
-/**
- * What a unit's stick does once the Azerons send `output`: its hand's Xbox stick for a controller;
- * for keys, the keys the game ships the actions of its Xbox directions on (the left stick's up is
- * Move forward, so W), or the mouse when none of them has one. Tuning is kept; the old
- * directions are not.
- */
-function stickFor(
-  prefix: 'L' | 'R',
-  before: StickBehaviour | undefined,
-  output: Scheme['output'],
-  game: Game,
-): StickBehaviour {
-  const tuning: Partial<StickBehaviour> = { ...before };
-  delete tuning.mode;
-  delete tuning.directions;
-  if (output === 'pad') return { ...tuning, mode: prefix === 'L' ? 'pad-left' : 'pad-right' };
-  const directions: StickDirections = {};
-  for (const direction of STICK_DIRECTIONS) {
-    const pad = STICK_PAD_DIRECTIONS[prefix][direction];
-    const key = game.actions.find((a) => a.native?.pad === pad && a.native.key?.kind === 'key')
-      ?.native?.key;
-    // keyed-write-ok: the key is a stick direction, one of four names
-    if (key !== undefined) directions[direction] = key;
-  }
-  return Object.keys(directions).length === 0
-    ? { ...tuning, mode: 'mouse' }
-    : { ...tuning, mode: 'keys', directions };
-}
-
 /**
  * "Azerons send: Keys | Controller". Every Azeron button keeps the action on its tap, now sent as
  * the other kind of signal, in the other binding set of the game: with a controller each gets an
  * Xbox control (THE PAD RULE, rule 2: the one the game ships its action on when free), with keys
  * the pad map empties. What a button showed only through its Xbox control (the controller's button
  * carries it) becomes its own. A controller button only taps, so a long press or a double tap
- * comes off (its action is unplaced); switching to keys keeps them. Each stick follows (`stickFor`). The keyboard and the mouse keep what
+ * comes off (its action is unplaced); switching to keys keeps them. Each stick follows (core's
+ * `stickForOutput`). The keyboard and the mouse keep what
  * they have, and the ledger is never touched. With a controller in the setup, it keeps doing what
  * it did: switching to keys gives its buttons the actions they showed through an Azeron button,
  * and switching to a controller puts an Azeron button on the control the controller already has
@@ -822,7 +787,7 @@ export function setOutput(scheme: Scheme, output: Scheme['output'], game: Game):
     const before: Behaviour = own(scheme.behaviour, id) ?? {};
     behaviour = withOwn<Behaviour>(behaviour, id, {
       ...before,
-      stick: stickFor(prefix, before.stick, output, game),
+      stick: stickForOutput(prefix === 'L' ? 'left' : 'right', before.stick, output, game),
     });
   }
   const out: Scheme = { ...scheme, output, padMap: {}, map, behaviour };

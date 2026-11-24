@@ -2,7 +2,16 @@
 // which of the game's two binding sets it rebinds, and what pad control a control sends. The
 // resolver, the checks and the editor all read a setup through these, so they never disagree.
 
-import type { ControlId, Hand, PadControl, Scheme, SetupDevices, Signal, StickMode } from './model';
+import type {
+  ControlId,
+  Hand,
+  PadControl,
+  Scheme,
+  SetupDevices,
+  Signal,
+  StickDirection,
+  StickMode,
+} from './model';
 import { PAD_CONTROLS, STICK_DIRECTIONS } from './model';
 import { own } from './own';
 import type { BindingSet, Plan, UnitProfile } from './plan';
@@ -116,40 +125,70 @@ export function setsUsed(scheme: Scheme): BindingSet[] {
   return BINDING_SETS.filter((set) => sends[set].length > 0);
 }
 
-const STICK_PADS: Record<'pad-left' | 'pad-right', readonly PadControl[]> = {
-  'pad-left': ['LS_UP', 'LS_DOWN', 'LS_LEFT', 'LS_RIGHT'],
-  'pad-right': ['RS_UP', 'RS_DOWN', 'RS_LEFT', 'RS_RIGHT'],
+/** One direction of a stick of the setup, and what it sends. */
+export interface StickDirectionSend {
+  /** The stick: `L.stick`, `R.stick`, or the controller's `pad.left_stick` and `pad.right_stick`. */
+  stick: ControlId;
+  direction: StickDirection;
+  signal: Signal;
+  /** The stick in words, for a sentence: "the left stick", "the controller's right stick". */
+  who: string;
+}
+
+const STICK_PAD_DIRECTIONS: Record<'pad-left' | 'pad-right', Record<StickDirection, PadControl>> = {
+  'pad-left': { up: 'LS_UP', down: 'LS_DOWN', left: 'LS_LEFT', right: 'LS_RIGHT' },
+  'pad-right': { up: 'RS_UP', down: 'RS_DOWN', left: 'RS_LEFT', right: 'RS_RIGHT' },
 };
 
 /**
- * What the setup's sticks send, by signal id, with the stick's name: an Azeron stick's direction
- * keys (key mode) or its Xbox directions, and the controller's two sticks. A stick reaches the
- * actions the game ships on what it sends (STICK DIRECTION KEYS, rule 3).
+ * Every direction of every stick of the setup, with what it sends: an Azeron stick's direction keys
+ * (key mode) or its Xbox directions, and the controller's two sticks. The units' sticks first, left
+ * then right, then the controller's; each in up, down, left, right order. A stick moving the mouse
+ * sends no direction.
  */
-export function stickSends(scheme: Scheme): Map<string, string> {
+export function stickDirections(scheme: Scheme): StickDirectionSend[] {
   const setup = setupOf(scheme.devices);
-  const out = new Map<string, string>();
-  const add = (signal: Signal, who: string) => {
-    if (!out.has(signalId(signal))) out.set(signalId(signal), who);
-  };
+  const out: StickDirectionSend[] = [];
   for (const hand of setup.hands) {
+    const stick = `${hand === 'left' ? 'L' : 'R'}.stick`;
+    const who = `the ${hand} stick`;
     const mode = stickModeOf(scheme, hand);
     if (mode === 'keys') {
-      const directions = own(scheme.behaviour, `${hand === 'left' ? 'L' : 'R'}.stick`)?.stick
-        ?.directions;
+      const directions = own(scheme.behaviour, stick)?.stick?.directions;
       for (const direction of STICK_DIRECTIONS) {
         const signal = directions?.[direction];
-        if (signal) add(signal, `the ${hand} stick`);
+        if (signal) out.push({ stick, direction, signal, who });
       }
     } else if (mode === 'pad-left' || mode === 'pad-right') {
-      for (const control of STICK_PADS[mode]) add({ kind: 'pad', control }, `the ${hand} stick`);
+      for (const direction of STICK_DIRECTIONS) {
+        const control = STICK_PAD_DIRECTIONS[mode][direction];
+        out.push({ stick, direction, signal: { kind: 'pad', control }, who });
+      }
     }
   }
   if (setup.controller) {
-    for (const control of STICK_PADS['pad-left'])
-      add({ kind: 'pad', control }, "the controller's left stick");
-    for (const control of STICK_PADS['pad-right'])
-      add({ kind: 'pad', control }, "the controller's right stick");
+    for (const [stick, mode, who] of [
+      ['pad.left_stick', 'pad-left', "the controller's left stick"],
+      ['pad.right_stick', 'pad-right', "the controller's right stick"],
+    ] as const) {
+      for (const direction of STICK_DIRECTIONS) {
+        const control = STICK_PAD_DIRECTIONS[mode][direction];
+        out.push({ stick, direction, signal: { kind: 'pad', control }, who });
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * What the setup's sticks send, by signal id, with the stick's name (`stickDirections`, the first
+ * stick to send a signal named). A stick reaches the actions the game ships on what it sends (STICK
+ * DIRECTION KEYS, rule 3).
+ */
+export function stickSends(scheme: Scheme): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const { signal, who } of stickDirections(scheme)) {
+    if (!out.has(signalId(signal))) out.set(signalId(signal), who);
   }
   return out;
 }

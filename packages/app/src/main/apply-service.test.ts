@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Game, Plan, Scheme } from '@helmarray/core';
-import { BUILT_IN_DEVICES, gameKeysPreset, resolve } from '@helmarray/core';
+import { BUILT_IN_DEVICES, blankKeysScheme, resolve } from '@helmarray/core';
 import { Command, FakeUnit, parseHostReport } from '@helmarray/azeron';
 import { planFingerprint } from './plan-fingerprint';
 import { createApplyService } from './apply-service';
@@ -23,7 +23,7 @@ const game: Game = {
   file: { format: 'elite-binds' },
 };
 const scheme: Scheme = {
-  ...gameKeysPreset(game),
+  ...blankKeysScheme(game),
   name: 'Main',
   writeGameFile: false,
   // The sticks send nothing here, which the checks call an error until it is accepted.

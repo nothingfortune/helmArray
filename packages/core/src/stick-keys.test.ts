@@ -4,7 +4,7 @@ import { helldivers2 } from './games/helldivers2';
 import type { Game, Scheme, Signal, StickDirections } from './model';
 import { AZERONS_ONLY } from './model';
 import type { Plan } from './plan';
-import { gameKeysPreset } from './presets/keys';
+import { blankKeysScheme } from './presets/keys';
 import { xboxControllerPreset } from './presets/xbox';
 import { resolve } from './resolve';
 
@@ -62,10 +62,10 @@ const skiff: Game = {
 
 type Over = Partial<Scheme>;
 function ownKeys(game: Game, over: Over = {}): Scheme {
-  return { ...gameKeysPreset(game), ...over };
+  return { ...blankKeysScheme(game), ...over };
 }
 function fileWritten(game: Game, over: Over = {}): Scheme {
-  return { ...gameKeysPreset(game), writeGameFile: true, ...over };
+  return { ...blankKeysScheme(game), writeGameFile: true, ...over };
 }
 const run = (scheme: Scheme, game: Game) => resolve(scheme, game, BUILT_IN_DEVICES);
 const sent = (plan: Plan, control: string) =>
@@ -310,7 +310,7 @@ describe('stick keys and the presets', () => {
   });
 
   it("the game's own keys preset leaves the sticks' directions to the player", () => {
-    const scheme = gameKeysPreset(helldivers2);
+    const scheme = blankKeysScheme(helldivers2);
     expect(scheme.behaviour).toEqual({});
     expect(found(run(scheme, helldivers2), 'stick-no-directions')).toHaveLength(2);
   });
