@@ -36,7 +36,7 @@ import {
 import { fixedWhere } from '../devices/layouts';
 import type { StickLabels, UnitKey } from '../unit/Unit';
 import { handPrefix, positionName, positionOf } from '../unit/layout';
-import { fixFor, isAcceptable, isStick, pressesOf, shownAction } from './editor-model';
+import { fixFor, isAcceptable, isStick, keyLabelOf, pressesOf, shownAction } from './editor-model';
 import type { Fix } from './editor-model';
 
 // ---- Signals, as words for a caption ----
@@ -175,6 +175,11 @@ export interface PanelView {
   sends: string | null;
   /** Where that signal came from, in a few plain words. */
   sendsNote: string;
+  /**
+   * The key label field, for a unit button or a key showing an action: its label, and the action's
+   * name as the hint. Null elsewhere (a mouse or controller row always has room for the name).
+   */
+  keyLabel: { value: string; placeholder: string } | null;
 }
 
 export interface FindingRow {
@@ -313,15 +318,20 @@ function keysOf(
     const lead = leadingAction(scheme, mode, control);
     if (lead === undefined) continue;
     const ref = actionRef(game, lead.id);
-    // A button with only a long press must not read as if its tap did that.
-    const label = lead.press === 'tap' ? ref.name : `${PRESS_WORD[lead.press]}: ${ref.name}`;
+    // A button with only a long press must not read as if its tap did that: the press word is kept
+    // apart from the name, so fitting the label (a key label for the name) never loses it.
+    const qualifier = lead.press === 'tap' ? undefined : `${PRESS_WORD[lead.press]}:`;
+    const label = qualifier === undefined ? ref.name : `${qualifier} ${ref.name}`;
+    const short = keyLabelOf(scheme, mode, control);
     keys.push([
       control,
       {
         label,
+        ...(qualifier === undefined ? {} : { qualifier, name: ref.name }),
         action: lead.id,
         press: lead.press,
         ...(ref.role === undefined ? {} : { role: ref.role }),
+        ...(short === undefined ? {} : { short }),
       },
     ]);
   }
@@ -604,6 +614,7 @@ function panelFor(input: PanelInput): PanelView {
       padChoice: null,
       sends: sends.text,
       sendsNote: sends.note,
+      keyLabel: null,
     };
   }
   const here = { ...(own(own(scheme.map, mode) ?? {}, control) ?? {}) };
@@ -644,6 +655,23 @@ function panelFor(input: PanelInput): PanelView {
     padChoice: padChoiceFor(scheme, game, mode, control),
     sends: sends.text,
     sendsNote: sends.note,
+    keyLabel: keyLabelField(scheme, game, mode, control),
+  };
+}
+
+/** The key label field of a unit button or a key, while it shows an action (label.ts draws it). */
+function keyLabelField(
+  scheme: Scheme,
+  game: Game,
+  mode: ModeId,
+  control: ControlId,
+): PanelView['keyLabel'] {
+  if (!/^(L|R|key)\./.test(control)) return null;
+  const shown = shownAction(scheme, mode, control);
+  if (shown === undefined) return null;
+  return {
+    value: keyLabelOf(scheme, mode, control) ?? '',
+    placeholder: actionRef(game, shown.id).name,
   };
 }
 

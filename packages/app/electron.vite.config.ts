@@ -20,6 +20,9 @@ export default defineConfig({
   renderer: {
     plugins: [react()],
     build: {
+      // Fonts stay files: a small one would be inlined as a `data:` URL, which the pages'
+      // `default-src 'self'` refuses.
+      assetsInlineLimit: (file: string) => (/\.woff2?$/.test(file) ? false : undefined),
       rollupOptions: {
         input: {
           index: resolve(import.meta.dirname, 'src/renderer/index.html'),

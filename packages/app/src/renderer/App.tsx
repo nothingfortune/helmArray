@@ -42,7 +42,8 @@ export function App({ state }: { state: AppState | null }) {
           onChoose={(unitId, hand) => void window.helm.chooseHand(unitId, hand)}
         />
       )}
-      {body}
+      {/* The screen scrolls in here, under the header: the window itself never scrolls. */}
+      <div className="app-screen">{body}</div>
     </>
   );
   if (screen.name === 'editor') {

@@ -8,6 +8,8 @@ import schemeV1 from './__fixtures__/scheme.v1.json';
 import schemeV1Turbo from './__fixtures__/scheme.v1-turbo.json';
 // Frozen: a pad scheme as version 2 saved it, before setups had devices. Never regenerate it.
 import schemeV2Pad from './__fixtures__/scheme.v2-pad.json';
+// Frozen: a scheme as version 3 saved it, before key labels. Never regenerate it.
+import schemeV3 from './__fixtures__/scheme.v3.json';
 // Frozen: a plan as version 1 of the applied file saved it, before game bindings. Never regenerate.
 import appliedV1 from './__fixtures__/applied.v1.json';
 import { BUILT_IN_DEVICES } from './devices/index';
@@ -137,6 +139,36 @@ describe('setups (scheme version 3)', () => {
       'ledger',
     ] as const;
     expect(keys.map((key) => now[key])).toEqual(keys.map((key) => schemeV2Pad[key]));
+  });
+});
+
+describe('key labels (scheme version 4)', () => {
+  it('is the version a scheme is written at', () => {
+    expect(currentVersion('scheme')).toBe(4);
+  });
+
+  it('give every scheme saved before key labels none', () => {
+    expect(
+      [schemeV1, schemeV1Turbo, schemeV2Pad, schemeV3].map((f) => load('scheme', f).keyLabels),
+    ).toEqual([{}, {}, {}, {}]);
+  });
+
+  it('leave the rest of a version 3 scheme as it was', () => {
+    const saved: Record<string, unknown> = { ...schemeV3 };
+    delete saved['schemaVersion'];
+    expect(load('scheme', schemeV3)).toEqual({ ...saved, keyLabels: {} });
+  });
+
+  it('keep the key labels a scheme was saved with', () => {
+    const scheme: Scheme = {
+      ...gameKeysPreset(game),
+      keyLabels: { ship: { 'L.index_1': 'Go' } },
+    };
+    expect(load('scheme', JSON.parse(JSON.stringify(store('scheme', scheme))))).toEqual(scheme);
+  });
+
+  it('start a preset with none', () => {
+    expect(gameKeysPreset(game).keyLabels).toEqual({});
   });
 });
 

@@ -68,5 +68,6 @@ export function xboxControllerPreset(
     },
     ledger: {},
     accepted: [],
+    keyLabels: {},
   };
 }

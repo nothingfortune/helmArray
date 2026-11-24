@@ -28,10 +28,11 @@ const withDevices = (scheme: Scheme, devices: Partial<Scheme['devices']>): Schem
   ...scheme,
   devices: { ...AZERONS_ONLY, ...devices },
 });
-const area = (scheme: Scheme, tab?: DeviceTabId, selected?: string) =>
+const area = (scheme: Scheme, tab?: DeviceTabId, selected?: string, width?: number) =>
   renderToStaticMarkup(
     <DeviceArea
       view={view(scheme, selected, tab)}
+      width={width}
       selected={selected}
       onSelect={none}
       onDropAction={none}
@@ -50,6 +51,7 @@ const panel = (scheme: Scheme, selected: string, tab?: DeviceTabId) => {
       onTurbo={none}
       onLatch={none}
       onPad={none}
+      onKeyLabel={none}
     />,
   );
 };
@@ -311,5 +313,54 @@ describe('the header’s parts', () => {
         renderToStaticMarkup(<BackLink onBack={none} />),
       ].map((html) => html.startsWith('<button')),
     ).toEqual([true, true]);
+  });
+});
+
+describe('the key label field', () => {
+  const labelled: Scheme = { ...keysScheme(), keyLabels: { ship: { 'L.middle_1': 'FSD' } } };
+
+  it('is under Press for a button with an action: its label, the name as the hint, and what it is for', () => {
+    const html = panel(labelled, 'L.middle_1');
+    expect([
+      html.includes('<label class="ed-lbl" for="ed-key-label">Key label</label>'),
+      html.includes('value="FSD"'),
+      html.includes('placeholder="Frame shift drive"'),
+      html.includes('aria-describedby="ed-key-label-hint"'),
+      html.indexOf('Key label') > html.indexOf('>Press<'),
+    ]).toEqual([true, true, true, true, true]);
+  });
+
+  it('is not there for an empty button', () => {
+    expect(panel(labelled, 'L.index_4')).not.toContain('Key label');
+  });
+});
+
+describe('the device area at a measured width', () => {
+  const kbm = (scheme: Scheme): Scheme => ({
+    ...withDevices(scheme, { keyboard: true, mouse: true }),
+    map: { ship: { 'key.J': { tap: 'fsd' } }, srv: {} },
+  });
+
+  it('draws the two units side by side at the scale the width gives', () => {
+    const html = area(keysScheme(), undefined, undefined, 915);
+    expect([
+      html.includes('class="ed-units"'),
+      count(html, 'ed-unit is-scaled'),
+      count(html, `scale(${(915 - 20) / 2 / 640})`),
+    ]).toEqual([true, 2, 2]);
+  });
+
+  it('stacks them when two would be too small to read', () => {
+    expect(area(keysScheme(), undefined, undefined, 700)).toContain('ed-units is-stacked');
+  });
+
+  it('puts the mouse under the keyboard when beside it the keyboard would be under 0.8', () => {
+    const narrow = area(kbm(keysScheme()), 'keyboard', undefined, 915);
+    const wide = area(kbm(keysScheme()), 'keyboard', undefined, 1100);
+    expect([
+      narrow.includes('ed-kbm is-below'),
+      narrow.includes('width:915px'),
+      wide.includes('ed-kbm is-below'),
+    ]).toEqual([true, true, false]);
   });
 });

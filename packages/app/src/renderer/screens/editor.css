@@ -1,11 +1,17 @@
 /* The Editor screen, from docs/design/canvas/Editor.dc.html. Colours, type and spacing come
    from the tokens. */
 
+/* The Editor fills the screen under the header and never makes the window scroll: the units stay
+   put, and the checks and the side panel scroll in their own columns. */
 .editor {
   display: flex;
   flex-direction: column;
-  min-height: calc(100vh - 60px);
+  height: 100%;
+  overflow: hidden;
   background: var(--color-bg);
+}
+.editor > * {
+  flex: none;
 }
 
 /* The bar under the header: game, scheme, mode tabs, Keys / Controller, Apply. */
@@ -70,6 +76,10 @@
   box-shadow: inset 0 -2px 0 var(--color-accent);
 }
 
+.ed-insp[aria-pressed='true'] {
+  background: var(--color-line);
+  box-shadow: inset 0 -2px 0 var(--color-accent);
+}
 .btn.icon:disabled {
   opacity: 0.4;
   cursor: default;
@@ -100,34 +110,54 @@
   color: var(--color-secondary);
 }
 
-/* Units and checks on the left; the side panel on the right, or below when there is no room. */
-.ed-body {
+/* Units and checks on the left; the side panel, its own column, on the right. Widths and the
+   units' scale are worked out in editor-layout.ts from what is measured. */
+.editor > .ed-body {
   display: flex;
-  flex-wrap: wrap;
-  flex: 1;
+  flex: 1 1 0;
   min-height: 0;
 }
 .ed-main {
-  flex: 999 1 760px;
+  flex: 1 1 0;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-16);
   padding: 22px var(--space-24) var(--space-24);
+  /* Only when the devices alone are taller than the window; the gutter keeps the width the same
+     either way, so the units' scale never jumps. */
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+.ed-main > * {
+  flex-shrink: 0;
+}
+/* The checks scroll under the devices, but always keep room for a row: in a window too short
+   for both, the column scrolls instead, so a check's buttons are never out of reach. */
+.ed-main > .ed-checks {
+  flex-shrink: 1;
+  min-height: 64px;
+  overflow-y: auto;
 }
 
-/* Two units side by side, scaled to fit the width; each is never drawn smaller than 448 px
-   (the canvas's 0.70), so they stack only when there is no room for two. */
+/* Two units side by side at the scale editor-layout.ts gives, or stacked when two would be too
+   small to read. Before the width is measured each fills half. */
 .ed-units {
   display: flex;
-  flex-wrap: wrap;
   justify-content: center;
   gap: 20px;
 }
+.ed-units.is-stacked {
+  flex-direction: column;
+  align-items: center;
+}
 .ed-unit {
-  flex: 1 1 448px;
+  flex: 1 1 0;
   max-width: 640px;
   min-width: 0;
+}
+.ed-unit.is-scaled {
+  flex: none;
 }
 
 .ed-checks {
@@ -191,10 +221,10 @@
   padding: var(--space-4) 0 var(--space-8);
 }
 
-/* The side panel. */
+/* The side panel: its width from editor-layout.ts; it scrolls in itself. */
 .ed-side {
-  flex: 1 1 340px;
-  max-width: 100%;
+  flex: none;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -213,6 +243,11 @@
   color: var(--color-muted);
   font-size: var(--size-label);
   line-height: 1.45;
+}
+.ed-note {
+  color: var(--color-muted);
+  font-size: var(--size-caption);
+  line-height: 1.4;
 }
 .ed-pick {
   display: flex;
@@ -516,23 +551,40 @@
   outline-offset: 2px;
 }
 
-/* The keyboard with the mouse beside it; the mouse beside the left unit. */
+/* The keyboard with the mouse beside it, or under it (laid out across) when beside it the keyboard
+   would be drawn under 0.8; the mouse beside the left unit. */
 .ed-kbm {
   display: flex;
-  flex-wrap: wrap;
   justify-content: center;
   align-items: center;
   gap: var(--space-24);
+}
+.ed-kbm.is-below {
+  flex-direction: column;
+}
+.ed-kbm.is-below .mouse {
+  flex-direction: row;
+  align-items: center;
+  width: auto;
+}
+.ed-kbm.is-below .mouse .dv-rows {
+  width: 220px;
 }
 .ed-kb {
   flex: 1 1 600px;
   max-width: 956px;
   min-width: 0;
 }
+.ed-kb.is-scaled {
+  flex: none;
+}
 .ed-unit.ed-mouse-beside {
   flex: 0 0 220px;
   display: flex;
   align-items: center;
+}
+.ed-units.is-stacked .ed-unit.ed-mouse-beside {
+  flex: none;
 }
 
 /* "Sends" with a choice of Xbox control. */
@@ -540,6 +592,8 @@
   flex-wrap: wrap;
 }
 .ed-select {
+  max-width: 100%;
+  min-width: 0;
   height: 30px;
   border-radius: 8px;
   background: var(--color-panel);

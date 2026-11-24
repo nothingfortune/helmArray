@@ -12,6 +12,7 @@ import type { DropAction } from '../devices/drag';
 import { Unit } from '../unit/Unit';
 import type { UnitProps } from '../unit/Unit';
 import {
+  KEY_LABEL_LIMIT,
   NAME_LIMIT,
   chooseAzerons,
   chooseController,
@@ -19,6 +20,8 @@ import {
   hasDevices,
 } from './editor-model';
 import type { EditorView, FindingRow, PanelView, UnitSide } from './editor-view';
+import { MOUSE_WIDTH, keyboardRow, unitRow } from './editor-layout';
+import { KEYBOARD_WIDTH } from '../devices/layouts';
 
 const roleColour = (role: Role | undefined): string =>
   role === undefined ? 'var(--color-muted)' : `var(--color-${role})`;
@@ -117,6 +120,7 @@ export function Panel({
   onTurbo,
   onLatch,
   onPad,
+  onKeyLabel,
 }: {
   panel: PanelView;
   onClose(): void;
@@ -126,6 +130,8 @@ export function Panel({
   onTurbo(on: boolean): void;
   onLatch(on: boolean): void;
   onPad(pad: PadControl): void;
+  /** The key label typed, when the field is left or Enter is pressed. */
+  onKeyLabel(text: string): void;
 }) {
   return (
     <div className="ed-panel">
@@ -202,6 +208,15 @@ export function Panel({
               </div>
             ))}
           </div>
+          {panel.keyLabel !== null && (
+            <KeyLabelField
+              // A new control, or a label changed elsewhere (an undo), starts the field afresh.
+              key={`${panel.control}|${panel.keyLabel.value}`}
+              value={panel.keyLabel.value}
+              placeholder={panel.keyLabel.placeholder}
+              onSave={onKeyLabel}
+            />
+          )}
           {panel.behaviour && (
             <div className="ed-group">
               <span className="ed-lbl">Behaviour</span>
@@ -255,6 +270,50 @@ export function Panel({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * "Key label", as the canvas draws it under Press: the player's short word for the key, shown on
+ * it only when the action's name won't fit. Saved when the field is left or Enter is pressed.
+ */
+export function KeyLabelField({
+  value,
+  placeholder,
+  onSave,
+}: {
+  value: string;
+  placeholder: string;
+  onSave(text: string): void;
+}) {
+  const [text, setText] = useState(value);
+  return (
+    <form
+      className="ed-group"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSave(text);
+      }}
+    >
+      <label className="ed-lbl" htmlFor="ed-key-label">
+        Key label
+      </label>
+      <span className="ed-field">
+        <input
+          id="ed-key-label"
+          type="text"
+          value={text}
+          placeholder={placeholder}
+          maxLength={KEY_LABEL_LIMIT}
+          aria-describedby="ed-key-label-hint"
+          onChange={(e) => setText(e.target.value)}
+          onBlur={() => onSave(text)}
+        />
+      </span>
+      <span className="ed-note" id="ed-key-label-hint">
+        Shown on the key only when the game&apos;s word won&apos;t fit at a readable size.
+      </span>
+    </form>
   );
 }
 
@@ -573,11 +632,14 @@ export function DevicesChooser({
  */
 export function DeviceArea({
   view,
+  width,
   selected,
   onSelect,
   onDropAction,
 }: {
   view: EditorView;
+  /** The width the devices have, measured; undefined before it is (each then fills its share). */
+  width?: number | undefined;
   selected: ControlId | undefined;
   onSelect(id: ControlId): void;
   onDropAction: DropAction;
@@ -591,25 +653,32 @@ export function DeviceArea({
   };
   if (view.tab === null)
     return <p className="ed-hint">This scheme has no devices. Choose them in Devices, above.</p>;
-  if (view.tab === 'keyboard')
+  if (view.tab === 'keyboard') {
+    const row = keyboardRow(width, view.mouse && view.keyboard);
     return (
-      <div className="ed-kbm">
+      <div className={`ed-kbm${row.mouseBelow ? ' is-below' : ''}`}>
         {view.keyboard && (
-          <div className="ed-kb">
+          <div
+            className={`ed-kb${row.scale === undefined ? '' : ' is-scaled'}`}
+            style={row.scale === undefined ? undefined : { width: KEYBOARD_WIDTH * row.scale }}
+          >
             <Keyboard {...fixed} />
           </div>
         )}
         {view.mouse && <Mouse {...fixed} />}
       </div>
     );
+  }
   if (view.tab === 'controller') return <Controller {...fixed} />;
+  const row = unitRow(width, view.hands.length, view.mouseBeside ? MOUSE_WIDTH : 0);
   return (
-    <div className="ed-units">
+    <div className={`ed-units${row.stacked ? ' is-stacked' : ''}`}>
       {view.hands.map((hand) => (
-        <div key={hand} className="ed-unit">
+        <div key={hand} className={`ed-unit${row.scale === undefined ? '' : ' is-scaled'}`}>
           <Unit
             hand={hand}
             {...unitProps(view[hand])}
+            {...(row.scale === undefined ? {} : { scale: row.scale })}
             selected={selected ?? ''}
             onSelect={onSelect}
             onDropAction={onDropAction}

@@ -1149,13 +1149,26 @@ describe('isScheme', () => {
   it('accepts a scheme and refuses what is missing a part', () => {
     const scheme = xboxControllerPreset(SKIFF);
     expect(isScheme(scheme)).toBe(true);
-    for (const key of Object.keys(scheme)) {
+    // Key labels are the one optional part: a scheme with none may leave them out.
+    for (const key of Object.keys(scheme).filter((k) => k !== 'keyLabels')) {
       const rest = Object.fromEntries(Object.entries(scheme).filter(([name]) => name !== key));
       expect(isScheme(rest), key).toBe(false);
     }
     expect(isScheme({ ...scheme, output: 'both' })).toBe(false);
     expect(isScheme(null)).toBe(false);
     expect(isScheme([])).toBe(false);
+  });
+
+  it('accepts a scheme with no key labels, and refuses key labels that are not a record', () => {
+    const without: Record<string, unknown> = { ...xboxControllerPreset(SKIFF) };
+    delete without['keyLabels'];
+    expect([
+      isScheme(without),
+      isScheme({ ...without, keyLabels: { default: { 'L.index_1': 'Nade' } } }),
+      isScheme({ ...without, keyLabels: 'Nade' }),
+      isScheme({ ...without, keyLabels: ['Nade'] }),
+      isScheme({ ...without, keyLabels: null }),
+    ]).toEqual([true, true, false, false, false]);
   });
 });
 

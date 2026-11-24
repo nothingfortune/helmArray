@@ -67,5 +67,8 @@ and has not drawn them on the canvas yet:
 - **"Azerons send"** as a visible label before *Keys | Controller*.
 - **In the side panel**, *Sends* is a choice of Xbox control for an Azeron button in controller
   output.
+- **Below a 1440 px window** the side panel is 300 px, not 340, so the two units stay side by
+  side at 1280 px (about 0.70, where the canvas's container queries stack them), and on the
+  Keyboard tab the mouse goes under the keyboard when beside it the keyboard would be under 0.8.
 - **The Apply drawer's game half**, "In the game's controls", one line per binding ("Set Reload
   to Xbox Y"), and after Apply the same lines as the bind sheet.

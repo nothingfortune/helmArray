@@ -114,6 +114,34 @@ test.describe('keyboard: the setups', () => {
     expect(unseen(stops)).toEqual([]);
   });
 
+  test('the Inspector button and the side panel’s Key label field', async ({ helm }) => {
+    const { page } = helm;
+    await startFrom(page, 'Xbox controller');
+    await leftUnit(page).getByRole('button', { name: 'Reload, middle 1' }).click();
+    await page.getByRole('heading', { name: 'Helldivers 2' }).click();
+    const stops = await walkTabOrder(page);
+    const labels = stops.map((s) => s.label);
+    expect(labels).toEqual(expect.arrayContaining(['Inspector', 'Key label']));
+    // The bar's button first, then the field in the side panel.
+    expect(labels.indexOf('Key label')).toBeGreaterThan(labels.indexOf('Inspector'));
+    expect(unseen(stops)).toEqual([]);
+  });
+
+  test('the Inspector button opens and shuts the side panel from the keyboard', async ({
+    helm,
+  }) => {
+    const { page } = helm;
+    await startFrom(page, 'Xbox controller');
+    const inspector = page.getByRole('button', { name: 'Inspector' });
+    await inspector.focus();
+    await page.keyboard.press('Enter');
+    await expect(inspector).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.getByRole('complementary', { name: 'Button and actions' })).toHaveCount(0);
+    await page.keyboard.press('Space');
+    await expect(inspector).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('complementary', { name: 'Button and actions' })).toBeVisible();
+  });
+
   test('the Keyboard tab', async ({ helm }) => {
     const { page } = helm;
     await startFrom(page, 'Xbox controller');

@@ -978,3 +978,103 @@ export function renameScheme(scheme: Scheme, name: string): Scheme {
   const next = name.trim().slice(0, NAME_LIMIT).trim();
   return next === '' || next === scheme.name ? scheme : { ...scheme, name: next };
 }
+
+// ---- Key labels ----
+
+/** The longest key label: a key is at most two or three short words wide. */
+export const KEY_LABEL_LIMIT = 16;
+
+/** The key label of a control in a mode, if it has one (and it is text). */
+export function keyLabelOf(scheme: Scheme, mode: ModeId, control: ControlId): string | undefined {
+  const label = own(own(scheme.keyLabels ?? {}, mode) ?? {}, control);
+  return typeof label === 'string' ? label : undefined;
+}
+
+/** The key labels with one set, or removed (`undefined`). Built by entries: ids may be `__proto__`. */
+function withKeyLabel(
+  scheme: Scheme,
+  mode: ModeId,
+  control: ControlId,
+  label: string | undefined,
+): Scheme {
+  const labels = scheme.keyLabels ?? {};
+  const byControl = Object.entries(own(labels, mode) ?? {}).filter(([c]) => c !== control);
+  if (label !== undefined) byControl.push([control, label]);
+  return {
+    ...scheme,
+    keyLabels: Object.fromEntries([
+      ...Object.entries(labels).filter(([m]) => m !== mode),
+      [mode, Object.fromEntries(byControl)],
+    ]),
+  };
+}
+
+/**
+ * Sets a control's key label in a mode: trimmed, cut at the limit, removed when blank. Only a
+ * control showing an action takes one: the label is the player's word for that action on that key.
+ */
+export function setKeyLabel(
+  scheme: Scheme,
+  mode: ModeId,
+  control: ControlId,
+  text: string,
+): Scheme {
+  const label = text.trim().slice(0, KEY_LABEL_LIMIT).trim();
+  const current = keyLabelOf(scheme, mode, control);
+  if (label === (current ?? '')) return scheme;
+  if (label === '') return withKeyLabel(scheme, mode, control, undefined);
+  if (shownAction(scheme, mode, control) === undefined) return scheme;
+  return withKeyLabel(scheme, mode, control, label);
+}
+
+/** Which device a control is on, for where a moved label may go: either unit counts as one. */
+const deviceOf = (control: ControlId): string => {
+  const prefix = control.slice(0, control.indexOf('.'));
+  return prefix === 'L' || prefix === 'R' ? 'azeron' : prefix;
+};
+
+/** The controls of a mode that show an action: those with one of their own, and those mirroring. */
+function controlsShowing(scheme: Scheme, mode: ModeId, action: ActionId): ControlId[] {
+  const controls = new Set([
+    ...Object.keys(own(scheme.map, mode) ?? {}),
+    ...Object.keys(scheme.padMap),
+  ]);
+  return [...controls].filter((c) => shownAction(scheme, mode, c)?.id === action);
+}
+
+/**
+ * The key labels after an edit (`before` to `after`). A label is the player's word for the action
+ * its control shows, so it stays while that control shows the same action; when the action moved to
+ * another control of the same device it goes there (unless that one keeps a label of its own);
+ * otherwise it goes. Returns `after` itself when no label changes.
+ */
+export function followLabels(before: Scheme, after: Scheme): Scheme {
+  if (after === before) return after;
+  const labels = after.keyLabels ?? {};
+  let changed = false;
+  const modes: [ModeId, Record<ControlId, string>][] = [];
+  for (const [mode, byControl] of Object.entries(labels)) {
+    const entries = Object.entries(byControl).filter(([, l]) => typeof l === 'string');
+    const kept = new Map<ControlId, string>();
+    const moving: [ControlId, ActionId, string][] = [];
+    for (const [control, label] of entries) {
+      const was = shownAction(before, mode, control)?.id;
+      const now = shownAction(after, mode, control)?.id;
+      if (now !== undefined && now === was) kept.set(control, label);
+      else if (was !== undefined) moving.push([control, was, label]);
+    }
+    for (const [from, action, label] of moving) {
+      const to = controlsShowing(after, mode, action).find(
+        (c) =>
+          c !== from &&
+          deviceOf(c) === deviceOf(from) &&
+          !kept.has(c) &&
+          shownAction(before, mode, c)?.id !== action,
+      );
+      if (to !== undefined) kept.set(to, label);
+    }
+    if (kept.size !== entries.length || entries.some(([c, l]) => kept.get(c) !== l)) changed = true;
+    modes.push([mode, Object.fromEntries(kept)]);
+  }
+  return changed ? { ...after, keyLabels: Object.fromEntries(modes) } : after;
+}
