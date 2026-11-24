@@ -186,9 +186,9 @@ describe('syncDetail', () => {
         right: { connected: true, verdict: both },
         pendingChanges: 0,
       }),
-    ).toBe('Right unit: 2 inputs not as applied.');
+    ).toBe('Right unit: 2 buttons not as applied.');
     expect(syncDetail({ left: wrong, right: matching, pendingChanges: 0 })).toBe(
-      'Left unit: 1 input not as applied.',
+      'Left unit: 1 button not as applied.',
     );
   });
 

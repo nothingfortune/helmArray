@@ -140,7 +140,7 @@ describe('the sync pill is the units against what was applied', () => {
     const sync = pill(wrong, active(APPLIED, planOf(base)));
     expect(sync.label).toBe('Right unit differs');
     expect(sync.tone).toBe('error');
-    expect(sync.detail).toMatch(/^Right unit: \d+ inputs? not as applied\.$/);
+    expect(sync.detail).toMatch(/^Right unit: \d+ buttons? not as applied\.$/);
   });
 
   it('names the left unit when it is the left that differs', async () => {

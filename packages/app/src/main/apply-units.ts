@@ -101,7 +101,7 @@ export function chooseSlot(
   if (!pick) {
     return {
       ok: false,
-      reason: `The unit has room for ${limit} slot${limit === 1 ? '' : 's'} and is running the only one, so there is nowhere to write without overwriting it.`,
+      reason: `The unit has room for ${limit} layout${limit === 1 ? '' : 's'} and is running the only one, so there is nowhere to write without overwriting it.`,
     };
   }
   return { ok: true, slot: pick.slot, overwrites: pick };
@@ -584,10 +584,13 @@ async function applyUnit(
     const wrote = outcome.wrote;
     const n = outcome.deleted.length;
     outcome.status = wrote ? 'applied' : 'unchanged';
+    // In the person's words: their layouts, not the unit's numbered slots.
+    const removed =
+      n === 1 ? 'its other layout was removed' : `its other ${n} layouts were removed`;
     outcome.message = wrote
-      ? `The ${unit} unit runs the layout in slot ${slot}${n > 0 ? `; ${n} other slot${n === 1 ? ' was' : 's were'} deleted` : ''}.`
+      ? `The ${unit} unit runs the layout${n > 0 ? `; ${removed}` : ''}.`
       : n > 0
-        ? `The ${unit} unit already held the layout; ${n} other slot${n === 1 ? ' was' : 's were'} deleted.`
+        ? `The ${unit} unit already held the layout; ${removed}.`
         : `The ${unit} unit already held the layout.`;
     return outcome;
   } catch (error) {

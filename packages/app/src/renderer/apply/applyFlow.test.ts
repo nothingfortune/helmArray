@@ -91,7 +91,7 @@ const FAILED: ApplyResult = {
     {
       hand: 'left',
       status: 'applied',
-      message: 'The left unit runs the layout in slot 1.',
+      message: 'The left unit runs the layout.',
       slot: 1,
     },
     {
@@ -178,7 +178,7 @@ describe('the Apply drawer flow', () => {
     expect(view.result?.ok).toBe(false);
     expect(view.result?.headline).toBe(FAILED.message);
     // The unit that did go through is said too; the failure is not said twice.
-    expect(view.result?.lines).toEqual(['The left unit runs the layout in slot 1.']);
+    expect(view.result?.lines).toEqual(['The left unit runs the layout.']);
     expect(view.apply).toEqual({ label: 'Try again', disabled: false });
     expect(reduce(done, { type: 'retry' })).toBe(START);
   });
@@ -597,7 +597,7 @@ describe('when to look again', () => {
       sync: {
         label: 'Left unit differs',
         tone: 'error',
-        detail: 'Left unit: 3 inputs not as applied.',
+        detail: 'Left unit: 3 buttons not as applied.',
       },
     });
     expect(previewKey(moved)).not.toBe(previewKey(state()));

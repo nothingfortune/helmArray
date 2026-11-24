@@ -132,7 +132,8 @@ export function syncState(input: SyncInput): SyncState {
 const distinctInputs = (verdict: Verdict): number =>
   new Set([...verdict.differences.map((d) => d.id), ...verdict.unchecked.map((u) => u.id)]).size;
 
-const inputs = (count: number) => (count === 1 ? '1 input' : `${count} inputs`);
+/** A unit's inputs are its buttons and its stick: a button, to the person. */
+const buttons = (count: number) => (count === 1 ? '1 button' : `${count} buttons`);
 
 /**
  * The words behind the label when a unit differs: which unit, and how much of it. For a tooltip.
@@ -141,7 +142,7 @@ const inputs = (count: number) => (count === 1 ? '1 input' : `${count} inputs`);
 export function syncDetail(input: SyncInput): string | undefined {
   const lines = HANDS.filter((hand) => differs(input[hand])).map((hand) => {
     const verdict = input[hand].verdict;
-    return `${name(hand)} unit: ${inputs(verdict ? distinctInputs(verdict) : 0)} not as applied.`;
+    return `${name(hand)} unit: ${buttons(verdict ? distinctInputs(verdict) : 0)} not as applied.`;
   });
   return lines.length > 0 ? lines.join(' ') : undefined;
 }

@@ -734,7 +734,7 @@ describe('applying to the units', () => {
       const held = await state.held();
       const preview = previewUnits(plan, held, { name: NAME });
       expect(preview.left.problem).toBe(
-        'The unit has room for 1 slot and is running the only one, so there is nowhere to write without overwriting it.',
+        'The unit has room for 1 layout and is running the only one, so there is nowhere to write without overwriting it.',
       );
       expect(preview.problems).toHaveLength(1);
       const result = await applyUnits(plan, state.deps);
@@ -964,12 +964,12 @@ describe('choosing a slot, in the order a person would', () => {
       {
         ok: false,
         reason:
-          'The unit has room for 1 slot and is running the only one, so there is nowhere to write without overwriting it.',
+          'The unit has room for 1 layout and is running the only one, so there is nowhere to write without overwriting it.',
       },
       {
         ok: false,
         reason:
-          'The unit has room for 0 slots and is running the only one, so there is nowhere to write without overwriting it.',
+          'The unit has room for 0 layouts and is running the only one, so there is nowhere to write without overwriting it.',
       },
     ]);
   });
@@ -1060,8 +1060,8 @@ describe('applying, said in words and traced', () => {
     const state = await rig(left, right);
     const result = await applyUnits(plan, state.deps);
     expect(result.units.map((u) => u.message)).toEqual([
-      'The left unit runs the layout in slot 1; 2 other slots were deleted.',
-      'The right unit runs the layout in slot 1; 1 other slot was deleted.',
+      'The left unit runs the layout; its other 2 layouts were removed.',
+      'The right unit runs the layout; its other layout was removed.',
     ]);
   });
 
@@ -1080,7 +1080,7 @@ describe('applying, said in words and traced', () => {
     const result = await applyUnits(plan, state.deps);
     expect(result.units.map((u) => u.message)).toEqual([
       'The left unit already held the layout.',
-      'The right unit already held the layout; 2 other slots were deleted.',
+      'The right unit already held the layout; its other 2 layouts were removed.',
     ]);
   });
 
@@ -1092,7 +1092,7 @@ describe('applying, said in words and traced', () => {
     const state = await rig(left, right);
     const result = await applyUnits(plan, state.deps);
     expect(result.units[0]?.message).toBe(
-      'The left unit already held the layout; 1 other slot was deleted.',
+      'The left unit already held the layout; its other layout was removed.',
     );
   });
 
