@@ -26,6 +26,14 @@ describe('the fingerprint of a plan', () => {
     expect(planFingerprint(fromDisk)).toBe(planFingerprint(plan(scheme)));
   });
 
+  it('is the same with key labels: they are drawing only, so setting one is no change to apply', () => {
+    const labelled = {
+      ...scheme,
+      keyLabels: { ship: { 'L.index_1': 'Go', 'R.index_1': 'Shoot' } },
+    };
+    expect(planFingerprint(plan(labelled))).toBe(planFingerprint(plan(scheme)));
+  });
+
   it('changes with any button, with what a button sends, and with a unit setting', () => {
     const base = planFingerprint(plan(scheme));
     const moved = {
