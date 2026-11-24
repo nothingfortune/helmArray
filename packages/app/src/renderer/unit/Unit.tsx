@@ -65,15 +65,21 @@ const DIRECTION_WORD: Record<StickDirection, string> = {
 };
 
 const px = (n: number): string => `${n}px`;
+/** A key's or chip's border, both sides, at its widest (an empty one's dashed 1.5 px). */
+const BORDER = 3;
 
 /**
  * The style of a fitted label: its size and, when it is drawn narrower to fit (`squeeze`), a box
  * as wide as the unsqueezed text needs, scaled into the `width` it has. `origin` is where it stays.
  */
 export function labelStyle(fit: LabelFit, width: number, origin: string): CSSProperties {
-  if (fit.squeeze >= 1) return { fontSize: px(fit.fontSize) };
-  return {
+  const size: CSSProperties = {
     fontSize: px(fit.fontSize),
+    ...(fit.lineHeight === undefined ? {} : { lineHeight: fit.lineHeight }),
+  };
+  if (fit.squeeze >= 1) return size;
+  return {
+    ...size,
     flex: 'none',
     display: 'inline-block',
     width: px(width / fit.squeeze),
@@ -137,8 +143,9 @@ export function Unit({
     const isPress = k.shape === 'press';
     const text = assigned ? action.label : isPress ? 'Press' : k.name;
     const pad = isPress ? 0 : k.flat ? 8 : 10;
-    const width = k.w - (k.flat ? 17 : 16);
-    const fit = fitLabel(text, width, k.h - pad, {
+    // The text area: the key less its padding (unit.css) and its border.
+    const width = k.w - (k.flat ? 17 : 15) - (isPress ? 0 : BORDER);
+    const fit = fitLabel(text, width, k.h - pad - (isPress ? 0 : BORDER), {
       ...(isPress ? { sizes: [11, 10] } : {}),
       short: action?.short,
     });
@@ -189,7 +196,8 @@ export function Unit({
 
   const renderChip = (c: ChipPlace) => {
     const word = stick?.[c.direction];
-    const fit = fitLabel(word || DIRECTION_WORD[c.direction], c.w - 8, c.h - 2, {
+    const width = c.w - 8 - BORDER;
+    const fit = fitLabel(word || DIRECTION_WORD[c.direction], width, c.h - BORDER, {
       sizes: [12, 11, 10],
       lineHeight: 1.1,
     });
@@ -200,7 +208,7 @@ export function Unit({
         style={{ ...place(c), ...roleVars(stick?.role) }}
         aria-hidden="true"
       >
-        <span className="sl-t" style={labelStyle(fit, c.w - 8, 'center')}>
+        <span className="sl-t" style={labelStyle(fit, width, 'center')}>
           {fit.text}
         </span>
       </span>

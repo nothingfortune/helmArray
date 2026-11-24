@@ -4,6 +4,7 @@ import {
   KEY_FONT_SIZES,
   MIN_FONT_SIZE,
   MIN_SQUEEZE,
+  TIGHT_LINE_HEIGHT,
   fitLabel,
   joinShortWords,
   textEm,
@@ -138,17 +139,26 @@ describe('fitLabel: the 10 px floor', () => {
     expect(fit.lines).toEqual(['Antidisestablishmentarianism']);
   });
 
+  it('draws the lines closer, at 10 px, when the height is one line short', () => {
+    // Three short lines in a key with room for two at the usual height, but three at 1.0.
+    const fit = fitLabel('Ping / comms wheel', 38, 31);
+    expect(fit).toMatchObject({ fontSize: 10, fits: true, lineHeight: TIGHT_LINE_HEIGHT });
+    expect(fit.lines).toHaveLength(3);
+    expect(fitLabel('Ping / comms wheel', 38, 40)).not.toHaveProperty('lineHeight');
+  });
+
   it('never draws narrower than MIN_SQUEEZE', () => {
     expect(MIN_SQUEEZE).toBeGreaterThanOrEqual(0.6);
   });
 
-  // Every key shape of the Azeron unit and the keyboard's narrowest key, as text areas (Unit.tsx
-  // and Devices.tsx take the padding off): finger, side, thumb, d-pad, a 1-unit keyboard key.
+  // Every key shape of the Azeron unit and the keyboard's narrowest key, as the text areas Unit.tsx
+  // and Devices.tsx give them (the key less its padding and border): finger 72 x 48, side 60 x 64,
+  // thumb 56 x 44, d-pad 60 x 34, a 1-unit keyboard key 64 x 60.
   const SHAPES = [
-    ['finger', W, H],
-    ['side', 44, 54],
-    ['thumb', 40, 34],
-    ['d-pad', DPAD_W, DPAD_H],
+    ['finger', 54, 35],
+    ['side', 42, 51],
+    ['thumb', 38, 31],
+    ['d-pad', 40, 23],
     ['keyboard', 48, 36],
   ] as const;
 
@@ -165,20 +175,25 @@ describe('fitLabel: the 10 px floor', () => {
   it('fits a long-press label of every Helldivers 2 action on a finger key', () => {
     const misses = helldivers2.actions
       .map((a) => `Long: ${a.name}`)
-      .filter((label) => !fitLabel(label, W, H).fits);
+      .filter((label) => !fitLabel(label, 54, 35).fits);
     expect(misses).toEqual([]);
   });
 });
 
 describe('joinShortWords', () => {
   it('keeps a one-character word with the word before it', () => {
-    expect(joinShortWords('D-pad ←')).toBe('D-pad ←');
-    expect(joinShortWords('Index 1')).toBe('Index 1');
+    expect(joinShortWords('D-pad ←')).toBe('D-\u2060pad\u00a0←');
+    expect(joinShortWords('Index 1')).toBe('Index\u00a01');
   });
 
-  it('leaves longer words free to wrap', () => {
+  it('leaves longer words free to wrap at their spaces, and keeps a lone slash with its word', () => {
     expect(joinShortWords('Support weapon')).toBe('Support weapon');
-    expect(joinShortWords('D-pad press')).toBe('D-pad press');
+    expect(joinShortWords('Climb / vault')).toBe('Climb\u00a0/ vault');
+  });
+
+  it('never lets a word break at its hyphen: a word joiner follows it', () => {
+    expect(joinShortWords('D-pad press')).toBe('D-\u2060pad press');
+    expect(joinShortWords('Re-arm -')).toBe('Re-\u2060arm\u00a0-');
   });
 
   it('does not join a one-character word at the start to anything', () => {
@@ -189,8 +204,8 @@ describe('joinShortWords', () => {
 describe('fitLabel: D-pad ← stays on one line', () => {
   it('fits an empty d-pad key on one line', () => {
     const fit = fitLabel('D-pad ←', DPAD_W, DPAD_H);
-    expect(fit.text).toBe('D-pad ←');
-    expect(fit.lines).toEqual(['D-pad ←']);
+    expect(fit.text).toBe('D-\u2060pad\u00a0←');
+    expect(fit.lines).toEqual(['D-\u2060pad\u00a0←']);
     expect(fit.fits).toBe(true);
   });
 });
@@ -203,7 +218,7 @@ describe('textEm', () => {
   });
 
   it('counts a non-breaking space as a space', () => {
-    expect(textEm('a b')).toBeCloseTo(textEm('a b'));
+    expect(textEm('a\u00a0b')).toBeCloseTo(textEm('a b'));
   });
 
   it('counts an arrow as wide as it is drawn, a full em', () => {
@@ -226,7 +241,7 @@ describe('wrapWords', () => {
   });
 
   it('never breaks at a non-breaking space', () => {
-    expect(wrapWords('D-pad ←', 13, 20)).toEqual(['D-pad ←']);
+    expect(wrapWords('D-pad\u00a0←', 13, 20)).toEqual(['D-pad\u00a0←']);
   });
 
   it('returns no lines for empty text', () => {

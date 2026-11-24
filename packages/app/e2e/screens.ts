@@ -132,7 +132,9 @@ export async function walkTabOrder(page: Page, limit = 300): Promise<FocusStop[]
       return {
         label:
           el.getAttribute('aria-label') ??
-          (el.textContent?.trim().slice(0, 40) || el.tagName.toLowerCase()),
+          ((el instanceof HTMLInputElement && el.labels?.[0]?.textContent?.trim()) ||
+            el.textContent?.trim().slice(0, 40) ||
+            el.tagName.toLowerCase()),
         inDialog: el.closest('[role="dialog"]') !== null,
         visible: focused.some((look, n) => look !== blurred[n]),
         blurred: blurred.join(' | '),

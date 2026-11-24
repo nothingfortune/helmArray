@@ -26,7 +26,10 @@ function MainWindow() {
           onChoose={(unitId, hand) => void window.helm.chooseHand(unitId, hand)}
         />
       )}
-      <App state={state} />
+      {/* The screen scrolls in here, under the header: the window itself never scrolls. */}
+      <div className="app-screen">
+        <App state={state} />
+      </div>
     </>
   );
 }

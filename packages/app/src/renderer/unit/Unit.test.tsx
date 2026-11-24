@@ -64,11 +64,18 @@ describe('the unit, drawn', () => {
 
   it('keeps "D-pad ←" on an empty key in one piece', () => {
     const html = renderToStaticMarkup(<Unit hand="left" keys={{}} scale={1} />);
-    expect(html).toContain('>D-pad ←</span>');
+    expect(html).toContain('>D-\u2060pad\u00a0←</span>');
   });
 });
 
 describe('labelStyle', () => {
+  it('draws the lines closer when the fit asks for it', () => {
+    expect(labelStyle(fitLabel('Ping / comms wheel', 38, 31), 38, 'left center')).toMatchObject({
+      fontSize: '10px',
+      lineHeight: 1,
+    });
+  });
+
   it('sets only the size of a label drawn at its own width', () => {
     expect(labelStyle(fitLabel('Fire', 56, 38), 56, 'left center')).toEqual({ fontSize: '13px' });
   });

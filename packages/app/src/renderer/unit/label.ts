@@ -11,6 +11,8 @@ export const KEY_LINE_HEIGHT = 1.12;
 /** The narrowest a label is drawn, as a share of its width: past it, letters stop reading. */
 export const MIN_SQUEEZE = 0.6;
 const SQUEEZE_STEP = 0.05;
+/** The line height of a last resort that needs one more line than the usual height allows. */
+export const TIGHT_LINE_HEIGHT = 1;
 
 export interface LabelFit {
   /** What to draw: the game's word or the short label, with its one-letter words kept joined. */
@@ -22,6 +24,8 @@ export interface LabelFit {
   short: boolean;
   /** 1, or the horizontal scale the text is drawn at to fit at 10 px. */
   squeeze: number;
+  /** Set when the lines are drawn closer than usual (TIGHT_LINE_HEIGHT) to fit at 10 px. */
+  lineHeight?: number;
   /** False only when the label does not fit even drawn at MIN_SQUEEZE. */
   fits: boolean;
 }
@@ -45,9 +49,9 @@ const INTER_600: Readonly<Record<string, number>> = {
   U: 0.74, V: 0.73, W: 1.02, X: 0.72, Y: 0.71, Z: 0.65,
   '0': 0.66, '1': 0.42, '2': 0.62, '3': 0.64, '4': 0.67, '5': 0.61, '6': 0.64, '7': 0.58,
   '8': 0.64, '9': 0.64,
-  ' ': 0.25, ' ': 0.25, '.': 0.32, ',': 0.32, ':': 0.32, ';': 0.33, "'": 0.33, '!': 0.32,
+  ' ': 0.25, '\u00a0': 0.25, '.': 0.32, ',': 0.32, ':': 0.32, ';': 0.33, "'": 0.33, '!': 0.32,
   '|': 0.36, '-': 0.47, '/': 0.38, '(': 0.37, ')': 0.37, '%': 1, '+': 0.67, '−': 0.67,
-  '&': 0.66, '?': 0.54, '←': 1, '→': 1, '↑': 0.88, '↓': 0.88,
+  '&': 0.66, '?': 0.54, '←': 1, '→': 1, '↑': 0.88, '↓': 0.88, '\u2060': 0,
 };
 /** A character not in the table: as wide as the widest letter, so a guess never overflows. */
 const UNKNOWN_EM = 1.02;
@@ -60,11 +64,12 @@ export function textEm(text: string): number {
 }
 
 /**
- * Joins a one-character word to the word before it with a non-breaking space, so "D-pad ←" and
- * "Index 1" never wrap into a word and a lone arrow or digit.
+ * Keeps words whole where the browser would break them: a one-character word is joined to the word
+ * before it with a non-breaking space, so "D-pad ←" and "Index 1" never wrap into a word and a lone
+ * arrow or digit; and a word joiner after each hyphen, so "D-pad" is never "D-" and "pad".
  */
 export const joinShortWords = (text: string): string =>
-  text.replace(/(\S) (\S)(?=\s|$)/gu, '$1 $2');
+  text.replace(/(\S) (\S)(?=\s|$)/gu, '$1\u00a0$2').replace(/-(?=\S)/gu, '-\u2060');
 
 /** Greedy wrap at ordinary spaces. A word wider than the line goes on a line of its own. */
 export function wrapWords(text: string, fontSize: number, availWidth: number): string[] {
@@ -137,19 +142,29 @@ export function fitLabel(
       if (fits) return { text: candidate, fontSize, lines, short: isShort, squeeze: 1, fits };
     }
   }
+  // The last resort: drawn narrower, at the usual line height and then with the lines closer.
   const last = short ?? full;
-  let squeeze = 1;
-  let tried = tryFit(last, MIN_FONT_SIZE, squeeze, box);
-  while (!tried.fits && squeeze - SQUEEZE_STEP >= MIN_SQUEEZE - 1e-9) {
-    squeeze = Math.round((squeeze - SQUEEZE_STEP) * 100) / 100;
-    tried = tryFit(last, MIN_FONT_SIZE, squeeze, box);
-  }
+  const narrower = (lineHeight: number) => {
+    const at = { ...box, lineHeight };
+    let squeeze = 1;
+    let tried = tryFit(last, MIN_FONT_SIZE, squeeze, at);
+    while (!tried.fits && squeeze - SQUEEZE_STEP >= MIN_SQUEEZE - 1e-9) {
+      squeeze = Math.round((squeeze - SQUEEZE_STEP) * 100) / 100;
+      tried = tryFit(last, MIN_FONT_SIZE, squeeze, at);
+    }
+    return { squeeze, ...tried };
+  };
+  const usual = narrower(box.lineHeight);
+  const tight =
+    usual.fits || box.lineHeight <= TIGHT_LINE_HEIGHT ? null : narrower(TIGHT_LINE_HEIGHT);
+  const best = tight?.fits === true ? tight : usual;
   return {
     text: last,
     fontSize: MIN_FONT_SIZE,
-    lines: tried.lines,
+    lines: best.lines,
     short: short !== undefined,
-    squeeze,
-    fits: tried.fits,
+    squeeze: best.squeeze,
+    ...(best === tight ? { lineHeight: TIGHT_LINE_HEIGHT } : {}),
+    fits: best.fits,
   };
 }
