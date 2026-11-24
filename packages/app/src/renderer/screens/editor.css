@@ -126,9 +126,11 @@
 .ed-main > * {
   flex-shrink: 0;
 }
+/* The checks scroll under the devices, but always keep room for a row: in a window too short
+   for both, the column scrolls instead, so a check's buttons are never out of reach. */
 .ed-main > .ed-checks {
   flex-shrink: 1;
-  min-height: 0;
+  min-height: 64px;
   overflow-y: auto;
 }
 

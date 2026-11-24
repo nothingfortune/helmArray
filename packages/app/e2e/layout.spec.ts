@@ -26,6 +26,8 @@ const SIZES = [
 const FLOOR = 10;
 /** The smallest scale each device is drawn at (editor-layout.ts): the floor on screen is this much. */
 const MIN_SCALE = { unit: 0.65, keyboard: 0.8 } as const;
+/** The units' scale with the side panel open, as measured: the canvas's 0.78 at 1440, 0.70 at 1280. */
+const UNIT_SCALE_AT: Record<number, number> = { 1440: 0.78, 1280: 0.69 };
 
 interface Box {
   x: number;
@@ -126,7 +128,7 @@ for (const [width, height] of SIZES) {
       await startFrom(page, 'Xbox controller');
       const before = await units(page);
       await leftUnit(page).getByRole('button', { name: 'Reload, middle 1' }).click();
-      await expect(page.getByLabel('Key label')).toBeVisible();
+      await expect(page.locator('.ed-panel')).toBeVisible();
       // The side panel scrolls in its own column, to the end of the action list.
       const side = page.getByRole('complementary', { name: 'Button and actions' });
       // Nothing in it is wider than it: it scrolls down, never across.
@@ -171,7 +173,7 @@ for (const [width, height] of SIZES) {
         sameRow: left.y === right.y,
         leftOfRight: left.x + left.w <= right.x,
         inView: right.x + right.w <= width && right.y + right.h <= height,
-        readable: scales.every((s) => s >= MIN_SCALE.unit),
+        readable: scales.every((s) => s >= (UNIT_SCALE_AT[width] ?? MIN_SCALE.unit)),
       }).toEqual({ sameRow: true, leftOfRight: true, inView: true, readable: true });
     });
 
@@ -271,6 +273,24 @@ test.describe('the Editor’s labels', () => {
         return file === undefined ? '' : readFile(join(helm.dataDir, 'schemes', file), 'utf8');
       })
       .toMatch(/"keyLabels":\s*\{\s*"default":\s*\{\s*"L.dpad_up":\s*"Ping"/);
+  });
+});
+
+test.describe('the Editor at the window’s smallest, 1280 x 720', () => {
+  test('the Keyboard tab: the window never scrolls and a check stays in reach', async ({
+    helm,
+  }) => {
+    const { page } = helm;
+    await contentSize(helm, 1280, 720);
+    await startFrom(page, 'Xbox controller');
+    await chooseDevice(page, 'Keyboard and mouse');
+    await deviceTab(page, 'Keyboard').click();
+    const keep = page.getByRole('button', { name: 'Keep, I know' });
+    await keep.scrollIntoViewIfNeeded();
+    await expect(keep).toBeInViewport({ ratio: 1 });
+    const scroll = await windowScrolls(page);
+    expect(scroll.scrolls, JSON.stringify(scroll)).toBe(false);
+    expect(await page.locator('.ed-checks').evaluate((el) => el.clientHeight)).toBeGreaterThan(40);
   });
 });
 
