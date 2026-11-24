@@ -1,0 +1,344 @@
+/* The Game screen: a game's modes and actions, and each action's defaults. Not drawn on the canvas:
+   built in its language (the Editor's bar, the Library's panels) from the tokens. */
+
+.gm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+  min-height: calc(100vh - 60px);
+  padding-bottom: var(--space-48);
+  background: var(--color-bg);
+}
+
+.gm-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-16);
+  padding: var(--space-12) var(--space-24);
+  border-bottom: 1px solid var(--color-raised);
+}
+.gm-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: var(--space-8);
+  color: var(--color-muted);
+}
+.gm-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 260px;
+}
+.gm-name {
+  width: 100%;
+  max-width: 520px;
+  padding: 2px 6px;
+  margin-left: -6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--color-text);
+  font: 700 var(--size-title) / 1.2 var(--font-name);
+}
+.gm-name:hover {
+  border-color: var(--color-line);
+}
+.gm-name:focus-visible {
+  outline: none;
+  border-color: var(--color-edge);
+  background: var(--color-panel);
+}
+.gm-name::placeholder {
+  color: var(--color-muted);
+}
+.gm-note {
+  color: var(--color-muted);
+  font-size: var(--size-label);
+  font-weight: 600;
+}
+.gm-spacer {
+  flex: 1;
+}
+.gm-state {
+  padding: var(--space-24);
+  color: var(--color-muted);
+}
+.gm-notice {
+  margin: 0 var(--space-24);
+}
+
+.gm-start,
+.gm-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  padding: 4px 4px 4px var(--space-12);
+  border-radius: var(--radius-key);
+  background: var(--color-panel);
+  border: 1px solid var(--color-line);
+  font-size: var(--size-label);
+}
+.gm-start-label {
+  color: var(--color-muted);
+  font-weight: 600;
+}
+.gm-danger,
+.btn.ghost.gm-danger {
+  color: var(--color-error-text);
+}
+.btn.gm-danger-solid {
+  background: var(--color-error-bg);
+  border-color: var(--color-error);
+  color: var(--color-error-text);
+}
+
+/* Mode tabs, as the Editor draws them. */
+.gm-modes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-12);
+  padding: 0 var(--space-24);
+}
+.gm-tabs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  padding: 3px;
+  background: var(--color-panel);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-key);
+}
+.gm-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  height: 34px;
+  padding: 0 var(--space-12);
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-muted);
+  font: 600 var(--size-label) var(--font-read);
+  cursor: pointer;
+}
+.gm-tab:hover {
+  background: var(--color-raised);
+}
+.gm-tab[aria-selected='true'] {
+  background: var(--color-line);
+  color: var(--color-text);
+  box-shadow: inset 0 -2px 0 var(--color-accent);
+}
+.gm-count {
+  font-family: var(--font-signal);
+  font-size: var(--size-caption);
+  color: var(--color-muted);
+}
+
+.gm-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-16);
+  margin: 0 var(--space-24);
+  padding: 20px;
+  border-radius: var(--radius-panel);
+  background: var(--color-panel);
+  border: 1px solid var(--color-line);
+}
+.gm-mode-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-16);
+}
+.gm-mode-name {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.gm-eyebrow {
+  color: var(--color-muted);
+  font-size: var(--size-caption);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.gm-mode-tools {
+  display: flex;
+  gap: var(--space-8);
+}
+.gm-empty {
+  margin: 0;
+  color: var(--color-muted);
+}
+
+/* Text fields and the role picker: fields on the panel, an edge that reads at 3:1. */
+.gm input:not([type='checkbox']):not(.gm-name),
+.gm select {
+  height: 32px;
+  padding: 0 var(--space-8);
+  border: 1px solid var(--color-edge);
+  border-radius: var(--radius-chip);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--size-label);
+}
+.gm input:not([type='checkbox']):focus-visible,
+.gm select:focus-visible {
+  outline: 2px solid var(--color-text);
+  outline-offset: 1px;
+}
+
+.gm-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.gm-table th {
+  padding: 0 var(--space-8) var(--space-8);
+  color: var(--color-muted);
+  font-size: var(--size-caption);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-align: left;
+  text-transform: uppercase;
+}
+.gm-table td {
+  padding: 6px var(--space-8);
+  border-top: 1px solid var(--color-line);
+  vertical-align: middle;
+}
+.gm-row:hover td {
+  background: var(--color-bg);
+}
+.gm-center {
+  text-align: center;
+}
+.gm-action-name {
+  width: calc(100% - 20px);
+  min-width: 160px;
+}
+.gm-role-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: var(--space-8);
+  border-radius: 50%;
+  vertical-align: middle;
+}
+.gm-role-dot.role-combat {
+  background: var(--color-combat);
+}
+.gm-role-dot.role-movement {
+  background: var(--color-movement);
+}
+.gm-role-dot.role-ability {
+  background: var(--color-ability);
+}
+.gm-role-dot.role-travel {
+  background: var(--color-travel);
+}
+.gm-role-dot.role-menu {
+  background: var(--color-menu);
+}
+.gm-check {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-accent);
+}
+.gm-check:focus-visible {
+  outline: 2px solid var(--color-text);
+  outline-offset: 2px;
+}
+
+/* A default: what the device sends, in mono, like a key's caption. Empty is dashed; waiting is amber. */
+.gm-press-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+.gm-press {
+  min-width: 132px;
+  height: 32px;
+  padding: 0 var(--space-12);
+  border: 1px solid var(--color-line-key);
+  border-radius: var(--radius-key);
+  background: var(--color-raised);
+  color: var(--color-secondary);
+  font: 500 var(--size-key) var(--font-signal);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--motion-hover);
+}
+.gm-press:hover {
+  background: var(--color-hover);
+}
+.gm-press.empty {
+  border-style: dashed;
+  border-color: var(--color-edge);
+  background: transparent;
+  color: var(--color-muted);
+  font-family: var(--font-read);
+}
+.gm-press.waiting {
+  border: 1px solid var(--color-accent);
+  background: var(--color-pressed);
+  color: var(--color-accent);
+  font-family: var(--font-read);
+  box-shadow: 0 0 0 3px rgb(255 178 36 / 0.25);
+}
+.gm-press:focus-visible {
+  outline: 2px solid var(--color-text);
+  outline-offset: 2px;
+}
+.gm-clear {
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--color-muted);
+  font-size: 16px;
+  cursor: pointer;
+}
+.gm-clear:hover {
+  background: var(--color-raised);
+  color: var(--color-text);
+}
+
+.gm-wait-row td {
+  border-top: 0;
+  padding-top: 0;
+}
+.gm-wait {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-16);
+  padding: var(--space-8) var(--space-12);
+  border-radius: var(--radius-chip);
+  background: var(--color-pressed);
+  font-size: var(--size-label);
+}
+.gm-wait-text {
+  color: var(--color-accent);
+  font-weight: 600;
+}
+.gm-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  color: var(--color-secondary);
+}
+
+.gm-add {
+  display: flex;
+  gap: var(--space-8);
+}
+.gm-add input {
+  flex: 1;
+  max-width: 480px;
+}

@@ -4,8 +4,16 @@
 
 import type { Action, ActionId, Game, ModeId, PadControl, Role, Signal } from '@helmarray/core';
 import { idFromName, isDataId } from '@helmarray/core';
-import type { Preset } from '../../shared/api';
+import type { GameEntry, Preset } from '../../shared/api';
 import { isSafeId } from '../../shared/ids';
+import { commit } from './editor-model';
+import type { History } from './editor-model';
+
+/** Which game the Game screen opens on. */
+export type GameTarget =
+  | { kind: 'edit'; gameId: string }
+  /** A game helmArray doesn't have yet: from a Steam tile (its name and app id), or by name. */
+  | { kind: 'new'; name: string; steamAppId?: number };
 
 /** The mode a new game starts with: one is needed, and most games have only one. */
 const FIRST_MODE = { id: 'default', name: 'Default' };
@@ -151,4 +159,40 @@ export function deleteMode(game: Game, id: ModeId): Game {
 export function canStartFrom(game: Game): Preset[] {
   if (game.actions.length === 0) return [];
   return game.actions.some((a) => a.native?.key !== undefined) ? ['xbox', 'keys'] : ['xbox'];
+}
+
+/**
+ * Adds an edit to the undo history. An edit of the same text field as the one before replaces it
+ * instead, so typing a name is one step to undo, not one per letter.
+ */
+export function record<T>(
+  history: History<T>,
+  next: T,
+  field: string | null,
+  lastField: string | null,
+): History<T> {
+  if (field !== null && field === lastField && history.past.length > 0)
+    return { ...history, present: next, future: [] };
+  return commit(history, next);
+}
+
+/**
+ * What the Game screen opens on: the game helmArray knows (with whose it is), or a new game made
+ * from the target, not saved yet. Null when the game asked for isn't there any more.
+ */
+export function loadedOf(
+  target: GameTarget,
+  games: readonly GameEntry[],
+): { game: Game; builtIn: boolean; edited: boolean; saved: boolean } | null {
+  if (target.kind === 'new') {
+    const game = newGame(
+      target.name,
+      games.map((g) => g.game.id),
+      target.steamAppId,
+    );
+    return { game, builtIn: false, edited: false, saved: false };
+  }
+  const entry = games.find((g) => g.game.id === target.gameId);
+  if (entry === undefined) return null;
+  return { game: entry.game, builtIn: entry.builtIn, edited: entry.edited === true, saved: true };
 }

@@ -34,7 +34,11 @@ test.describe('the M4 screens', () => {
     ]);
     await expect(helldivers(page)).toHaveAttribute('aria-label', /Not set up/);
     await expect(page.getByText('A Game Nobody Wrote Yet')).toBeVisible();
-    await expect(page.getByText('Not supported yet')).toBeVisible();
+    // A game helmArray has no data for is set up on the Game screen (it said "Not supported yet"
+    // until games could be added in the app).
+    await expect(
+      page.getByRole('button', { name: 'Set up A Game Nobody Wrote Yet' }),
+    ).toBeVisible();
     // The helm-cover:// protocol served the file the Steam read found.
     const cover = page.locator('.tile', { hasText: 'HELLDIVERS' }).locator('img.art');
     await expect(cover).toBeVisible();

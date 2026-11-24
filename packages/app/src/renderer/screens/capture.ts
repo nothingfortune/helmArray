@@ -198,3 +198,23 @@ export function newPadPress(
   }
   return null;
 }
+
+/** The part of a `Gamepad` this reads. */
+interface GamepadLike {
+  mapping: string;
+  buttons: readonly { pressed: boolean; value: number }[];
+  axes: readonly number[];
+}
+
+/** What `navigator.getGamepads()` gives, as snapshots: copied, so a later read can't change them. */
+export function snapshotsOf(pads: Iterable<GamepadLike | null>): (PadSnapshot | null)[] {
+  return [...pads].map((pad) =>
+    pad === null
+      ? null
+      : {
+          mapping: pad.mapping,
+          buttons: pad.buttons.map((b) => ({ pressed: b.pressed, value: b.value })),
+          axes: [...pad.axes],
+        },
+  );
+}

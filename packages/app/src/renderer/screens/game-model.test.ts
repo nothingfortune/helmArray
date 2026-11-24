@@ -8,15 +8,18 @@ import {
   canStartFrom,
   deleteAction,
   deleteMode,
+  loadedOf,
   moveAction,
   moveMode,
   newGame,
+  record,
   renameGame,
   renameMode,
   setDefaultKey,
   setDefaultPad,
   updateAction,
 } from './game-model';
+import { startHistory, undo } from './editor-model';
 
 const two: Game = {
   id: 'rover',
@@ -254,5 +257,66 @@ describe('canStartFrom', () => {
 
   it('offers nothing for a game with no actions yet', () => {
     expect(canStartFrom(newGame('Rover', []))).toEqual([]);
+  });
+});
+
+describe('record', () => {
+  it('makes each edit a step to undo', () => {
+    const h = record(record(startHistory('a'), 'b', null, null), 'c', null, null);
+    expect([h.past, undo(h).present]).toEqual([['a', 'b'], 'b']);
+  });
+
+  it('makes typing in one field one step: the letters after the first replace each other', () => {
+    const one = record(startHistory('Jum'), 'Jump', 'name:jump', null);
+    const two = record(one, 'Jumps', 'name:jump', 'name:jump');
+    expect([two.past, undo(two).present]).toEqual([['Jum'], 'Jum']);
+  });
+
+  it('starts a new step when another field is typed in', () => {
+    const one = record(startHistory('a'), 'b', 'name:jump', null);
+    const two = record(one, 'c', 'name:fire', 'name:jump');
+    expect(two.past).toEqual(['a', 'b']);
+  });
+
+  it('drops what was undone once something new is typed', () => {
+    const one = record(record(startHistory('a'), 'b', null, null), 'c', 'name:x', null);
+    const back = undo(one);
+    expect(record(back, 'd', 'name:x', 'name:x').future).toEqual([]);
+  });
+});
+
+describe('loadedOf', () => {
+  const entries = [
+    { game: helldivers2, builtIn: true, edited: true as const },
+    { game: two, builtIn: false },
+  ];
+
+  it('opens a game helmArray knows, saying whose it is', () => {
+    expect([
+      loadedOf({ kind: 'edit', gameId: 'helldivers2' }, entries),
+      loadedOf({ kind: 'edit', gameId: 'rover' }, entries),
+    ]).toEqual([
+      { game: helldivers2, builtIn: true, edited: true, saved: true },
+      { game: two, builtIn: false, edited: false, saved: true },
+    ]);
+  });
+
+  it('is nothing for a game that isn’t there any more', () => {
+    expect(loadedOf({ kind: 'edit', gameId: 'gone' }, entries)).toBeNull();
+  });
+
+  it('makes a new game, not saved yet, with an id no game has', () => {
+    expect(loadedOf({ kind: 'new', name: 'Rover', steamAppId: 7 }, entries)).toEqual({
+      game: {
+        id: 'rover_2',
+        name: 'Rover',
+        steamAppId: 7,
+        modes: [{ id: 'default', name: 'Default' }],
+        actions: [],
+      },
+      builtIn: false,
+      edited: false,
+      saved: false,
+    });
   });
 });

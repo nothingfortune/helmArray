@@ -10,6 +10,7 @@ import {
   padControlOfAxis,
   padControlOfButton,
   padsHeld,
+  snapshotsOf,
   whileWaitingForKey,
   whileWaitingForPad,
 } from './capture';
@@ -281,5 +282,22 @@ describe('what a key does while the Game screen waits', () => {
       whileWaitingForPad(key('Tab')),
       whileWaitingForPad(key('KeyR')),
     ]).toEqual(['cancel', 'pass', 'pass']);
+  });
+});
+
+describe('snapshotsOf', () => {
+  it('copies what the Gamepad API gives, empty slots kept as such', () => {
+    const live = {
+      mapping: 'standard',
+      buttons: [{ pressed: true, value: 1, touched: true }],
+      axes: [0.5],
+    };
+    const [first, second] = snapshotsOf([live, null]);
+    live.buttons[0] = { pressed: false, value: 0, touched: false };
+    live.axes[0] = 0;
+    expect([first, second]).toEqual([
+      { mapping: 'standard', buttons: [{ pressed: true, value: 1 }], axes: [0.5] },
+      null,
+    ]);
   });
 });

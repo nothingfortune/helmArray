@@ -13,8 +13,11 @@ import {
   summary,
 } from './libraryView';
 import { useLibrary } from './useLibrary';
+import { gameTarget, needsSetUp } from './gameTile';
+import type { GameTarget } from './game-model';
 
 type Send = (event: FlowEvent) => void;
+type OpenGame = (target: GameTarget) => void;
 
 function SearchIcon() {
   return (
@@ -62,16 +65,32 @@ function Choices({ entry, send }: { entry: LibraryEntry; send: Send }) {
   );
 }
 
+/** *Edit game*: the game's modes and actions, on the Game screen. */
+function EditGame({ entry, onOpenGame }: { entry: LibraryEntry; onOpenGame: OpenGame }) {
+  return (
+    <button
+      type="button"
+      className="btn ghost small"
+      aria-label={`Edit ${entry.name}`}
+      onClick={() => onOpenGame(gameTarget(entry))}
+    >
+      Edit game
+    </button>
+  );
+}
+
 function Tile({
   entry,
   state,
   flow,
   send,
+  onOpenGame,
 }: {
   entry: LibraryEntry;
   state: AppState | null;
   flow: FlowState;
   send: Send;
+  onOpenGame: OpenGame;
 }) {
   const status = statusLine(entry, state);
   const body = (
@@ -89,11 +108,20 @@ function Tile({
     </>
   );
 
-  if (entry.gameId === null) {
+  // A game helmArray has no data for (or none yet): set it up on the Game screen first.
+  if (needsSetUp(entry)) {
     return (
       <li className="tile unsupported">
         {body}
-        {caption}
+        <div className="game-name">{entry.name}</div>
+        <button
+          type="button"
+          className="btn small"
+          aria-label={`Set up ${entry.name}`}
+          onClick={() => onOpenGame(gameTarget(entry))}
+        >
+          Set up
+        </button>
       </li>
     );
   }
@@ -118,6 +146,7 @@ function Tile({
             </button>
           </Popover.Anchor>
           {caption}
+          <EditGame entry={entry} onOpenGame={onOpenGame} />
           <Popover.Portal>
             <Popover.Content
               className="popover"
@@ -143,6 +172,7 @@ function Tile({
         {body}
       </button>
       {caption}
+      <EditGame entry={entry} onOpenGame={onOpenGame} />
       <Popover.Root>
         <Popover.Trigger asChild>
           <button type="button" className="btn ghost small">
@@ -176,9 +206,12 @@ function Tile({
 export function Library({
   state,
   onOpenEditor,
+  onOpenGame,
 }: {
   state: AppState | null;
   onOpenEditor: (schemeId: string) => void;
+  /** The Game screen: *Set up*, *Edit game* and *Add a game*. */
+  onOpenGame: OpenGame;
 }) {
   const library = useLibrary();
   const [flow, setFlow] = useState<FlowState>(START);
@@ -261,6 +294,13 @@ export function Library({
           >
             {library.scanning ? 'Looking…' : 'Look again'}
           </button>
+          <button
+            type="button"
+            className="btn ghost"
+            onClick={() => onOpenGame({ kind: 'new', name: '' })}
+          >
+            Add a game
+          </button>
           <label className="search">
             <SearchIcon />
             <input
@@ -298,6 +338,7 @@ export function Library({
               state={state}
               flow={flow}
               send={send}
+              onOpenGame={onOpenGame}
             />
           ))}
         </ul>
