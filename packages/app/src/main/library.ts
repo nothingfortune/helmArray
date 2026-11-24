@@ -59,6 +59,7 @@ export function mergeLibrary(input: LibraryInput): LibraryEntry[] {
       nativeKeys: game ? hasNativeKeys(game) : false,
       hasCover: steam?.cover !== undefined,
       hasHeader: steam?.header !== undefined,
+      actionCount: game?.actions.length ?? 0,
     };
   };
 

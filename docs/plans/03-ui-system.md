@@ -69,6 +69,7 @@ fields), 10 (keys, buttons), 16 (panels, unit plates). Motion 120 ms hover and s
 | Library     | What's on your Azerons now (big card), then your Steam games as covers with a one-line status each. |
 | Editor      | Game, scheme, Keys/Controller, mode tabs, Play view, Apply. Both units big in the middle, side by side, scaled to fit the width; they stack only when there is no room for two at a readable size. Pedals and checks under them. Side panel: the selected button in every mode, its presses (tap, long, double), turbo and latch, what it sends, then the actions not on a button yet. With nothing selected, just that list. |
 | Play view   | Its own small window, kept on top. Tabs for Azerons, keyboard and controller. Each control labelled with its action in the game's words, lit as you press it, the last few presses along the bottom. |
+| Game        | (not drawn; built in the canvas's style, M4.5) A game's data: mode tabs, then the mode's actions as rows (name, role, required, default key, default controller button, More). A default is set by clicking its field and pressing it. The new-action field: type a name, Enter, press its key. *New scheme from* once it has an action; *Back to helmArray's* on your copy of a built-in game. |
 | Devices     | (not drawn) The units, pedals and controller, their state, and the repair utility.                 |
 | Settings    | (not drawn) Game folders found, the log, export and import.                                        |
 

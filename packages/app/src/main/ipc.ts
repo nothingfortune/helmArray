@@ -2,7 +2,8 @@
 // `ipcMain` it registers on is handed in (a fake in tests), and everything a window sends is
 // checked here, because a window's page is not trusted.
 
-import type { Scheme } from '@helmarray/core';
+import type { Game, Scheme } from '@helmarray/core';
+import { gameProblem } from '@helmarray/core';
 import type {
   AppState,
   ApplyPreview,
@@ -37,9 +38,15 @@ export interface HelmHandlers {
   setActive(gameId: string, schemeId: string | null): Promise<void>;
   previewApply(schemeId: string): Promise<ApplyPreview>;
   apply(schemeId: string, fingerprint: string): Promise<ApplyResult>;
+  saveGame(game: Game): Promise<void>;
+  deleteGame(gameId: string): Promise<void>;
 }
 
 const PRESETS: readonly string[] = ['xbox', 'keys'] satisfies Preset[];
+
+/** A sentence from `gameProblem` as the second half of one: its first word lowered unless a name. */
+const lowerFirst = (text: string) =>
+  /^(The|This|Every|Two|Whether) /.test(text) ? text.charAt(0).toLowerCase() + text.slice(1) : text;
 
 function idArg(name: string, value: unknown): string {
   if (!isSafeId(value)) throw new TypeError(`${name}: that isn't an id.`);
@@ -98,6 +105,18 @@ export function registerHelmIpc(ipc: IpcRegistry, handlers: HelmHandlers): () =>
       throw new TypeError('apply: the fingerprint must be text.');
     return handlers.apply(idArg('apply', schemeId), fingerprint);
   });
+  ipc.handle(CHANNELS.saveGame, (_event, game) => {
+    // The whole game is checked here, not only its shape: what a window sends isn't trusted, and
+    // a mode id becomes a key of every scheme's map.
+    const problem = gameProblem(game);
+    if (problem !== null) throw new TypeError(`saveGame: ${lowerFirst(problem)}`);
+    if (!isSafeId((game as Game).id))
+      throw new TypeError("saveGame: this game's id can't be used as a file name.");
+    return handlers.saveGame(game as Game);
+  });
+  ipc.handle(CHANNELS.deleteGame, (_event, gameId) =>
+    handlers.deleteGame(idArg('deleteGame', gameId)),
+  );
   return () => {
     for (const channel of [
       CHANNELS.state,
@@ -115,6 +134,8 @@ export function registerHelmIpc(ipc: IpcRegistry, handlers: HelmHandlers): () =>
       CHANNELS.setActive,
       CHANNELS.previewApply,
       CHANNELS.apply,
+      CHANNELS.saveGame,
+      CHANNELS.deleteGame,
     ]) {
       ipc.removeHandler(channel);
     }

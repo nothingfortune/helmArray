@@ -15,6 +15,8 @@ import type {
 } from './model';
 import { PRESSES, STICK_DIRECTIONS } from './model';
 import type { Finding, GameBinding, PinPlan, Plan, UnitProfile } from './plan';
+import { hasAction } from './game-data';
+import { own } from './own';
 import { signalId } from './signal';
 import type { Setup } from './setup';
 import { inSetup, setsUsed, setupOf, setupSends, stickModeOf, stickSends } from './setup';
@@ -30,6 +32,7 @@ export const CHECK_RULES = [
   'mixed-input',
   'stick-not-keyboard',
   'stick-no-directions',
+  'action-deleted',
 ] as const;
 export type CheckRule = (typeof CHECK_RULES)[number];
 
@@ -119,7 +122,7 @@ function knownControls(devices: readonly Device[]): Context['known'] {
 /** A mode's mapped controls in device order; ids no device has come last, by name. */
 function controlsIn(ctx: Context, mode: ModeId): ControlId[] {
   const order = (c: ControlId) => ctx.known.get(c)?.order ?? Number.MAX_SAFE_INTEGER;
-  return Object.keys(ctx.scheme.map[mode] ?? {}).sort(
+  return Object.keys(own(ctx.scheme.map, mode) ?? {}).sort(
     (a, b) => order(a) - order(b) || (a < b ? -1 : a > b ? 1 : 0),
   );
 }
@@ -130,7 +133,9 @@ function* placed(ctx: Context) {
     for (const control of controlsIn(ctx, mode.id)) {
       for (const press of PRESSES) {
         const action = ctx.scheme.map[mode.id]?.[control]?.[press];
-        if (action !== undefined) yield { mode: mode.id, control, press, action };
+        // One the game no longer has here is on nothing: only action-deleted speaks of it.
+        if (action !== undefined && hasAction(ctx.game, mode.id, action))
+          yield { mode: mode.id, control, press, action };
       }
     }
   }
@@ -491,6 +496,42 @@ function stickNoDirections(ctx: Context): Finding[] {
     }));
 }
 
+/**
+ * An action the game no longer has, still on a control: deleted from the game, gone with its mode,
+ * or moved to another mode. Editing a game never rewrites a setup, so the setup keeps naming it;
+ * the resolver puts it on nothing, and the control does nothing for it. A warning, not an error:
+ * nothing is sent wrong, and Apply can go ahead. Every mode the setup has is read, not only the
+ * game's, so an action that went with its mode is found too (with no mode to show it in).
+ */
+function actionDeleted(ctx: Context): Finding[] {
+  const out: Finding[] = [];
+  const gameModes = ctx.game.modes.map((m) => m.id);
+  const setupModes = Object.keys(ctx.scheme.map);
+  const modes = [
+    ...gameModes.filter((m) => setupModes.includes(m)),
+    ...setupModes.filter((m) => !gameModes.includes(m)),
+  ];
+  for (const mode of modes) {
+    const byControl = own(ctx.scheme.map, mode) ?? {};
+    for (const control of controlsIn(ctx, mode)) {
+      const presses = own(byControl, control) ?? {};
+      const gone = PRESSES.map((p) => presses[p]).find(
+        (a): a is ActionId => a !== undefined && !hasAction(ctx.game, mode, a),
+      );
+      if (gone === undefined) continue;
+      out.push({
+        rule: 'action-deleted',
+        severity: 'warning',
+        control,
+        ...(gameModes.includes(mode) ? { mode } : {}),
+        action: gone,
+        message: `The action on this ${control.startsWith('key.') ? 'key' : 'button'} was deleted from ${ctx.game.name}, so pressing it does nothing.`,
+      });
+    }
+  }
+  return out;
+}
+
 const CHECKS: Record<CheckRule, (ctx: Context) => Finding[]> = {
   'key-collision': keyCollision,
   'sends-nothing': sendsNothing,
@@ -501,6 +542,7 @@ const CHECKS: Record<CheckRule, (ctx: Context) => Finding[]> = {
   'mixed-input': mixedInput,
   'stick-not-keyboard': stickNotKeyboard,
   'stick-no-directions': stickNoDirections,
+  'action-deleted': actionDeleted,
 };
 
 /**

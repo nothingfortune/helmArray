@@ -3,7 +3,9 @@
 // core's `store()` / `load()`, so it carries its schema version and old files are brought up to
 // date on read. Pure of Electron: the folder is handed in, so tests run over a temp one.
 //
-//   games/<id>.json     a game added by hand (built-in games ship inside the app)
+//   games/<id>.json     a game added by hand, or your copy of a built-in game under its id (yours
+//                       wins; deleting it brings helmArray's back). Built-in games ship inside
+//                       the app and are never written.
 //   schemes/<id>.json   one scheme
 //   settings.json       the active game, and the active scheme of each game
 //   units.json          what each unit was last written with: which scheme, of which game, when
@@ -15,8 +17,9 @@
 // - A file that can't be read is reported (`problems()`, `onProblem`), never silently replaced:
 //   one saved by a newer helmArray is left exactly as it is and the write is refused; one that
 //   is corrupt is kept beside itself as `<name>.corrupt-<id>` before the new one is written.
-// - A scheme being edited is saved a moment after the last change (`saveScheme`), together with
-//   its other edits; `flush()` writes whatever is waiting and is called on quit.
+// - A scheme or a game being edited is saved a moment after the last change (`saveScheme`,
+//   `saveGame`), together with its other edits; `flush()` writes whatever is waiting and is called
+//   on quit. A game is checked (core's `gameProblem`) before it is taken, and again when read.
 
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
@@ -38,12 +41,14 @@ import {
   copyScheme,
   currentVersion,
   gameKeysPreset,
+  gameProblem,
   load,
   own,
   store,
   xboxControllerPreset,
 } from '@helmarray/core';
 import type { GameEntry, Preset } from '../shared/api';
+import { MAX_ID_LENGTH, isSafeId } from '../shared/ids';
 
 /** A file the store could not use, in a sentence the person can act on. */
 export interface StoreProblem {
@@ -84,13 +89,7 @@ export interface ActiveSelection {
 
 // --- ids and shapes -------------------------------------------------------------------------
 
-/** An id that is safe as a file name: ids come from windows and from files, so nothing else. */
-const MAX_ID_LENGTH = 100;
-const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
-/** Windows treats these as devices, with or without an extension: never a file name. */
-const RESERVED = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$/i;
-export const isSafeId = (value: unknown): value is string =>
-  typeof value === 'string' && SAFE_ID.test(value) && !value.endsWith('.') && !RESERVED.test(value);
+export { isSafeId };
 
 type Rec = Record<string, unknown>;
 const isRecord = (value: unknown): value is Rec =>
@@ -192,6 +191,9 @@ type Read<K extends StoredKind> =
   /** The disk wouldn't give it up (permissions, a lock): nothing is known, so nothing is done. */
   | { status: 'unreadable'; message: string };
 
+/** A sentence from `gameProblem` as the second half of one: its first word lowered unless a name. */
+const lowerFirst = (text: string) =>
+  /^(The|This|Every|Two|Whether) /.test(text) ? text.charAt(0).toLowerCase() + text.slice(1) : text;
 const codeOf = (error: unknown): string | undefined => (error as { code?: string }).code;
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
@@ -289,6 +291,9 @@ export class DataStore {
   private readonly unsaved = new Map<string, Scheme>();
   /** The way to call off each scheme's waiting write. */
   private readonly timers = new Map<string, () => void>();
+  /** Games edited and not yet safely on disk, and the way to call off each one's waiting write. */
+  private readonly unsavedGames = new Map<string, Game>();
+  private readonly gameTimers = new Map<string, () => void>();
 
   private constructor(options: DataStoreOptions) {
     this.root = options.root;
@@ -427,24 +432,140 @@ export class DataStore {
 
   // Games -------------------------------------------------------------------------------------
 
-  /** The built-in games, then the ones added by hand, each group by name. */
+  /**
+   * The built-in games, then the ones added by hand, each group by name. A built-in game you have
+   * edited is your copy, in its place (`edited`). Edits not yet written are included.
+   */
   async listGames(): Promise<GameEntry[]> {
-    const taken = new Set(this.builtIn.map((game) => game.id));
-    const added: GameEntry[] = [];
+    const mine = new Map<string, Game>();
     for (const { id, value } of await this.readAll('game', 'games')) {
-      if (taken.has(id)) {
-        this.report(`games/${id}.json`, 'A game built into helmArray already has this id.');
+      const problem = gameProblem(value);
+      if (problem !== null) {
+        this.report(`games/${id}.json`, `This game can't be used: ${lowerFirst(problem)}`);
         continue;
       }
-      added.push({ game: value, builtIn: false });
+      mine.set(id, value);
     }
-    added.sort(
-      (a, b) => a.game.name.localeCompare(b.game.name) || a.game.id.localeCompare(b.game.id),
-    );
-    const builtIn = [...this.builtIn]
-      .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id))
-      .map((game): GameEntry => ({ game, builtIn: true }));
+    for (const [id, game] of this.unsavedGames) mine.set(id, structuredClone(game));
+    const byName = (a: GameEntry, b: GameEntry) =>
+      a.game.name.localeCompare(b.game.name) || a.game.id.localeCompare(b.game.id);
+    const builtIn = this.builtIn
+      .map((game): GameEntry => {
+        const copy = mine.get(game.id);
+        return copy ? { game: copy, builtIn: true, edited: true } : { game, builtIn: true };
+      })
+      .sort(byName);
+    const taken = new Set(this.builtIn.map((game) => game.id));
+    const added = [...mine.values()]
+      .filter((game) => !taken.has(game.id))
+      .map((game): GameEntry => ({ game, builtIn: false }))
+      .sort(byName);
     return [...builtIn, ...added];
+  }
+
+  /**
+   * Autosave of a game: a game added by hand, or your copy of a built-in one (same id). Checked
+   * first: throws at once, writing nothing, with what is wrong in one sentence. Written once
+   * `debounceMs` has passed with no further edit of this game.
+   */
+  saveGame(game: Game): void {
+    if (!isSafeId((game as { id?: unknown } | null)?.id))
+      throw new StoreError("This game's id can't be used as a file name.");
+    const problem = gameProblem(game);
+    if (problem !== null) throw new StoreError(problem);
+    const copy = structuredClone(game);
+    this.unsavedGames.set(copy.id, copy);
+    this.gameTimers.get(copy.id)?.();
+    this.gameTimers.set(
+      copy.id,
+      this.schedule(() => {
+        this.gameTimers.delete(copy.id);
+        return this.writeGame(copy.id);
+      }, this.debounceMs),
+    );
+  }
+
+  /** Writes the waiting edit of one game. A failure is reported; the edit stays in memory. */
+  private async writeGame(id: string): Promise<void> {
+    const game = this.unsavedGames.get(id);
+    if (!game) return;
+    try {
+      await this.put('game', `games/${id}.json`, game);
+    } catch {
+      return; // `put` has reported it.
+    }
+    if (this.unsavedGames.get(id) === game) this.unsavedGames.delete(id);
+  }
+
+  /**
+   * Deletes a game you added, with its schemes, or drops your copy of a built-in one (*back to
+   * helmArray's*), whose schemes stay. An edit still waiting is dropped with it.
+   */
+  deleteGame(gameId: string): Promise<void> {
+    if (!isSafeId(gameId)) return Promise.reject(new StoreError('There is no such game.'));
+    this.gameTimers.get(gameId)?.();
+    this.gameTimers.delete(gameId);
+    const waiting = this.unsavedGames.delete(gameId);
+    const builtIn = this.builtIn.some((game) => game.id === gameId);
+    const file = `games/${gameId}.json`;
+    // In the write queue: a write of this game already under way finishes first, then this.
+    const run = this.enqueue(async () => {
+      let removed = true;
+      try {
+        await rm(join(this.root, file));
+      } catch (error) {
+        if (codeOf(error) !== 'ENOENT') {
+          this.report(file, `The file couldn't be removed (${messageOf(error)}).`);
+          throw new StoreError(`${file} couldn't be removed: ${messageOf(error)}`);
+        }
+        removed = false;
+      }
+      this.open.delete(file);
+      if (!removed && !waiting) {
+        throw new StoreError(
+          builtIn
+            ? "You haven't changed this game: it is already helmArray's."
+            : 'There is no such game.',
+        );
+      }
+    });
+    // A game added by hand is gone, and its schemes with it: a game added later under its id must
+    // not take them over. Nothing may stay picked for it. A built-in game stays, with its schemes.
+    const done = builtIn
+      ? run
+      : run.then(() => this.dropSchemes(gameId)).then(() => this.forget(gameId));
+    return this.track(done);
+  }
+
+  /** Deletes every scheme of a game, and what the game holds once they are gone. */
+  private async dropSchemes(gameId: string): Promise<void> {
+    for (const scheme of await this.listSchemes(gameId)) await this.deleteScheme(scheme.id);
+    await this.enqueue(() =>
+      rm(join(this.root, 'applied', `${heldId(gameId)}.json`), { force: true }),
+    );
+  }
+
+  /** Drops a game from the settings: no longer the active game, and no scheme picked for it. */
+  private forget(gameId: string): Promise<void> {
+    const run = this.settingsTurn.then(async () => {
+      const before = this.settings;
+      if (before.activeGameId !== gameId && own(before.activeScheme, gameId) === undefined) return;
+      const next: AppSettings = {
+        activeGameId: before.activeGameId === gameId ? null : before.activeGameId,
+        activeScheme: Object.fromEntries(
+          Object.entries(before.activeScheme).filter(([id]) => id !== gameId),
+        ),
+      };
+      this.settings = next;
+      try {
+        await this.put('settings', 'settings.json', next);
+      } catch (error) {
+        if (this.settings === next) this.settings = before;
+        throw error;
+      }
+    });
+    this.settingsTurn = run.catch(() => undefined);
+    return run;
   }
 
   private async findGame(gameId: string): Promise<Game | undefined> {
@@ -603,11 +724,15 @@ export class DataStore {
 
   /** Writes every waiting edit now, and waits for all writes to finish. Used on quit. */
   async flush(): Promise<void> {
-    for (const cancel of this.timers.values()) cancel();
+    for (const cancel of [...this.timers.values(), ...this.gameTimers.values()]) cancel();
     this.timers.clear();
+    this.gameTimers.clear();
     // A change still looking things up isn't queued to write yet: wait for it first.
     while (this.ops.size > 0) await Promise.allSettled([...this.ops]);
-    await Promise.all([...this.unsaved.keys()].map((id) => this.writeScheme(id)));
+    await Promise.all([
+      ...[...this.unsaved.keys()].map((id) => this.writeScheme(id)),
+      ...[...this.unsavedGames.keys()].map((id) => this.writeGame(id)),
+    ]);
     await this.chain;
   }
 

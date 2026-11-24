@@ -26,6 +26,7 @@ import { clone } from './clone';
 import { KEY_POOL, formatCanName } from './pool';
 import { signalId } from './signal';
 import { runChecks } from './checks';
+import { hasAction } from './game-data';
 import type { Setup } from './setup';
 import { bindingSetOf, inSetup, setsUsed, setupOf, stickModeOf, stickSends } from './setup';
 
@@ -61,7 +62,9 @@ function carried(scheme: Scheme, game: Game, control: string, press: Press) {
   const out: { mode: ModeId; action: ActionId }[] = [];
   for (const mode of game.modes) {
     const action = scheme.map[mode.id]?.[control]?.[press];
-    if (action !== undefined) out.push({ mode: mode.id, action });
+    // An action the game no longer has in this mode is on nothing (the action-deleted check).
+    if (action !== undefined && hasAction(game, mode.id, action))
+      out.push({ mode: mode.id, action });
   }
   return out;
 }
@@ -291,14 +294,15 @@ function bindings(
       for (const press of PRESSES) {
         const action = byControl[control]?.[press];
         const signal = signals.get(slot(control, press));
-        if (action !== undefined && signal) {
+        if (action !== undefined && signal && hasAction(game, mode.id, action)) {
           out.push({ mode: mode.id, control, press, action, signal });
         }
       }
     }
     for (const [control, signal] of fixed) {
       const action = Object.hasOwn(byControl, control) ? byControl[control]?.tap : undefined;
-      if (action !== undefined) out.push({ mode: mode.id, control, press: 'tap', action, signal });
+      if (action !== undefined && hasAction(game, mode.id, action))
+        out.push({ mode: mode.id, control, press: 'tap', action, signal });
     }
   }
   return out;
@@ -503,9 +507,8 @@ function fixedTaken(
   for (const mode of game.modes) {
     const byControl = scheme.map[mode.id] ?? {};
     for (const [control, signal] of fixed) {
-      if (Object.hasOwn(byControl, control) && byControl[control]?.tap !== undefined) {
-        out.add(signalId(signal));
-      }
+      const action = Object.hasOwn(byControl, control) ? byControl[control]?.tap : undefined;
+      if (action !== undefined && hasAction(game, mode.id, action)) out.add(signalId(signal));
     }
   }
   return out;

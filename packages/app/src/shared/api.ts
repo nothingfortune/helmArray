@@ -10,6 +10,11 @@ export interface GameEntry {
   game: Game;
   /** True for a game that ships with the app; false for one added by hand. */
   builtIn: boolean;
+  /**
+   * A built-in game you have edited: `game` is your copy, kept under the built-in's id, and
+   * *back to helmArray's* drops it.
+   */
+  edited?: true;
 }
 
 /** One scheme of a game, as the Library lists it. */
@@ -53,6 +58,11 @@ export interface LibraryEntry {
   /** Whether a portrait cover and a header image can be had for `coverUrl`. */
   hasCover: boolean;
   hasHeader: boolean;
+  /**
+   * How many actions helmArray's data for the game has: 0 for a game it doesn't know, or one
+   * added and not given any yet. Such a game is set up on the Game screen before a scheme.
+   */
+  actionCount: number;
 }
 
 /** The starting points a new scheme is copied from. Using one never edits it. */
@@ -276,6 +286,17 @@ export interface HelmApi {
    * Never rejects for a refusal: the result says why.
    */
   apply(schemeId: string, fingerprint: string): Promise<ApplyResult>;
+  /**
+   * Saves a game's data: one you added (a new id adds it), or your copy of a built-in game under
+   * its id. Refused, with what is wrong in one sentence, when the game can't be saved. Written a
+   * moment later, as a scheme's edits are. Setups made from it are never changed.
+   */
+  saveGame(game: Game): Promise<void>;
+  /**
+   * Deletes a game you added, or drops your copy of a built-in one (*back to helmArray's*). Its
+   * schemes are kept.
+   */
+  deleteGame(gameId: string): Promise<void>;
 }
 
 /** IPC channel names, shared by main and preload. */
@@ -296,4 +317,6 @@ export const CHANNELS = {
   listLibrary: 'helm:list-library',
   previewApply: 'helm:preview-apply',
   apply: 'helm:apply',
+  saveGame: 'helm:save-game',
+  deleteGame: 'helm:delete-game',
 } as const;

@@ -1,4 +1,5 @@
 // What the specs share: the places on the M4 screens, and the steps that get to them.
+import AxeBuilder from '@axe-core/playwright';
 import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Locator, Page } from '@playwright/test';
@@ -148,3 +149,20 @@ export const unseen = (stops: readonly FocusStop[]): string[] =>
   stops
     .filter((s) => !s.visible)
     .map((s) => `${s.label} (blurred: ${s.blurred}; focused: ${s.focused})`);
+
+/**
+ * An axe scan of the page: its serious and critical violations, one line each (rule, impact, how
+ * many elements, the first one's selector). Legacy mode runs axe inside the page itself: the
+ * default opens a second page, which an Electron window can't give.
+ */
+export async function seriousViolations(page: Page, leaveOut?: string): Promise<string[]> {
+  const builder = new AxeBuilder({ page }).setLegacyMode(true);
+  if (leaveOut !== undefined) builder.exclude(leaveOut);
+  const { violations } = await builder.analyze();
+  return violations
+    .filter((v) => v.impact === 'serious' || v.impact === 'critical')
+    .map(
+      (v) =>
+        `${v.id} (${v.impact}, ${v.nodes.length}): ${v.nodes[0]?.target.join(' ') ?? ''} - ${v.help}`,
+    );
+}
