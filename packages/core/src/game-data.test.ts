@@ -291,3 +291,31 @@ describe('idFromName', () => {
     expect([isDataId(id), id.length <= 40]).toEqual([true, true]);
   });
 });
+
+describe('gameProblem: the ids a game has retired', () => {
+  const retired = (modes: string[], actions: string[]) => ({ retired: { modes, actions } });
+
+  it('takes a game that keeps the ids of what it deleted', () => {
+    expect(gameProblem(game(retired(['ship'], ['reload'])))).toBeNull();
+  });
+
+  it('refuses an action that takes the id of one deleted before', () => {
+    expect(gameProblem(game(retired([], ['fire'])))).toBe(
+      'Fire has the id of an action deleted before.',
+    );
+  });
+
+  it('refuses a mode that takes the id of one deleted before', () => {
+    expect(gameProblem(game(retired(['default'], [])))).toBe(
+      'The mode Default has the id of a mode deleted before.',
+    );
+  });
+
+  it.each([
+    ['not an object', 'fire'],
+    ['lists that are not lists', { modes: 'ship', actions: [] }],
+    ['ids that are not text', { modes: [], actions: [7] }],
+  ])('refuses a list of retired ids that is %s', (_what, value) => {
+    expect(gameProblem(raw({ retired: value }))).toBe("The game's deleted ids can't be read.");
+  });
+});

@@ -131,6 +131,18 @@ export function gameProblem(game: unknown): string | null {
   if (game['needsKeyStick'] !== undefined && typeof game['needsKeyStick'] !== 'boolean')
     return 'Whether the sticks must send keys must be yes or no.';
 
+  const retired = game['retired'];
+  const isIds = (v: unknown): v is string[] =>
+    Array.isArray(v) && v.every((id) => typeof id === 'string');
+  if (
+    retired !== undefined &&
+    !(isRecord(retired) && isIds(retired['modes']) && isIds(retired['actions']))
+  )
+    return "The game's deleted ids can't be read.";
+  const gone = retired as { modes: string[]; actions: string[] } | undefined;
+  const retiredModes = new Set(gone?.modes ?? []);
+  const retiredActions = new Set(gone?.actions ?? []);
+
   const modes = game['modes'];
   if (!Array.isArray(modes) || modes.length === 0) return 'The game needs at least one mode.';
   const modeIds = new Set<string>();
@@ -139,6 +151,8 @@ export function gameProblem(game: unknown): string | null {
     if (!isDataId(mode['id']))
       return `The mode ${mode['name'].trim()} has an id helmArray can't use.`;
     if (modeIds.has(mode['id'])) return `Two modes have the same id, "${mode['id']}".`;
+    if (retiredModes.has(mode['id']))
+      return `The mode ${mode['name'].trim()} has the id of a mode deleted before.`;
     modeIds.add(mode['id']);
   }
 
@@ -150,6 +164,8 @@ export function gameProblem(game: unknown): string | null {
     if (problem !== null) return problem;
     const id = (action as Rec)['id'] as string;
     if (actionIds.has(id)) return `Two actions have the same id, "${id}".`;
+    if (retiredActions.has(id))
+      return `${((action as Rec)['name'] as string).trim()} has the id of an action deleted before.`;
     actionIds.add(id);
   }
   return null;

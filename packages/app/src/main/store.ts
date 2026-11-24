@@ -498,9 +498,8 @@ export class DataStore {
   }
 
   /**
-   * Deletes a game you added, or drops your copy of a built-in one (*back to helmArray's*). An
-   * edit still waiting is dropped with it. Schemes are never touched: a setup names its game by
-   * id, and a game added again under that id finds them.
+   * Deletes a game you added, with its schemes, or drops your copy of a built-in one (*back to
+   * helmArray's*), whose schemes stay. An edit still waiting is dropped with it.
    */
   deleteGame(gameId: string): Promise<void> {
     if (!isSafeId(gameId)) return Promise.reject(new StoreError('There is no such game.'));
@@ -530,9 +529,20 @@ export class DataStore {
         );
       }
     });
-    // A game added by hand is gone: nothing may stay picked for it. A built-in game stays.
-    const done = builtIn ? run : run.then(() => this.forget(gameId));
+    // A game added by hand is gone, and its schemes with it: a game added later under its id must
+    // not take them over. Nothing may stay picked for it. A built-in game stays, with its schemes.
+    const done = builtIn
+      ? run
+      : run.then(() => this.dropSchemes(gameId)).then(() => this.forget(gameId));
     return this.track(done);
+  }
+
+  /** Deletes every scheme of a game, and what the game holds once they are gone. */
+  private async dropSchemes(gameId: string): Promise<void> {
+    for (const scheme of await this.listSchemes(gameId)) await this.deleteScheme(scheme.id);
+    await this.enqueue(() =>
+      rm(join(this.root, 'applied', `${heldId(gameId)}.json`), { force: true }),
+    );
   }
 
   /** Drops a game from the settings: no longer the active game, and no scheme picked for it. */

@@ -477,7 +477,7 @@ describe('the title bar', () => {
       vi.mocked(first.props.onConfirm).mock.calls,
       vi.mocked(asking.props.onDrop).mock.calls.length,
       vi.mocked(asking.props.onConfirm).mock.calls,
-      renderToStaticMarkup(asking.node).includes('Delete Rover? Its schemes are kept.'),
+      renderToStaticMarkup(asking.node).includes('Delete Rover and its schemes?'),
     ]).toEqual([[[true]], 1, [[false]], true]);
   });
 

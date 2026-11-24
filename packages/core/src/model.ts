@@ -148,6 +148,12 @@ export interface Game {
    * one. Set per game, never by default: other games want a pad stick or the pointer.
    */
   needsKeyStick?: boolean;
+  /**
+   * The ids of the modes and actions deleted from the game: never given to anything again, so a
+   * setup naming one finds it gone (the action-deleted check) instead of on something new. Kept in
+   * the game's file; a built-in game has none.
+   */
+  retired?: { modes: readonly ModeId[]; actions: readonly ActionId[] };
 }
 
 /** A press is a slot on a control. Long and double delay the tap by design. */

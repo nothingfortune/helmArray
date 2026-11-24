@@ -2,7 +2,16 @@
 // each action's defaults. Every one returns a new game and leaves the one it was given alone. The
 // screen checks the result with core's `gameProblem` before it saves it.
 
-import type { Action, ActionId, Game, ModeId, PadControl, Role, Signal } from '@helmarray/core';
+import type {
+  Action,
+  ActionId,
+  Game,
+  ModeId,
+  PadControl,
+  Role,
+  Scheme,
+  Signal,
+} from '@helmarray/core';
 import { idFromName, isDataId } from '@helmarray/core';
 import type { GameEntry, Preset } from '../../shared/api';
 import { isSafeId } from '../../shared/ids';
@@ -43,16 +52,66 @@ export const renameGame = (game: Game, name: string): Game => ({ ...game, name }
 export const actionsIn = (game: Game, mode: ModeId): Action[] =>
   game.actions.filter((a) => a.mode === mode);
 
-const freeId = (taken: readonly { id: string }[]) => (id: string) =>
-  isDataId(id) && !taken.some((t) => t.id === id);
+/** Ids no new mode or action may take, besides the game's own: those its saved schemes name. */
+export interface Reserved {
+  modes: readonly string[];
+  actions: readonly string[];
+}
+const NONE: Reserved = { modes: [], actions: [] };
+
+/**
+ * An id is free when nothing has it, nothing had it (the game's retired ids) and no saved scheme
+ * names it (a copy of a built-in game dropped forgets what it retired; its schemes don't).
+ */
+const freeId =
+  (live: readonly { id: string }[], ...gone: (readonly string[])[]) =>
+  (id: string) =>
+    isDataId(id) && !live.some((t) => t.id === id) && !gone.some((list) => list.includes(id));
+
+const retiredOf = (game: Game): Reserved => game.retired ?? NONE;
+
+/** The game with these ids retired too, each once. */
+function retire(game: Game, modes: readonly string[], actions: readonly string[]): Game {
+  const before = retiredOf(game);
+  return {
+    ...game,
+    retired: {
+      modes: [...new Set([...before.modes, ...modes])],
+      actions: [...new Set([...before.actions, ...actions])],
+    },
+  };
+}
+
+/** Every mode and action the schemes name: never given to anything new in their game. */
+export function referencedIds(schemes: readonly Scheme[]): Reserved {
+  const modes = new Set<string>();
+  const actions = new Set<string>();
+  for (const scheme of schemes) {
+    for (const [mode, controls] of Object.entries(scheme.map)) {
+      modes.add(mode);
+      for (const presses of Object.values(controls))
+        for (const action of Object.values(presses)) if (action !== undefined) actions.add(action);
+    }
+  }
+  return { modes: [...modes], actions: [...actions] };
+}
 
 /**
  * Adds an action at the end of its mode: its name trimmed, not required, no defaults yet, and the
  * role of the action above it (actions are usually added in groups).
  */
-export function addAction(game: Game, mode: ModeId, name: string): { game: Game; id: ActionId } {
+export function addAction(
+  game: Game,
+  mode: ModeId,
+  name: string,
+  reserved: Reserved = NONE,
+): { game: Game; id: ActionId } {
   const trimmed = name.trim();
-  const id = idFromName(trimmed, freeId(game.actions), 'action');
+  const id = idFromName(
+    trimmed,
+    freeId(game.actions, retiredOf(game).actions, reserved.actions),
+    'action',
+  );
   const above = actionsIn(game, mode).at(-1);
   const action: Action = {
     id,
@@ -115,15 +174,20 @@ export function moveAction(game: Game, id: ActionId, by: -1 | 1): Game {
   };
 }
 
-export const deleteAction = (game: Game, id: ActionId): Game => ({
-  ...game,
-  actions: game.actions.filter((a) => a.id !== id),
-});
+/** Deletes an action. Its id is retired: never given to another action of this game. */
+export const deleteAction = (game: Game, id: ActionId): Game =>
+  game.actions.some((a) => a.id === id)
+    ? retire({ ...game, actions: game.actions.filter((a) => a.id !== id) }, [], [id])
+    : game;
 
 /** Adds a mode at the end. Its id is a key of every setup's map, so never an inherited name. */
-export function addMode(game: Game, name: string): { game: Game; id: ModeId } {
+export function addMode(
+  game: Game,
+  name: string,
+  reserved: Reserved = NONE,
+): { game: Game; id: ModeId } {
   const trimmed = name.trim();
-  const id = idFromName(trimmed, freeId(game.modes), 'mode');
+  const id = idFromName(trimmed, freeId(game.modes, retiredOf(game).modes, reserved.modes), 'mode');
   return { game: { ...game, modes: [...game.modes, { id, name: trimmed }] }, id };
 }
 
@@ -142,14 +206,21 @@ export function moveMode(game: Game, id: ModeId, by: -1 | 1): Game {
   return { ...game, modes };
 }
 
-/** Deletes a mode and its actions. The last mode stays: a game has at least one. */
+/**
+ * Deletes a mode and its actions, retiring all their ids. The last mode stays: a game has at
+ * least one.
+ */
 export function deleteMode(game: Game, id: ModeId): Game {
-  if (game.modes.length <= 1) return game;
-  return {
-    ...game,
-    modes: game.modes.filter((m) => m.id !== id),
-    actions: game.actions.filter((a) => a.mode !== id),
-  };
+  if (game.modes.length <= 1 || !game.modes.some((m) => m.id === id)) return game;
+  return retire(
+    {
+      ...game,
+      modes: game.modes.filter((m) => m.id !== id),
+      actions: game.actions.filter((a) => a.mode !== id),
+    },
+    [id],
+    game.actions.filter((a) => a.mode === id).map((a) => a.id),
+  );
 }
 
 /**
@@ -183,12 +254,14 @@ export function record<T>(
 export function loadedOf(
   target: GameTarget,
   games: readonly GameEntry[],
+  schemes: readonly Scheme[] = [],
 ): {
   game: Game;
   builtIn: boolean;
   edited: boolean;
   saved: boolean;
   taken?: string[];
+  reserved?: Reserved;
 } | null {
   if (target.kind === 'new') {
     const taken = games.map((g) => g.game.id);
@@ -197,5 +270,11 @@ export function loadedOf(
   }
   const entry = games.find((g) => g.game.id === target.gameId);
   if (entry === undefined) return null;
-  return { game: entry.game, builtIn: entry.builtIn, edited: entry.edited === true, saved: true };
+  return {
+    game: entry.game,
+    builtIn: entry.builtIn,
+    edited: entry.edited === true,
+    saved: true,
+    reserved: referencedIds(schemes),
+  };
 }

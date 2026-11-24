@@ -18,6 +18,7 @@ import {
   setDefaultKey,
   setDefaultPad,
 } from './game-model';
+import type { Reserved } from './game-model';
 import { plainReason, runMake } from './libraryFlow';
 
 /** What the screen waits for a press of: an action's default key, or its controller button. */
@@ -41,6 +42,8 @@ export interface Loaded {
   saved: boolean;
   /** The other games' ids, which a new game's id must not be. */
   taken?: readonly string[];
+  /** The ids the game's saved schemes name: never given to a new mode or action. */
+  reserved?: Reserved;
 }
 
 export interface GameEditorState {
@@ -73,6 +76,7 @@ export class GameEditor {
    */
   private fresh: boolean;
   private readonly taken: readonly string[];
+  private readonly reserved: Reserved;
 
   constructor(
     loaded: Loaded,
@@ -93,6 +97,7 @@ export class GameEditor {
     this.builtIn = loaded.builtIn;
     this.fresh = !loaded.saved;
     this.taken = loaded.taken ?? [];
+    this.reserved = loaded.reserved ?? { modes: [], actions: [] };
   }
 
   get state(): GameEditorState {
@@ -213,7 +218,7 @@ export class GameEditor {
 
   /** Adds a mode named for its place (*Mode 2*) and shows it. Gives its id back. */
   readonly addMode = (): ModeId => {
-    const added = addMode(this.game, `Mode ${this.game.modes.length + 1}`);
+    const added = addMode(this.game, `Mode ${this.game.modes.length + 1}`, this.reserved);
     this.edit(() => added.game);
     this.set({ mode: added.id });
     return added.id;
@@ -239,7 +244,7 @@ export class GameEditor {
   /** Adds an action to the mode shown, then waits for its key. Nothing for an empty name. */
   readonly addAction = (name: string): void => {
     if (name.trim() === '') return;
-    const added = addAction(this.game, this.mode, name);
+    const added = addAction(this.game, this.mode, name, this.reserved);
     this.edit(() => added.game);
     this.set({ waiting: { action: added.id, part: 'key' } });
   };

@@ -188,7 +188,7 @@ describe('a built-in game edited in the app, then back to helmArray’s', () => 
   });
 });
 
-describe('a game added by hand, active, then deleted', () => {
+describe('a game added by hand, active, then deleted with its scheme', () => {
   let world: World;
   let schemeId: string;
   let after: {
@@ -228,12 +228,14 @@ describe('a game added by hand, active, then deleted', () => {
     expect([after.games, after.library]).toEqual([[HELLDIVERS2], [HELLDIVERS2]]);
   });
 
-  it('keeps its scheme on disk', () => {
-    expect(after.schemes).toEqual([schemeId]);
+  // Its schemes went with it once they were kept, and a game added later under its id took them
+  // over (Codex on #95).
+  it('takes its scheme with it', () => {
+    expect(after.schemes).toEqual([]);
   });
 
-  it('can’t be applied any more, and Apply says why', () => {
-    expect(after.preview).toEqual({ ready: false, checks: [expect.stringMatching(/game/i)] });
+  it('leaves nothing to apply, and Apply says why', () => {
+    expect(after.preview).toEqual({ ready: false, checks: [expect.stringMatching(/scheme/i)] });
   });
 
   it('leaves no game active, so the pill no longer judges a game that is gone', () => {

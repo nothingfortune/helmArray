@@ -10,6 +10,7 @@
 // is in memory. The parts are drawn by GameParts.tsx.
 
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import type { Scheme } from '@helmarray/core';
 import type { GameEntry } from '../../shared/api';
 import { snapshotsOf } from './capture';
 import { isTextEntry } from './editor-model';
@@ -54,10 +55,12 @@ export function GameScreen(props: GameScreenProps) {
 
   useEffect(() => {
     let live = true;
-    window.helm.listGames().then(
-      (games: GameEntry[]) => {
+    // The game's saved schemes too: the ids they name are never given to anything new.
+    const schemes = target.kind === 'edit' ? window.helm.listSchemes(target.gameId) : [];
+    Promise.all([window.helm.listGames(), schemes]).then(
+      ([games, saved]: [GameEntry[], Scheme[]]) => {
         if (!live) return;
-        const loaded = loadedOf(target, games);
+        const loaded = loadedOf(target, games, saved);
         setLoad(
           loaded === null
             ? { kind: 'gone' }

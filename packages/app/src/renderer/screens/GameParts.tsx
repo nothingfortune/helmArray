@@ -148,7 +148,7 @@ export function TitleBar({
       )}
       {confirming && (
         <div className="gm-confirm" role="group" aria-label="Are you sure?">
-          <span>{builtIn ? 'Drop your edits?' : `Delete ${game.name}? Its schemes are kept.`}</span>
+          <span>{builtIn ? 'Drop your edits?' : `Delete ${game.name} and its schemes?`}</span>
           <button type="button" className="btn gm-danger-solid" disabled={busy} onClick={onDrop}>
             {builtIn ? "Back to helmArray's" : 'Delete'}
           </button>

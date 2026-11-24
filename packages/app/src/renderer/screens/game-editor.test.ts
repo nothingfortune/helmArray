@@ -40,7 +40,13 @@ function api(over: Partial<EditorApi> = {}) {
 
 const open = (
   game: Game = rover,
-  flags: Partial<{ builtIn: boolean; edited: boolean; saved: boolean; taken: string[] }> = {},
+  flags: Partial<{
+    builtIn: boolean;
+    edited: boolean;
+    saved: boolean;
+    taken: string[];
+    reserved: { modes: string[]; actions: string[] };
+  }> = {},
   calls = api(),
 ) => ({
   editor: new GameEditor({ game, builtIn: false, edited: false, saved: true, ...flags }, calls),
@@ -457,5 +463,19 @@ describe('a new game’s id', () => {
     const { editor, calls } = added();
     editor.nameDone();
     expect(calls.saveGame.mock.calls).toEqual([]);
+  });
+});
+
+describe('the ids the game’s saved schemes name', () => {
+  it('are never given to a new action or mode, though the game has forgotten them', () => {
+    const { editor } = open(rover, { reserved: { modes: ['default_2'], actions: ['grapple'] } });
+    editor.addAction('Grapple');
+    const mode = editor.addMode();
+    expect([editor.game.actions.at(-1)?.id, mode]).toEqual(['grapple_2', 'mode_2']);
+  });
+
+  it('are reserved for a mode named like one', () => {
+    const { editor } = open(rover, { reserved: { modes: ['mode_2'], actions: [] } });
+    expect(editor.addMode()).toBe('mode_2_2');
   });
 });

@@ -1,5 +1,5 @@
-import { gameProblem, helldivers2 } from '@helmarray/core';
-import type { Game } from '@helmarray/core';
+import { gameKeysPreset, gameProblem, helldivers2 } from '@helmarray/core';
+import type { Game, Scheme } from '@helmarray/core';
 import { describe, expect, it } from 'vitest';
 import {
   actionsIn,
@@ -13,6 +13,7 @@ import {
   moveMode,
   newGame,
   record,
+  referencedIds,
   renameGame,
   renameMode,
   setDefaultKey,
@@ -296,9 +297,32 @@ describe('loadedOf', () => {
       loadedOf({ kind: 'edit', gameId: 'helldivers2' }, entries),
       loadedOf({ kind: 'edit', gameId: 'rover' }, entries),
     ]).toEqual([
-      { game: helldivers2, builtIn: true, edited: true, saved: true },
-      { game: two, builtIn: false, edited: false, saved: true },
+      {
+        game: helldivers2,
+        builtIn: true,
+        edited: true,
+        saved: true,
+        reserved: { modes: [], actions: [] },
+      },
+      {
+        game: two,
+        builtIn: false,
+        edited: false,
+        saved: true,
+        reserved: { modes: [], actions: [] },
+      },
     ]);
+  });
+
+  it('reserves the ids the game’s saved schemes name', () => {
+    const scheme = {
+      ...gameKeysPreset(two),
+      map: { foot: { 'L.index_1': { tap: 'grapple' } } },
+    };
+    expect(loadedOf({ kind: 'edit', gameId: 'rover' }, entries, [scheme])?.reserved).toEqual({
+      modes: ['foot'],
+      actions: ['grapple'],
+    });
   });
 
   it('is nothing for a game that isn’t there any more', () => {
@@ -319,5 +343,103 @@ describe('loadedOf', () => {
       saved: false,
       taken: ['helldivers2', 'rover'],
     });
+  });
+});
+
+describe('ids are never given out twice', () => {
+  it('keeps the id of a deleted action, and a new action named alike gets another', () => {
+    const gone = deleteAction(two, 'fire');
+    const { id } = addAction(gone, 'foot', 'Fire!');
+    expect([gone.retired, id]).toEqual([{ modes: [], actions: ['fire'] }, 'fire_2']);
+  });
+
+  it('keeps the ids of a deleted mode and of its actions', () => {
+    const gone = deleteMode(two, 'drive');
+    expect([gone.retired, addMode(gone, 'Driving').id, addAction(gone, 'foot', 'Honk').id]).toEqual(
+      [{ modes: ['drive'], actions: ['honk'] }, 'driving', 'honk_2'],
+    );
+  });
+
+  it('never gives the id a saved scheme names, though the game itself has forgotten it', () => {
+    const reserved = { modes: ['drive'], actions: ['grapple'] };
+    expect([
+      addAction(two, 'foot', 'Grapple', reserved).id,
+      addMode(two, 'Drive', reserved).id,
+    ]).toEqual(['grapple_2', 'drive_2']);
+  });
+
+  it('keeps each deleted id once', () => {
+    const twice = deleteAction(addAction(deleteAction(two, 'fire'), 'foot', 'Fire').game, 'fire_2');
+    expect(twice.retired).toEqual({ modes: [], actions: ['fire', 'fire_2'] });
+  });
+
+  it('is a game that can still be saved after deleting', () => {
+    expect(gameProblem(deleteMode(deleteAction(two, 'fire'), 'drive'))).toBeNull();
+  });
+});
+
+describe('referencedIds', () => {
+  it('lists every mode and action a scheme names', () => {
+    const scheme = {
+      ...gameKeysPreset(two),
+      map: {
+        foot: { 'L.index_1': { tap: 'jump', long: 'gone' } },
+        old_mode: { 'key.R': { tap: 'grapple' } },
+      },
+    };
+    expect(referencedIds([scheme])).toEqual({
+      modes: ['foot', 'old_mode'],
+      actions: ['jump', 'gone', 'grapple'],
+    });
+  });
+
+  it('reads a mode named __proto__ as a mode', () => {
+    const scheme = {
+      ...gameKeysPreset(two),
+      map: JSON.parse('{"__proto__": {"L.index_1": {"tap": "x"}}}') as Scheme['map'],
+    };
+    expect(referencedIds([scheme])).toEqual({ modes: ['__proto__'], actions: ['x'] });
+  });
+});
+
+describe('a property: whatever is added, renamed and deleted, no id is given out twice', () => {
+  /** A small seeded generator, so a failure can be run again. */
+  const random = (seed: number) => () => {
+    seed = (seed * 1103515245 + 12345) % 2 ** 31;
+    return seed / 2 ** 31;
+  };
+  const NAMES = ['Fire', 'Fire!', 'fire', 'Jump', 'Constructor', '__proto__', 'Drive', ''];
+
+  it.each([1, 2, 3, 4, 5, 6, 7, 8])('holds over 300 steps from seed %i', (seed) => {
+    const next = random(seed);
+    const pick = <T>(list: readonly T[]): T | undefined => list[Math.floor(next() * list.length)];
+    // A scheme saved at the start names every action the game had then.
+    let game: Game = two;
+    const issued = new Map<string, number>([
+      ...two.actions.map((a) => [`a:${a.id}`, 1] as const),
+      ...two.modes.map((m) => [`m:${m.id}`, 1] as const),
+    ]);
+    const issue = (key: string) => issued.set(key, (issued.get(key) ?? 0) + 1);
+    for (let step = 0; step < 300; step++) {
+      const roll = next();
+      const mode = pick(game.modes)?.id ?? 'foot';
+      const action = pick(game.actions)?.id;
+      if (roll < 0.35) {
+        const added = addAction(game, mode, pick(NAMES) ?? 'x');
+        game = added.game;
+        issue(`a:${added.id}`);
+      } else if (roll < 0.5) {
+        const added = addMode(game, pick(NAMES) ?? 'x');
+        game = added.game;
+        issue(`m:${added.id}`);
+      } else if (roll < 0.65 && action !== undefined) {
+        game = updateAction(game, action, { name: pick(NAMES) ?? 'x' });
+      } else if (roll < 0.85 && action !== undefined) {
+        game = deleteAction(game, action);
+      } else {
+        game = deleteMode(game, mode);
+      }
+    }
+    expect([...issued].filter(([, times]) => times > 1)).toEqual([]);
   });
 });

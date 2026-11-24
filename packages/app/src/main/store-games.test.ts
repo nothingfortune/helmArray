@@ -2,9 +2,10 @@
 // holds a game you added, or your copy of a built-in game under the built-in's id. Yours wins,
 // and dropping it brings helmArray's back.
 
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { BUILT_IN_DEVICES, resolve } from '@helmarray/core';
 import type { Game } from '@helmarray/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AUTOSAVE_MS, DataStore } from './store';
@@ -183,13 +184,43 @@ describe('a game added by hand', () => {
     expect(await exists('rover')).toBe(false);
   });
 
-  it('keeps its schemes when it is deleted: adding it again under its id brings them back', async () => {
+  // A game deleted once kept its schemes, and the next game under its id took them over silently
+  // (Codex on #95): a game you delete now takes its schemes with it.
+  it('takes its schemes with it: added again under its id, it has none', async () => {
     const { data } = await openStore();
     data.saveGame(ROVER);
     const scheme = await data.createSchemeFromPreset('rover', 'keys');
+    await data.flush();
     await data.deleteGame('rover');
     data.saveGame(ROVER);
-    expect((await data.listSchemes('rover')).map((s) => s.id)).toEqual([scheme.id]);
+    expect([
+      await data.listSchemes('rover'),
+      await stat(join(root, 'schemes', `${scheme.id}.json`)).then(
+        () => true,
+        () => false,
+      ),
+    ]).toEqual([[], false]);
+  });
+
+  it('takes with it the plan it was applied with, and what it holds', async () => {
+    const { data } = await openStore();
+    data.saveGame(ROVER);
+    const scheme = await data.createSchemeFromPreset('rover', 'keys');
+    const plan = resolve(scheme, ROVER, BUILT_IN_DEVICES);
+    await data.saveApplied(scheme.id, plan);
+    await data.deleteGame('rover');
+    expect([await data.lastApplied('rover'), await readdir(join(root, 'applied'))]).toEqual([
+      null,
+      [],
+    ]);
+  });
+
+  it('keeps a built-in game’s schemes when your copy is dropped: the game is still there', async () => {
+    const { data } = await openStore();
+    data.saveGame({ ...SKIFF, name: 'Mine' });
+    const scheme = await data.createSchemeFromPreset('skiff', 'keys');
+    await data.deleteGame('skiff');
+    expect((await data.listSchemes('skiff')).map((s) => s.id)).toEqual([scheme.id]);
   });
 });
 
