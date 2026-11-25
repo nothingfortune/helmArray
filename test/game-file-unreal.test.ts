@@ -43,7 +43,7 @@ const action = (id: string) => harvest().game.actions.find((a) => a.id === id);
 describe('Everspace 2: harvest', () => {
   it('matches the reviewed snapshot', () => {
     const snapshot = JSON.parse(readFileSync(SNAPSHOT, 'utf8')) as unknown;
-    expect(harvest()).toEqual(snapshot);
+    expect(harvest()).toStrictEqual(snapshot);
   });
 
   it('is a game helmArray can save', () => {
@@ -255,6 +255,16 @@ describe('Everspace 2: write', () => {
 
   it('keeps a second key when its action moves', () => {
     const after = writeUnrealIni(FILE, [row('NavigateRight', 'keyboard', key('L'), 'menus')]);
+    expect(
+      diff(FILE, after).map(([, , now]) => /Key1=[^,]*,Key1Mod=None,Key2=[^,]*/.exec(now)?.[0]),
+    ).toEqual(['Key1=L,Key1Mod=None,Key2=Right']);
+  });
+
+  it('keeps a second key the write asks for, where it is', () => {
+    const after = writeUnrealIni(FILE, [
+      row('NavigateRight', 'keyboard', key('L'), 'menus'),
+      row('NavigateRight', 'keyboard', key('Right'), 'menus'),
+    ]);
     expect(
       diff(FILE, after).map(([, , now]) => /Key1=[^,]*,Key1Mod=None,Key2=[^,]*/.exec(now)?.[0]),
     ).toEqual(['Key1=L,Key1Mod=None,Key2=Right']);

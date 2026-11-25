@@ -47,7 +47,7 @@ const action = (id: string, harvest = custom) => harvest().game.actions.find((a)
 
 describe('Elite: harvest', () => {
   it('matches the reviewed snapshots', () => {
-    expect([custom(), kmo()]).toEqual([
+    expect([custom(), kmo()]).toStrictEqual([
       snapshot('elite-custom.harvest.json'),
       snapshot('elite-keyboard-mouse-only.harvest.json'),
     ]);

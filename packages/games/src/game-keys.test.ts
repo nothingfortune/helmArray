@@ -114,11 +114,14 @@ describe('Unreal names', () => {
   });
 
   it('reads a modifier on either side as the modifier', () => {
-    expect(signalOfUnreal({ key: 'A', mod: 'RightControl' })).toEqual({
-      kind: 'key',
-      code: 'A',
-      mods: ['ctrl'],
-    });
+    const sides = ['LeftControl', 'RightControl', 'LeftShift', 'RightShift', 'LeftAlt', 'RightAlt'];
+    expect(sides.map((mod) => signalOfUnreal({ key: 'A', mod }))).toEqual(
+      ['ctrl', 'ctrl', 'shift', 'shift', 'alt', 'alt'].map((m) => ({
+        kind: 'key',
+        code: 'A',
+        mods: [m],
+      })),
+    );
   });
 
   it('reads None as empty, and an axis, a chord or an unknown name as nothing it can name', () => {
@@ -231,13 +234,22 @@ describe('Elite names', () => {
   });
 
   it('reads a modifier on either side as the modifier', () => {
+    const sides = ['LeftControl', 'RightControl', 'LeftShift', 'RightShift', 'LeftAlt', 'RightAlt'];
     expect(
-      signalOfElite({
-        device: 'Keyboard',
-        key: 'Key_W',
-        modifiers: [{ device: 'Keyboard', key: 'Key_RightShift' }],
-      }),
-    ).toEqual({ kind: 'key', code: 'W', mods: ['shift'] });
+      sides.map((side) =>
+        signalOfElite({
+          device: 'Keyboard',
+          key: 'Key_W',
+          modifiers: [{ device: 'Keyboard', key: `Key_${side}` }],
+        }),
+      ),
+    ).toEqual(
+      ['ctrl', 'ctrl', 'shift', 'shift', 'alt', 'alt'].map((m) => ({
+        kind: 'key',
+        code: 'W',
+        mods: [m],
+      })),
+    );
   });
 
   it('reads a chord, a joystick, an unknown key and a key on the wrong device as nothing it can name', () => {
@@ -255,9 +267,10 @@ describe('Elite names', () => {
         k('Keyboard', 'Key_Nothing'),
         k('Mouse', 'Key_A'),
         k('Keyboard', 'Mouse_1'),
-        k('Keyboard', 'Key_A', ['T16000M', 'Joy_1']),
+        k('Keyboard', 'Key_A', ['T16000M', 'Key_LeftShift']),
+        k('T16000M', 'Key_A'),
         k('28DE11FF', 'GamePad_LStickX'),
       ].map(signalOfElite),
-    ).toEqual([null, null, null, null, null, null, null, null, null]);
+    ).toEqual([null, null, null, null, null, null, null, null, null, null]);
   });
 });

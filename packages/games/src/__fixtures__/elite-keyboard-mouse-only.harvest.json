@@ -1334,7 +1334,7 @@
       },
       {
         "id": "CamTranslateZHold",
-        "name": "Cam translate zhold",
+        "name": "Cam translate Z hold",
         "mode": "map",
         "role": "menu",
         "required": false
@@ -2546,7 +2546,7 @@
       },
       {
         "id": "ExplorationFSSRadioTuningX_Increase",
-        "name": "Exploration FSS radio tuning x increase",
+        "name": "Exploration FSS radio tuning X increase",
         "mode": "fss",
         "required": false,
         "native": {
@@ -2558,7 +2558,7 @@
       },
       {
         "id": "ExplorationFSSRadioTuningX_Decrease",
-        "name": "Exploration FSS radio tuning x decrease",
+        "name": "Exploration FSS radio tuning X decrease",
         "mode": "fss",
         "required": false,
         "native": {
@@ -3215,25 +3215,25 @@
       },
       {
         "id": "HumanoidItemWheelButton_XLeft",
-        "name": "Item wheel button x left",
+        "name": "Item wheel button X left",
         "mode": "foot",
         "required": false
       },
       {
         "id": "HumanoidItemWheelButton_XRight",
-        "name": "Item wheel button x right",
+        "name": "Item wheel button X right",
         "mode": "foot",
         "required": false
       },
       {
         "id": "HumanoidItemWheelButton_YUp",
-        "name": "Item wheel button y up",
+        "name": "Item wheel button Y up",
         "mode": "foot",
         "required": false
       },
       {
         "id": "HumanoidItemWheelButton_YDown",
-        "name": "Item wheel button y down",
+        "name": "Item wheel button Y down",
         "mode": "foot",
         "required": false
       },

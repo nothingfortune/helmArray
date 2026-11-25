@@ -42,14 +42,18 @@ export interface Line {
   end: string;
 }
 
+/** A group of a regex that matched: text, whenever the group is one that always takes part. */
+export function groupOf(match: RegExpMatchArray, n: number): string {
+  // Stryker disable next-line StringLiteral: every group read through here always takes part in the match, so the default is never used
+  return match[n] ?? '';
+}
+
 /** A file's lines, each with its own ending, so that joining them gives the file back exactly. */
 export function linesOf(file: string): Line[] {
   const lines: Line[] = [];
-  const pattern = /([^\r\n]*)(\r\n|\n|\r|$)/g;
-  for (const match of file.matchAll(pattern)) {
-    const [whole, text = '', end = ''] = match;
-    if (whole === '') break;
-    lines.push({ text, end });
+  for (const match of file.matchAll(/([^\r\n]*)(\r\n|\n|\r|$)/g)) {
+    if (match[0] === '') break;
+    lines.push({ text: groupOf(match, 1), end: groupOf(match, 2) });
   }
   return lines;
 }
@@ -111,8 +115,11 @@ export function setOf(signal: Signal): BindingSet {
 /** A signal as a comparable string; modifiers in any order are the same signal. */
 export function signalKey(signal: Signal): string {
   switch (signal.kind) {
-    case 'key':
-      return `key:${[...(signal.mods ?? [])].sort().join('+')}+${signal.code}`;
+    case 'key': {
+      // Stryker disable next-line StringLiteral: ctrl, shift and alt joined with or without a separator are still distinct, so the separator changes nothing
+      const mods = [...(signal.mods ?? [])].sort().join('+');
+      return `key:${mods}+${signal.code}`;
+    }
     case 'mouse':
       return `mouse:${signal.button}`;
     case 'scroll':
@@ -173,13 +180,13 @@ export function assignSlots(
 export function keepSeconds(
   slots: readonly Slot[],
   set: BindingSet,
-  wanted: readonly Signal[] | undefined,
+  wanted: readonly Signal[],
   taken: (signal: Signal) => boolean,
 ): Slot[] {
   let first = true;
   return slots.map((slot): Slot => {
     if (slot.state !== 'read' || setOf(slot.signal) !== set) return slot;
-    if (first || wanted === undefined || wanted.length === 0) {
+    if (first || wanted.length === 0) {
       first = false;
       return slot;
     }
@@ -191,22 +198,20 @@ export function keepSeconds(
 }
 
 /**
- * Who a write puts on each signal, per mode and set: `taken(mode, set, action)` says whether the
- * write puts the signal on an action other than `action` in that mode.
+ * What a write puts on each signal, per mode: `taken(mode)(signal)` says whether any row puts the
+ * signal on an action of that mode. (An action asking for its own second key is seen first, by
+ * `keepSeconds`.)
  */
 export function takenBy(
   rows: readonly GameBinding[],
   modeOf: (action: ActionId) => string | undefined,
-): (mode: string, action: ActionId) => (signal: Signal) => boolean {
-  const on = new Map<string, Set<ActionId>>();
-  for (const row of rows) {
-    const mode = modeOf(row.action);
-    if (row.signal === null || mode === undefined) continue;
-    const key = JSON.stringify([mode, signalKey(row.signal)]);
-    on.set(key, (on.get(key) ?? new Set()).add(row.action));
-  }
-  return (mode, action) => (signal) =>
-    [...(on.get(JSON.stringify([mode, signalKey(signal)])) ?? [])].some((a) => a !== action);
+): (mode: string) => (signal: Signal) => boolean {
+  const on = new Set(
+    rows.flatMap((row) =>
+      row.signal === null ? [] : [JSON.stringify([modeOf(row.action), signalKey(row.signal)])],
+    ),
+  );
+  return (mode) => (signal) => on.has(JSON.stringify([mode, signalKey(signal)]));
 }
 
 /** Words for a signal in an error: `F13`, `Ctrl+Shift+A`, `the mouse's back button`. */

@@ -33,12 +33,14 @@ import type {
   GameBinding,
   Mode,
   ModeId,
+  PadControl,
   Role,
   Signal,
 } from '@helmarray/core';
 import type { FolderReader, Line, Slot } from './game-file';
 import {
   GameFileError,
+  groupOf,
   assignSlots,
   entryOf,
   idMaker,
@@ -59,6 +61,8 @@ interface EliteSlot extends EliteKey {
   name: string;
   first: number;
   last: number;
+  /** The ending of its last line. */
+  end: string;
   indent: string;
   /** Children other than `Modifier` and `Hold`: nothing helmArray knows. */
   unknown: boolean;
@@ -82,20 +86,21 @@ function controlsOf(lines: readonly Line[]): Control[] {
   const controls: Control[] = [];
   let open: { tag: string; indent: string; slots: EliteSlot[] } | null = null;
   let slot: EliteSlot | null = null;
-  lines.forEach(({ text }, index) => {
+  lines.forEach(({ text, end }, index) => {
     if (slot !== null) {
       const modifier = MODIFIER.exec(text);
       if (text.trim() === `</${slot.name}>`) {
         slot.last = index;
+        slot.end = end;
         slot = null;
       } else if (modifier !== null)
-        slot.modifiers.push({ device: modifier[1] ?? '', key: modifier[2] ?? '' });
+        slot.modifiers.push({ device: groupOf(modifier, 1), key: groupOf(modifier, 2) });
       else if (!HOLD.test(text)) slot.unknown = true;
       return;
     }
     if (open === null) {
       const start = OPEN.exec(text);
-      if (start !== null) open = { tag: start[2] ?? '', indent: start[1] ?? '', slots: [] };
+      if (start !== null) open = { tag: groupOf(start, 2), indent: groupOf(start, 1), slots: [] };
       return;
     }
     if (text.trim() === `</${open.tag}>`) {
@@ -108,13 +113,14 @@ function controlsOf(lines: readonly Line[]): Control[] {
     const found = SLOT.exec(text);
     if (found === null) return;
     const next: EliteSlot = {
-      name: found[2] ?? '',
-      device: found[3] ?? '',
-      key: found[4] ?? '',
+      name: groupOf(found, 2),
+      device: groupOf(found, 3),
+      key: groupOf(found, 4),
       modifiers: [],
       first: index,
       last: index,
-      indent: found[1] ?? '',
+      end,
+      indent: groupOf(found, 1),
       unknown: false,
     };
     open.slots.push(next);
@@ -160,7 +166,7 @@ const MODES: readonly Mode[] = [
   { id: 'construction', name: 'Construction' },
 ];
 
-/** The buggy's controls that don't say Buggy. */
+/** The buggy's controls that don't say Buggy (its speed axes say nothing either, but are axes). */
 const SRV = new Set([
   'ToggleDriveAssist',
   'SteerLeftButton',
@@ -168,8 +174,6 @@ const SRV = new Set([
   'VerticalThrustersButton',
   'IncreaseSpeedButtonMax',
   'DecreaseSpeedButtonMax',
-  'IncreaseSpeedButtonPartial',
-  'DecreaseSpeedButtonPartial',
   'RecallDismissShip',
 ]);
 /** Controls that work whatever the player is doing. */
@@ -182,26 +186,46 @@ const GENERAL = new Set([
   'MouseReset',
   'BlockMouseDecay',
 ]);
-const CAMERA =
-  /^(FocusDistance|ToggleVanityCamera)|FreeCam|VanityCamera|PhotoCameraToggle|^(Pitch|Yaw|Roll)Camera|^FStop|^(ToggleRotationLock|FixCamera(Relative|World)Toggle|QuitCamera|ToggleAdvanceMode)$/;
+/** The camera suite's controls, by how their names start, contain, or are. */
+const CAMERA_STARTS = ['PitchCamera', 'YawCamera', 'RollCamera', 'FStop'];
+const CAMERA_HAS = ['FreeCam', 'VanityCamera', 'PhotoCameraToggle'];
+const CAMERA = new Set([
+  'ToggleRotationLock',
+  'FixCameraRelativeToggle',
+  'FixCameraWorldToggle',
+  'QuitCamera',
+  'ToggleAdvanceMode',
+]);
+const HEADLOOK_STARTS = ['HeadLookReset', 'HeadLookPitch', 'HeadLookYaw'];
+const UI = new Set(['CycleNextPanel', 'CyclePreviousPanel', 'CycleNextPage', 'CyclePreviousPage']);
+
+const startsWithAny = (tag: string, starts: readonly string[]): boolean =>
+  starts.some((start) => tag.startsWith(start));
 
 function modeOf(tag: string): ModeId {
-  if (/Settlement|Colonisation|ConstructionOption/.test(tag)) return 'construction';
-  if (/^(FocusDistance|ToggleVanityCamera)/.test(tag)) return 'camera';
+  if (['Settlement', 'Colonisation', 'ConstructionOption'].some((s) => tag.includes(s)))
+    return 'construction';
+  // Before the buggy and on foot: ToggleVanityCamera_Buggy is the camera's.
+  if (startsWithAny(tag, ['FocusDistance', 'ToggleVanityCamera'])) return 'camera';
   if (tag.startsWith('Humanoid') || tag.endsWith('_Humanoid')) return 'foot';
   if (tag.includes('Buggy') || SRV.has(tag)) return 'srv';
   if (tag.endsWith('_Landing')) return 'landing';
   // The scanner is entered from the ship; everything else about it is done inside.
   if (tag === 'ExplorationFSSEnter') return 'ship';
   if (tag.startsWith('ExplorationFSS')) return 'fss';
-  if (tag.startsWith('ExplorationSAA') || tag.startsWith('SAA')) return 'dss';
+  if (startsWithAny(tag, ['ExplorationSAA', 'SAA'])) return 'dss';
   if (tag.startsWith('MultiCrew')) return 'multicrew';
   if (tag.startsWith('Order') || tag === 'OpenOrders') return 'fighter';
   if (/^Cam[A-Z]/.test(tag) || tag === 'GalaxyMapHome') return 'map';
-  if (tag.startsWith('Store') || tag.startsWith('CommanderCreator')) return 'store';
-  if (/^HeadLook(Reset|Pitch|Yaw)/.test(tag)) return 'headlook';
-  if (CAMERA.test(tag)) return 'camera';
-  if (tag.startsWith('UI_') || /^Cycle(Next|Previous)(Panel|Page)$/.test(tag)) return 'ui';
+  if (startsWithAny(tag, ['Store', 'CommanderCreator'])) return 'store';
+  if (startsWithAny(tag, HEADLOOK_STARTS)) return 'headlook';
+  if (
+    startsWithAny(tag, CAMERA_STARTS) ||
+    CAMERA_HAS.some((s) => tag.includes(s)) ||
+    CAMERA.has(tag)
+  )
+    return 'camera';
+  if (tag.startsWith('UI_') || UI.has(tag)) return 'ui';
   if (tag.startsWith('GalnetAudio') || GENERAL.has(tag)) return 'general';
   return 'ship';
 }
@@ -212,25 +236,26 @@ function modeOf(tag: string): ModeId {
  */
 function nameOf(tag: string): string {
   const words = tag
-    .replace(/^Humanoid(?=[A-Z])/, '')
+    .replace(/^Humanoid/, '')
     .replace(/_(Buggy|Humanoid|Landing)$/, '')
     .replace(/Button$/, '')
-    .replace(/_/g, ' ')
-    .replace(/([a-z])([A-Z0-9])|([A-Z]+)([A-Z][a-z])|([0-9])([A-Za-z])/g, (_, a, b, c, d, e, f) =>
-      a !== undefined ? `${a} ${b}` : c !== undefined ? `${c} ${d}` : `${e} ${f}`,
-    )
-    .split(/\s+/)
-    .filter((word) => word !== '')
-    .map((word, i) => (i === 0 || /^[A-Z0-9]{2,}$/.test(word) ? word : word.toLowerCase()));
+    .replace(/([a-z])([A-Z0-9])/g, '$1 $2')
+    .replace(/([A-Z])([A-Z][a-z])/g, '$1 $2')
+    .replace(/([0-9])([A-Za-z])/g, '$1 $2')
+    .replace(/[_\s]+/g, ' ')
+    .trim()
+    .split(' ')
+    .map((word, i) => (i > 0 && word !== word.toUpperCase() ? word.toLowerCase() : word));
   return words.join(' ') || tag;
 }
 
 const MOVING_MODES = new Set(['ship', 'landing', 'srv', 'foot']);
+const TRAVEL = new Set(['Supercruise', 'Hyperspace', 'HyperSuperCombination', 'UseBoostJuice']);
 
 function roleOf(tag: string, mode: ModeId): Role | undefined {
   if (mode === 'ui' || mode === 'map' || mode === 'store') return 'menu';
   if (!MOVING_MODES.has(mode)) return undefined;
-  if (/^(Supercruise|Hyperspace|HyperSuperCombination|UseBoostJuice)$/.test(tag)) return 'travel';
+  if (TRAVEL.has(tag)) return 'travel';
   if (/Fire|Target|Hardpoint|Weapon|Grenade|Melee|Reload|ECM|Chaff|HeatSink|ShieldCell/.test(tag))
     return 'combat';
   if (/Yaw|Pitch|Roll|Thrust|Forward|Backward|Strafe|Steer|Speed|Sprint|Crouch|Jump|Walk/.test(tag))
@@ -250,6 +275,13 @@ const describe = (slot: EliteKey): string =>
     ? slot.key
     : `${slot.key} with ${slot.modifiers.map((m) => m.key).join(' and ')} held`;
 
+/** The set a slot that isn't empty is in; null for another device, which is in neither. */
+function setOfSlot(slot: EliteSlot, state: Slot): BindingSet | null {
+  if (state.state === 'read') return setOf(state.signal);
+  if (isPadKey(slot.key)) return 'controller';
+  return slot.device === KEYBOARD || slot.device === MOUSE ? 'keyboard' : null;
+}
+
 /**
  * The game as a .binds file has it: its modes of play, every button control as an action, and
  * what each is bound to on the keyboard and the controller. The game's id and name are the
@@ -258,40 +290,32 @@ const describe = (slot: EliteKey): string =>
 export function harvestEliteBinds(file: string, game: { id: string; name: string }): Harvest {
   const kept: KeptBinding[] = [];
   const actions = actionsOf(controlsOf(linesOf(file))).map(({ id, control }): Action => {
-    const states = control.slots.map(stateOf);
-    const first = new Map<BindingSet, Signal>();
-    states.forEach((state, i) => {
-      const slot = control.slots[i];
-      if (slot === undefined || state.state === 'empty') return;
-      // A slot on another device (a joystick, the pedals) is in neither set: it isn't listed.
-      const set =
-        state.state === 'read'
-          ? setOf(state.signal)
-          : isPadKey(slot.key)
-            ? 'controller'
-            : slot.device === KEYBOARD || slot.device === MOUSE
-              ? 'keyboard'
-              : null;
-      if (set === null) return;
-      if (state.state === 'read' && !first.has(set)) first.set(set, state.signal);
+    let key: Signal | undefined;
+    let pad: PadControl | undefined;
+    for (const slot of control.slots) {
+      const state = stateOf(slot);
+      const set = state.state === 'empty' ? null : setOfSlot(slot, state);
+      if (set === null) continue;
+      if (state.state === 'read' && state.signal.kind === 'pad' && pad === undefined)
+        pad = state.signal.control;
+      else if (state.state === 'read' && state.signal.kind !== 'pad' && key === undefined)
+        key = state.signal;
       else kept.push({ action: id, set, text: describe(slot) });
-    });
+    }
     const mode = modeOf(control.tag);
     const role = roleOf(control.tag, mode);
-    const key = first.get('keyboard');
-    const pad = first.get('controller');
     return {
       id,
       name: nameOf(control.tag),
       mode,
       ...(role === undefined ? {} : { role }),
       required: false,
-      ...(key === undefined && pad?.kind !== 'pad'
+      ...(key === undefined && pad === undefined
         ? {}
         : {
             native: {
               ...(key === undefined ? {} : { key }),
-              ...(pad?.kind === 'pad' ? { pad: pad.control } : {}),
+              ...(pad === undefined ? {} : { pad }),
             },
           }),
     };
@@ -311,22 +335,14 @@ export function harvestEliteBinds(file: string, game: { id: string; name: string
 
 // --- writing ------------------------------------------------------------------------------
 
-/** The device the file's controller bindings are on, or null when it has none. */
-function padDeviceOf(file: string): string | null {
-  return /Device="([^"]*)" Key="(?:Pos_|Neg_)?GamePad_/.exec(file)?.[1] ?? null;
-}
-
 /** A slot as the file writes it: one line, or with its modifiers, one per line inside it. */
 function slotText(slot: EliteSlot, control: Control, key: EliteKey, end: string): string {
-  // One level deeper than the slot, by the step from the control to the slot.
-  const step = slot.indent.startsWith(control.indent)
-    ? slot.indent.slice(control.indent.length)
-    : '';
+  // One level deeper than the slot, by the file's own step from the control to the slot.
+  const step = slot.indent.slice(control.indent.length) || '\t';
   const head = `${slot.indent}<${slot.name} Device="${key.device}" Key="${key.key}"`;
   if (key.modifiers.length === 0) return `${head} />`;
   const inner = key.modifiers.map(
-    (m: EliteInput) =>
-      `${slot.indent}${step || '\t'}<Modifier Device="${m.device}" Key="${m.key}" />`,
+    (m: EliteInput) => `${slot.indent}${step}<Modifier Device="${m.device}" Key="${m.key}" />`,
   );
   return [`${head}>`, ...inner, `${slot.indent}</${slot.name}>`].join(end);
 }
@@ -346,13 +362,17 @@ export function writeEliteBinds(
   options: { padDevice?: string } = {},
 ): string {
   const lines = linesOf(file);
-  const actions = actionsOf(controlsOf(lines));
-  const byId = new Map(actions.map(({ id, control }) => [id, control]));
+  const controls = controlsOf(lines);
+  const byId = new Map(actionsOf(controls).map(({ id, control }) => [id, control]));
   const taken = takenBy(rows, (id) => {
     const control = byId.get(id);
     return control === undefined ? undefined : modeOf(control.tag);
   });
-  const padDevice = padDeviceOf(file) ?? options.padDevice ?? null;
+  // The device the file's controller bindings are on: a new one goes there too.
+  const padDevice =
+    controls.flatMap((control) => control.slots).find((slot) => isPadKey(slot.key))?.device ??
+    options.padDevice ??
+    null;
   const problems: string[] = [];
   /** Per first line of a slot: the slot, and what it becomes. */
   const changes = new Map<number, { slot: EliteSlot; control: Control; key: EliteKey }>();
@@ -364,32 +384,27 @@ export function writeEliteBinds(
       continue;
     }
     const name = nameOf(control.tag);
-    const others = taken(modeOf(control.tag), id);
     let slots = control.slots.map(stateOf);
-    let fine = true;
     for (const [set, list] of wanted) {
-      for (const signal of list.filter((s) => setOf(s) !== set)) {
+      for (const signal of list.filter((s) => setOf(s) !== set))
         problems.push(`${name}: ${signalWords(signal)} isn't a ${set} binding.`);
-        fine = false;
-      }
-      slots = keepSeconds(slots, set, list, others);
+      slots = keepSeconds(slots, set, list, taken(modeOf(control.tag)));
     }
-    if (!fine) continue;
     const placed = assignSlots(slots, wanted);
     for (const signal of placed.short)
       problems.push(
         `${name}: a control holds two bindings, so ${signalWords(signal)} doesn't fit.`,
       );
-    placed.slots.forEach((signal, i) => {
-      const slot = control.slots[i];
-      if (signal === undefined || slot === undefined) return;
+    control.slots.forEach((slot, i) => {
+      const signal = placed.slots[i];
+      if (signal === undefined) return;
       if (signal?.kind === 'pad' && padDevice === null) {
         problems.push(
           `${name}: the file has no controller in it to bind ${signalWords(signal)} to.`,
         );
         return;
       }
-      const key = signal === null ? EMPTY : eliteKeyOf(signal, padDevice ?? '');
+      const key = signal === null ? EMPTY : eliteKeyOf(signal, padDevice ?? NO_DEVICE);
       if (typeof key === 'string') problems.push(`${name}: ${key}`);
       else changes.set(slot.first, { slot, control, key });
     });
@@ -397,18 +412,20 @@ export function writeEliteBinds(
 
   if (problems.length > 0) throw new GameFileError(problems);
   const out: Line[] = [];
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+  let skipTo = -1;
+  lines.forEach((line, i) => {
+    if (i <= skipTo) return;
     const change = changes.get(i);
-    if (line === undefined) continue;
     if (change === undefined) {
       out.push(line);
-      continue;
+      return;
     }
-    const last = lines[change.slot.last] ?? line;
-    out.push({ text: slotText(change.slot, change.control, change.key, line.end), end: last.end });
-    i = change.slot.last;
-  }
+    out.push({
+      text: slotText(change.slot, change.control, change.key, line.end),
+      end: change.slot.end,
+    });
+    skipTo = change.slot.last;
+  });
   return joinLines(out);
 }
 
@@ -463,16 +480,13 @@ function presetFile(
 ): string | null {
   const own = fs
     .list(folder)
-    .map((entry) => ({
-      entry,
-      version: /^(.*)\.(\d+)\.(\d+)\.binds$/i.exec(entry),
-    }))
-    .filter(({ version }) => version?.[1]?.toLowerCase() === name.toLowerCase())
-    .sort((a, b) => {
-      const [, , aMajor = '0', aMinor = '0'] = a.version ?? [];
-      const [, , bMajor = '0', bMinor = '0'] = b.version ?? [];
-      return Number(bMajor) - Number(aMajor) || Number(bMinor) - Number(aMinor);
-    })[0];
+    .flatMap((entry) => {
+      const match = /(.*)\.(\d+)\.(\d+)\.binds$/i.exec(entry);
+      return match !== null && groupOf(match, 1).toLowerCase() === name.toLowerCase()
+        ? [{ entry, major: Number(groupOf(match, 2)), minor: Number(groupOf(match, 3)) }]
+        : [];
+    })
+    .sort((a, b) => b.major - a.major || b.minor - a.minor)[0];
   if (own !== undefined) return fs.join(folder, own.entry);
   return walk(fs, installDir, [...CONTROL_SCHEMES, `${name}.binds`]);
 }

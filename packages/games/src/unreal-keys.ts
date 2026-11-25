@@ -244,7 +244,7 @@ export function unrealKeyOf(signal: Signal): UnrealKey | string {
  */
 export function signalOfUnreal(slot: UnrealKey): Signal | 'empty' | null {
   if (slot.key === 'None') return 'empty';
-  const mod = slot.mod === 'None' ? undefined : MOD_OF.get(slot.mod);
+  const mod = MOD_OF.get(slot.mod);
   if (slot.mod !== 'None' && mod === undefined) return null;
   const code = KEY_OF.get(slot.key);
   if (code !== undefined)

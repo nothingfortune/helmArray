@@ -39,6 +39,7 @@ import type {
 import type { FolderReader, Line, Slot } from './game-file';
 import {
   GameFileError,
+  groupOf,
   assignSlots,
   entryOf,
   idMaker,
@@ -46,7 +47,6 @@ import {
   keepSeconds,
   linesOf,
   setOf,
-  signalKey,
   signalWords,
   takenBy,
   wantedByAction,
@@ -74,28 +74,32 @@ interface RowLine {
 /** One binding row: an action at a scale, or an axis, with its line in each input group. */
 interface Row {
   action: string;
-  axisName: string;
   category: string;
   isAxis: boolean;
   scale: number;
   lines: Map<string, RowLine>;
-  name: string;
 }
 
-const unquote = (value: string): string =>
-  value.startsWith('"') && value.endsWith('"') && value.length >= 2 ? value.slice(1, -1) : value;
+/** A quoted value without its quotes; any other as it is. */
+const unquote = (value: string): string => value.replace(/^"(.*)"$/, '$1');
 
 /** The fields of `Name=(a=1,b="x, y",c=F("p", "q"))`, from the first after the parenthesis. */
 function fieldsOf(text: string, from: number): Map<string, Field> | null {
   const fields = new Map<string, Field>();
+  /** A field is `name=value`; a part with no `=` in it is no field. */
   const add = (start: number, end: number): void => {
-    const eq = text.indexOf('=', start);
-    if (eq < 0 || eq >= end) return;
-    fields.set(text.slice(start, eq), { value: text.slice(eq + 1, end), start: eq + 1, end });
+    const eq = text.slice(start, end).indexOf('=');
+    if (eq >= 0)
+      fields.set(text.slice(start, start + eq), {
+        value: text.slice(start + eq + 1, end),
+        start: start + eq + 1,
+        end,
+      });
   };
   let depth = 0;
   let quoted = false;
   let start = from;
+  // Stryker disable next-line EqualityOperator: one step past the end reads no character, and no character is a quote, a parenthesis or a comma
   for (let i = from; i < text.length; i++) {
     const c = text[i];
     if (quoted) {
@@ -115,48 +119,57 @@ function fieldsOf(text: string, from: number): Map<string, Field> | null {
   return null;
 }
 
-const REQUIRED_FIELDS = ['Action', 'Category', 'bIsAxis', 'Scale', 'GroupName'];
+/** A line without these isn't one this module can read, and is left as it is. */
+const REQUIRED_FIELDS = [
+  'Action',
+  'Category',
+  'bIsAxis',
+  'Scale',
+  'GroupName',
+  'Key1',
+  'Key1Mod',
+  'Key2',
+  'Key2Mod',
+];
 
 /** The last quoted text of `NSLOCTEXT("ns", "key", "Boost [HOLD]")`: what the game shows. */
-function displayText(field: Field | undefined): string | null {
-  const texts = [...(field?.value ?? '').matchAll(/"((?:[^"\\]|\\.)*)"/g)].map((m) => m[1] ?? '');
-  const last = texts.at(-1)?.trim();
-  return last === undefined || last === '' ? null : last;
+function displayText(line: RowLine | undefined): string | null {
+  const value = line?.fields.get('DisplayName')?.value;
+  if (value === undefined) return null;
+  const last = [...value.matchAll(/"((?:[^"\\]|\\.)*)"/g)].at(-1);
+  const text = last === undefined ? '' : groupOf(last, 1).trim();
+  return text === '' ? null : text;
 }
 
-/** The binding rows of the file, in the order they first appear. */
+/** A row's name in the game's words: its keyboard line's, else the first line's that has one. */
+function nameOf(row: Row): string {
+  const lines = [row.lines.get('Keyboard'), ...row.lines.values()];
+  return lines.map(displayText).find((text) => text !== null) ?? row.action;
+}
+
+/**
+ * The binding rows of the file, in the order they first appear. A row is its action, category,
+ * scale and whether it is an axis; it has one line per input group, the first the file has.
+ */
 function rowsOf(lines: readonly Line[]): Row[] {
   const rows = new Map<string, Row>();
-  let section = '';
+  let section: string | null = null;
   lines.forEach((line, index) => {
     if (line.text.startsWith('[')) section = line.text.trim();
     if (section !== SECTION || !line.text.startsWith(ENTRY)) return;
     const fields = fieldsOf(line.text, ENTRY.length);
     if (fields === null || REQUIRED_FIELDS.some((name) => !fields.has(name))) return;
+    // Stryker disable next-line StringLiteral: every field read here is a required one, checked above, so the default is never used
     const get = (name: string): string => unquote(fields.get(name)?.value ?? '');
-    const slot = (n: 1 | 2): UnrealKey => ({
-      key: get(`Key${n}`) || 'None',
-      mod: get(`Key${n}Mod`) || 'None',
-    });
+    const slot = (n: 1 | 2): UnrealKey => ({ key: get(`Key${n}`), mod: get(`Key${n}Mod`) });
     const action = get('Action');
-    const axisName = get('AxisName');
     const category = get('Category');
     const isAxis = get('bIsAxis') === 'True';
     const scale = Number(get('Scale'));
-    const identity = JSON.stringify([action, get('ActionName'), axisName, category, isAxis, scale]);
-    const row = rows.get(identity) ?? {
-      action,
-      axisName,
-      category,
-      isAxis,
-      scale,
-      lines: new Map<string, RowLine>(),
-      name: '',
-    };
+    const identity = JSON.stringify([action, category, isAxis, scale]);
+    const row = rows.get(identity) ?? { action, category, isAxis, scale, lines: new Map() };
     const group = get('GroupName');
     if (!row.lines.has(group)) row.lines.set(group, { index, fields, slots: [slot(1), slot(2)] });
-    if (row.name === '' || group === 'Keyboard')
-      row.name = displayText(fields.get('DisplayName')) ?? '';
     rows.set(identity, row);
   });
   return [...rows.values()];
@@ -178,8 +191,7 @@ const MODES: readonly (Mode & { categories: readonly string[] })[] = [
 function modeOf(category: string): Mode {
   const known = MODES.find((mode) => mode.categories.includes(category));
   if (known !== undefined) return { id: known.id, name: known.name };
-  const n = category.replace(/[^0-9]/g, '') || '0';
-  return { id: `category_${n}`, name: `Category ${n}` };
+  return { id: `category_${category.replace(/[^A-Za-z0-9]/g, '')}`, name: `Category ${category}` };
 }
 
 function roleOf(row: Row): Role | undefined {
@@ -210,7 +222,8 @@ interface Stick {
   line: RowLine;
   slot: 1 | 2;
   ends: readonly [PadControl, PadControl];
-  sign: number;
+  /** A negative scale or `bInvert` turns the axis round; both turn it back. */
+  flipped: boolean;
 }
 
 function stickOf(row: Row): Stick | null {
@@ -222,24 +235,18 @@ function stickOf(row: Row): Stick | null {
   const only = used.length === 1 ? used[0] : undefined;
   const ends = only === undefined ? undefined : STICK_AXES.get(only.s.key);
   if (only === undefined || ends === undefined || only.s.mod !== 'None') return null;
-  const inverted = unquote(line.fields.get('bInvert')?.value ?? '') === 'True';
-  return { row, line, slot: only.slot, ends, sign: Math.sign(row.scale) * (inverted ? -1 : 1) };
+  const inverted = line.fields.get('bInvert')?.value === 'True';
+  return { row, line, slot: only.slot, ends, flipped: row.scale < 0 !== inverted };
 }
 
 /** The stick direction an axis row gives a row that isn't an axis: its half of the stick. */
 function halfOf(stick: Stick, row: Row): PadControl {
-  return Math.sign(row.scale) * stick.sign >= 0 ? stick.ends[0] : stick.ends[1];
+  return row.scale < 0 !== stick.flipped ? stick.ends[1] : stick.ends[0];
 }
 
-/** The rows an axis row drives: the rows of its action and axis that aren't axes. */
+/** The rows an axis row drives: the rows of its action, in its category, that aren't axes. */
 const halvesOf = (rows: readonly Row[], axis: Row): Row[] =>
-  rows.filter(
-    (row) =>
-      !row.isAxis &&
-      row.action === axis.action &&
-      row.axisName === axis.axisName &&
-      row.category === axis.category,
-  );
+  rows.filter((row) => !row.isAxis && row.action === axis.action && row.category === axis.category);
 
 /** The axis rows that drive a row. */
 const axesOf = (rows: readonly Row[], half: Row): Row[] =>
@@ -269,34 +276,36 @@ const sticksOf = (rows: readonly Row[]): Map<Row, Stick> => {
 const describeKey = (key: UnrealKey): string =>
   key.mod === 'None' ? key.key : `${key.key} with ${key.mod} held`;
 
-/** The group each binding set lives in, and the kinds of signal it takes. */
-const GROUPS: Readonly<Record<BindingSet, { group: string; takes: (s: Signal) => boolean }>> = {
-  keyboard: { group: 'Keyboard', takes: (s) => setOf(s) === 'keyboard' },
-  controller: { group: 'Gamepad', takes: (s) => setOf(s) === 'controller' },
+const SETS: readonly BindingSet[] = ['keyboard', 'controller'];
+
+/** The group each binding set lives in. */
+const GROUPS: Readonly<Record<BindingSet, string>> = {
+  keyboard: 'Keyboard',
+  controller: 'Gamepad',
 };
 
+/** A row's slots in one set: a slot holding a signal of the other set is kept, not read. */
 function slotsOf(row: Row, set: BindingSet): Slot[] {
-  const { group, takes } = GROUPS[set];
-  const line = row.lines.get(group);
-  if (line === undefined) return [];
-  return line.slots.map((key): Slot => {
+  return (row.lines.get(GROUPS[set])?.slots ?? []).map((key): Slot => {
     const signal = signalOfUnreal(key);
     if (signal === 'empty') return { state: 'empty' };
-    return signal !== null && takes(signal) ? { state: 'read', signal } : { state: 'kept' };
+    return signal !== null && setOf(signal) === set ? { state: 'read', signal } : { state: 'kept' };
   });
 }
 
 const readOf = (slots: readonly Slot[]): Signal[] =>
   slots.flatMap((slot) => (slot.state === 'read' ? [slot.signal] : []));
 
-/** A row's controller signals as the game has them: its own line's, else its half of a stick. */
-function padOf(row: Row, sticks: ReadonlyMap<Row, Stick>): Signal[] {
-  const own = readOf(slotsOf(row, 'controller'));
+/** A row's controller bindings as the game has them: its half of a stick, else its own line's. */
+function padOf(row: Row, sticks: ReadonlyMap<Row, Stick>): PadControl[] {
   const stick = sticks.get(row);
-  return own.length > 0 || stick === undefined
-    ? own
-    : [{ kind: 'pad', control: halfOf(stick, row) }];
+  return stick === undefined
+    ? readOf(slotsOf(row, 'controller')).flatMap((s) => (s.kind === 'pad' ? [s.control] : []))
+    : [halfOf(stick, row)];
 }
+
+const padSignals = (controls: readonly PadControl[]): Signal[] =>
+  controls.map((control) => ({ kind: 'pad', control }));
 
 /** The file's actions: every row that isn't an axis, with the id a harvest gives it. */
 function actionsOf(rows: readonly Row[]): { id: ActionId; row: Row }[] {
@@ -344,6 +353,34 @@ export function findEverspace2Ini(
   return null;
 }
 
+/** What a row's lines hold that the game's data can't: what isn't read, and a second binding. */
+function keptOf(
+  action: ActionId,
+  row: Row,
+  rows: readonly Row[],
+  sticks: ReadonlyMap<Row, Stick>,
+): KeptBinding[] {
+  const out: KeptBinding[] = [];
+  for (const set of SETS) {
+    const states = slotsOf(row, set);
+    let first = true;
+    (row.lines.get(GROUPS[set])?.slots ?? []).forEach((key, i) => {
+      const state = states[i]?.state;
+      if (state === 'kept' || (state === 'read' && !first))
+        out.push({ action, set, text: describeKey(key) });
+      if (state === 'read') first = false;
+    });
+  }
+  // What the row's axis rows hold that helmArray doesn't manage: a mouse axis, a stick it leaves.
+  for (const axis of axesOf(rows, row))
+    for (const set of SETS) {
+      if (set === 'controller' && sticks.get(row)?.row === axis) continue;
+      for (const key of axis.lines.get(GROUPS[set])?.slots ?? [])
+        if (key.key !== 'None') out.push({ action, set, text: `${describeKey(key)} (axis)` });
+    }
+  return out;
+}
+
 /**
  * The game as its Input.ini has it: the modes, every action in the game's words, and what each is
  * bound to on the keyboard and the controller. The game's id and name are the caller's.
@@ -356,39 +393,22 @@ export function harvestUnrealIni(file: string, game: { id: string; name: string 
   const actions = actionsOf(rows).map(({ id, row }): Action => {
     const mode = modeOf(row.category);
     modes.set(mode.id, mode);
-    for (const set of ['keyboard', 'controller'] as const) {
-      const line = row.lines.get(GROUPS[set].group);
-      let read = 0;
-      slotsOf(row, set).forEach((slot, i) => {
-        const key = line?.slots[i];
-        if (slot.state === 'read') read++;
-        if (key !== undefined && (slot.state === 'kept' || (read > 1 && slot.state === 'read')))
-          kept.push({ action: id, set, text: describeKey(key) });
-      });
-    }
-    // What the row's axis rows hold that helmArray doesn't manage: a mouse axis, a stick it leaves.
-    for (const axis of axesOf(rows, row))
-      for (const set of ['keyboard', 'controller'] as const) {
-        if (set === 'controller' && sticks.get(row)?.row === axis) continue;
-        for (const key of axis.lines.get(GROUPS[set].group)?.slots ?? [])
-          if (key.key !== 'None')
-            kept.push({ action: id, set, text: `${describeKey(key)} (axis)` });
-      }
+    kept.push(...keptOf(id, row, rows, sticks));
     const key = readOf(slotsOf(row, 'keyboard'))[0];
     const pad = padOf(row, sticks)[0];
     const role = roleOf(row);
     return {
       id,
-      name: row.name || row.action,
+      name: nameOf(row),
       mode: mode.id,
       ...(role === undefined ? {} : { role }),
       required: REQUIRED.has(`${row.category}:${row.action}`),
-      ...(key === undefined && pad?.kind !== 'pad'
+      ...(key === undefined && pad === undefined
         ? {}
         : {
             native: {
               ...(key === undefined ? {} : { key }),
-              ...(pad?.kind === 'pad' ? { pad: pad.control } : {}),
+              ...(pad === undefined ? {} : { pad }),
             },
           }),
     };
@@ -425,10 +445,6 @@ function rewrite(line: RowLine, text: string, slots: ReadonlyMap<1 | 2, UnrealKe
 
 const NONE: UnrealKey = { key: 'None', mod: 'None' };
 
-const sameSignals = (a: readonly Signal[], b: readonly Signal[]): boolean =>
-  a.length === b.length &&
-  [...a.map(signalKey)].sort().join('|') === [...b.map(signalKey)].sort().join('|');
-
 /**
  * The file with the setup's bindings in it: for each action and binding set the rows name, the
  * set's slots hold exactly the rows' signals (a null row: nothing). An action or set with no rows
@@ -440,9 +456,7 @@ export function writeUnrealIni(file: string, rows: readonly GameBinding[]): stri
   const lines = linesOf(file);
   const all = rowsOf(lines);
   const sticks = sticksOf(all);
-  const actions = actionsOf(all);
-  const byId = new Map(actions.map(({ id, row }) => [id, row]));
-  const idOf = new Map(actions.map(({ id, row }) => [row, id]));
+  const byId = new Map(actionsOf(all).map(({ id, row }) => [id, row]));
   const taken = takenBy(rows, (id) => {
     const row = byId.get(id);
     return row === undefined ? undefined : modeOf(row.category).id;
@@ -457,59 +471,59 @@ export function writeUnrealIni(file: string, rows: readonly GameBinding[]): stri
 
   /** Puts a set's wanted signals into a row's line, or says why not. */
   const place = (row: Row, set: BindingSet, list: readonly Signal[]): void => {
-    const line = row.lines.get(GROUPS[set].group);
+    const line = row.lines.get(GROUPS[set]);
     if (line === undefined) {
-      if (list.length > 0) problems.push(`${row.name}: the file has no ${set} line for it.`);
+      if (list.length > 0) problems.push(`${nameOf(row)}: the file has no ${set} line for it.`);
       return;
     }
-    const others = taken(modeOf(row.category).id, idOf.get(row) ?? '');
     const { slots, short } = assignSlots(
-      keepSeconds(slotsOf(row, set), set, list, others),
+      keepSeconds(slotsOf(row, set), set, list, taken(modeOf(row.category).id)),
       new Map([[set, [...list]]]),
     );
     for (const signal of short)
       problems.push(
-        `${row.name}: a line holds two bindings, so ${signalWords(signal)} doesn't fit.`,
+        `${nameOf(row)}: a line holds two bindings, so ${signalWords(signal)} doesn't fit.`,
       );
     slots.forEach((signal, i) => {
       if (signal === undefined) return;
       const key = signal === null ? NONE : unrealKeyOf(signal);
-      if (typeof key === 'string') problems.push(`${row.name}: ${key}`);
+      if (typeof key === 'string') problems.push(`${nameOf(row)}: ${key}`);
       else change(line, (i + 1) as 1 | 2, key);
     });
   };
 
-  const wanted = wantedByAction(rows);
   const controller = new Map<Row, Signal[]>();
-  for (const [id, sets] of wanted) {
+  for (const [id, sets] of wantedByAction(rows)) {
     const row = byId.get(id);
     if (row === undefined) {
       problems.push(`The file has no action "${id}".`);
       continue;
     }
     for (const [set, list] of sets) {
-      const misplaced = list.filter((signal) => setOf(signal) !== set);
-      for (const signal of misplaced)
-        problems.push(`${row.name}: ${signalWords(signal)} isn't a ${set} binding.`);
-      if (misplaced.length > 0) continue;
+      for (const signal of list.filter((s) => setOf(s) !== set))
+        problems.push(`${nameOf(row)}: ${signalWords(signal)} isn't a ${set} binding.`);
       if (set === 'keyboard') place(row, set, list);
       else controller.set(row, list);
     }
   }
 
   // The controller set, a stick at a time: a stick's halves move together or not at all.
-  const done = new Set<Row>();
+  const handled = new Set<Stick>();
   for (const [row, list] of controller) {
-    if (done.has(row)) continue;
     const stick = sticks.get(row);
     if (stick === undefined) {
       place(row, 'controller', list);
       continue;
     }
+    if (handled.has(stick)) continue;
+    handled.add(stick);
     const halves = [...sticks].filter(([, s]) => s === stick).map(([half]) => half);
-    const want = (half: Row): Signal[] => controller.get(half) ?? padOf(half, sticks);
-    for (const half of halves) done.add(half);
-    if (halves.every((half) => sameSignals(want(half), padOf(half, sticks)))) continue;
+    const want = (half: Row): Signal[] => controller.get(half) ?? padSignals(padOf(half, sticks));
+    const stays = halves.every((half) => {
+      const [only, ...more] = want(half);
+      return more.length === 0 && only?.kind === 'pad' && only.control === halfOf(stick, half);
+    });
+    if (stays) continue;
     change(stick.line, stick.slot, NONE);
     for (const half of halves) place(half, 'controller', want(half));
   }
