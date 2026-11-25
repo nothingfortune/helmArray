@@ -127,7 +127,10 @@ export interface GameSection {
   summary: string;
   /** The game's file, by name, once found: only for the file helmArray writes. */
   file?: string;
-  /** For the file: how many bindings in each mode, and that a copy is kept; or that none change. */
+  /**
+   * For the file: how many bindings in each mode, and that a copy is kept; or that none change. For
+   * a sheet: why the rows are set by hand, when the file helmArray would write isn't there.
+   */
   note?: string;
   /** A label only when there is more than one group. */
   groups: { label: string | null; lines: string[] }[];
@@ -147,6 +150,11 @@ export interface DrawerView {
   sections: UnitSection[];
   /** The game's bindings that change, before Apply; null when none does. */
   game: GameSection | null;
+  /**
+   * Before Apply, beside the file: the bindings of actions the file doesn't have, to set by hand;
+   * null when there are none.
+   */
+  byHand: GameSection | null;
   /**
    * After an Apply that went through: the bindings still to be set by hand in the game's own
    * controls (the bind sheet, until helmArray writes the game's file); null when there are none.
@@ -312,7 +320,11 @@ export function gameSection(game: ApplyGame, title?: string): GameSection | null
     title: title ?? (sheet ? "In the game's controls" : 'Game file'),
     summary: sheet ? `${n} to set by hand` : file?.same === true ? 'No change' : counted,
     ...(file === undefined || file.name === null ? {} : { file: file.name }),
-    ...(file === undefined ? {} : { note: fileNote(game) }),
+    ...(file !== undefined
+      ? { note: fileNote(game) }
+      : game.note === undefined
+        ? {}
+        : { note: game.note }),
     groups: [...groups.values()].map((g) => ({
       label: groups.size > 1 ? g.label : null,
       lines: g.lines,
@@ -340,11 +352,32 @@ function progressWords(preview: ApplyPreview): string {
   return `${units}. ${keep} and the Azeron app closed.`;
 }
 
+/**
+ * The rows of actions the game's file doesn't have (added by hand), to set in the game's own menu;
+ * null when there are none.
+ */
+export function byHandSection(preview: ApplyPreview, title?: string): GameSection | null {
+  const rows = preview.game.byHand ?? [];
+  if (rows.length === 0) return null;
+  const file =
+    preview.gameName === '' ? "The game's controls file" : `${preview.gameName}'s controls file`;
+  const what = rows.length === 1 ? 'this action' : 'these actions';
+  return gameSection(
+    {
+      via: 'sheet',
+      rows,
+      note: `${file} doesn't have ${what}, so set ${rows.length === 1 ? 'it' : 'them'} in the game's own menu.`,
+    },
+    title,
+  );
+}
+
 export function drawerView(state: DrawerState): DrawerView {
-  const closed: Pick<DrawerView, 'sections' | 'checks' | 'game' | 'sheet'> = {
+  const closed: Pick<DrawerView, 'sections' | 'checks' | 'game' | 'byHand' | 'sheet'> = {
     sections: [],
     checks: [],
     game: null,
+    byHand: null,
     sheet: null,
   };
   const idle = { progress: null, result: null, loading: null, unavailable: null, notice: null };
@@ -383,6 +416,7 @@ export function drawerView(state: DrawerState): DrawerView {
     .filter((u) => u.used)
     .map((u) => unitSection(u, preview.azeronOpen));
   const game = gameSection(preview.game);
+  const byHand = byHandSection(preview);
   if (state.phase === 'ready') {
     return {
       ...head,
@@ -391,6 +425,7 @@ export function drawerView(state: DrawerState): DrawerView {
       checks: shownChecks(preview.checks),
       sections,
       game,
+      byHand,
       sheet: null,
       cancel: { label: 'Cancel', disabled: false },
       apply: { label: 'Apply', disabled: !canApply(state) },
@@ -405,6 +440,7 @@ export function drawerView(state: DrawerState): DrawerView {
       checks: shownChecks(preview.checks),
       sections,
       game,
+      byHand,
       sheet: null,
       cancel: { label: 'Cancel', disabled: true },
       apply: { label: 'Applying…', disabled: true },
@@ -412,6 +448,10 @@ export function drawerView(state: DrawerState): DrawerView {
     };
   }
   const { result } = state;
+  const nowTitle =
+    preview.gameName === ''
+      ? "Now, in the game's controls"
+      : `Now, in ${preview.gameName}'s controls`;
   return {
     ...head,
     ...idle,
@@ -427,16 +467,13 @@ export function drawerView(state: DrawerState): DrawerView {
     checks: [],
     sections: [],
     game: null,
+    byHand: null,
     // Rows only the person can now set: the units are done, the game is theirs.
-    sheet:
-      result.ok && preview.game.via === 'sheet'
-        ? gameSection(
-            preview.game,
-            preview.gameName === ''
-              ? "Now, in the game's controls"
-              : `Now, in ${preview.gameName}'s controls`,
-          )
-        : null,
+    sheet: !result.ok
+      ? null
+      : preview.game.via === 'sheet'
+        ? gameSection(preview.game, nowTitle)
+        : byHandSection(preview, nowTitle),
     cancel: { label: 'Close', disabled: false },
     apply: result.ok ? null : { label: 'Try again', disabled: false },
     closable: true,

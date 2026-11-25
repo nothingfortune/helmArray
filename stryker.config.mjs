@@ -58,6 +58,7 @@ export default {
     'packages/core/src/sticks.ts', // what a stick does for the Azerons' output
     'packages/core/src/games/**/*.ts',
     'packages/core/src/game-data.ts', // a game's data checked before it is saved
+    'packages/core/src/harvest.ts', // a game's file merged into its data, never losing an edit
     '!packages/core/src/**/*.test.ts',
     // Games: Steam folders, the VDF readers and writers, and the game file adapters (Everspace 2's
     // Input.ini, Elite's .binds and StartPreset: find, harvest, write, and the key names).
@@ -80,6 +81,7 @@ export default {
     'packages/app/src/main/hid-transport.ts',
     'packages/app/src/main/processes.ts',
     'packages/app/src/main/game-file.ts', // the game's file: refused, backed up, written, verified, put back
+    'packages/app/src/main/game-harvest.ts', // the game's file read into its data, never written
     'packages/app/src/main/exchange-log.ts',
     'packages/app/src/main/e2e-seam.ts',
     'packages/app/src/main/compose.ts',
@@ -99,6 +101,7 @@ export default {
     // The Game screen: its edits, its state, press-to-set and what it listens to while waiting.
     'packages/app/src/renderer/screens/game-model.ts',
     'packages/app/src/renderer/screens/game-editor.ts',
+    'packages/app/src/renderer/screens/file-read.ts', // what reading the game's file changes, in words
     'packages/app/src/renderer/screens/capture.ts',
     'packages/app/src/renderer/screens/press-listener.ts',
     'packages/app/src/renderer/screens/gameTile.ts',

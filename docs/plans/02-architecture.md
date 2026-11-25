@@ -170,8 +170,49 @@ button does in this game), and the action names Play view shows.
 | Unreal games that keep defaults inside their pak files | nothing readable; taught by pressing (v2) |
 | Steam Input templates the game ships           | pad layout, where present (spike)       |
 
-Harvested data is stored as the game's **defaults**, read-only; your scheme is always a copy.
-Re-harvest after a game update shows what changed.
+A harvest goes into the game's data (`games/<id>.json`), the same data the Game screen edits:
+its modes, its actions with their default key and controller button, and `file.format`. Your
+setups are always copies, and never change when the game's data does. With it the data keeps
+what the file held at that read (`Game.fromFile`), so the next read can tell what you changed
+from what the game changed.
+
+**Reading the file again** (`mergeHarvest`, core's `harvest.ts`) never loses anything you typed.
+Per field (an action's name, mode, role, *required*, default key and default button; a mode's
+name), with what the file has now, what it had at the last read, and what the data has:
+
+- The data still has what the file had last time: it takes what the file has now (the game was
+  updated, or rebound in its own menu).
+- The data has something else: that is yours, and it stays. A game never read before counts
+  every value it has as yours; a value it doesn't have is filled from the file.
+- A binding the file has because helmArray put it there (what the game holds from the last
+  Apply, its baseline) isn't news from the game: it counts as what the file had last time. So
+  Apply then a read changes no default.
+- An action or mode in the file and not in the data is added at the end of its mode, unless its
+  id is retired (you deleted it, or its mode: the Game screen's rule, so it never comes back) or
+  its mode isn't there. One in the data and not in the file stays: added by hand, or gone from
+  the file.
+- `file.format` is the file's; the game's name, Steam id, retired ids and *the sticks must send
+  keys* are the data's.
+
+A file with nothing a game can be made of (empty, or only lines the adapter ignores: no action,
+or a game core's `gameProblem` refuses) is never a read: not a game found from its tile (the
+tile stays *Set up*, and the Game screen says in one sentence that the file has nothing
+helmArray can read), not a re-read, and `mergeHarvest` refuses it, so no merge gives a game that
+can't be saved.
+
+A re-read is shown before it is saved: one list of what changes (and what of yours stays though
+the file differs), and one button. The first read of a game has nothing of yours to lose and
+saves at once.
+
+**Where it is read** (`app/main/game-harvest.ts`, read only: the game's file is never written by
+a read). The games helmArray has a file format for are known by their Steam app id (Everspace 2,
+1128920; Elite Dangerous, 359320). A game whose file is found and whose data the app doesn't have
+yet is listed as a game helmArray knows (its Steam tile, *Game's own keys* offered) and is saved
+the first time it is used: a scheme made from it, or an edit on the Game screen. So setting one up
+from its tile is a click on the tile, one on the preset, and Apply, as for a game that ships with
+helmArray. A game with a file format (or known by its id or Steam id) has *Read from the game's file*
+on the Game screen. Deleting a game read this way brings it back from its file, fresh, the next
+time the Library looks.
 
 ## Targets
 
@@ -186,7 +227,7 @@ interface Target<P> {
 | Target      | apply                                                                                  | verify                         | Refuses when                       |
 | ----------- | -------------------------------------------------------------------------------------- | ------------------------------ | ---------------------------------- |
 | Units       | write the one slot, switch to it, delete every other slot; only the units the setup uses (left only for *left Azeron + mouse*) | read every slot back           | Azeron app running; unknown unit   |
-| Game file   | back up, write the whole file: keyboard **and** controller bindings for the setup      | re-read, harvest, compare      | game running; file not found, unreadable, or can't take the bindings |
+| Game file   | back up, write the whole file: keyboard **and** controller bindings for the setup      | re-read, harvest, compare      | game running; file unreadable, or can't take the bindings (a file not found isn't a refusal: the bind sheet) |
 | Bind sheet  | nothing to write; shown and printable                                                  | —                              | —                                  |
 | Helper (v2) | load the macro program                                                                 | —                              | game not opted in                  |
 
@@ -195,9 +236,14 @@ The units' profile button is never part of any flow: the app writes, switches, a
 
 **The game file target** (M5, `app/main/game-file.ts`). Its preview is the write done in memory:
 the file found (the adapter's `find`, under `%LOCALAPPDATA%`), read as UTF-8 and given the plan's
-`gameBindings`, so a file that is missing, unreadable or can't take them (an action it doesn't
-have, a key it can't name) is a check that isn't ready, before any unit is written; text that
-comes out the same is not written at all. The game must be closed, told from the running
+`gameBindings`, so a file that is unreadable or can't take them (a key it can't name, more
+bindings than a line holds) is a check that isn't ready, before any unit is written; text that comes out the
+same is not written at all. A file that isn't there (Everspace 2 saves one only once a control is
+changed in its menu) doesn't stop Apply: the units are written, and the game's half is bind sheet
+rows with one sentence saying why; the game's baseline doesn't move, so the Library's reminder
+keeps them until *Done*. An action the file doesn't have (one added by hand on the Game screen)
+has no line to write: its rows are bind sheet rows, listed apart in the drawer, the rest is
+written, and the baseline moves for the rest only. The game must be closed, told from the running
 programs; a game whose programs helmArray doesn't know can't be told running, so its file is
 never written and its bindings stay on the bind sheet. A write keeps a copy of the file first in
 the data folder (`backups/<game>/`, named by when, the newest five), then reads the file back:

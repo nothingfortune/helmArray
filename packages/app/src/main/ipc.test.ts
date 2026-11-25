@@ -77,6 +77,9 @@ function setup() {
     saveGame: vi.fn<HelmHandlers['saveGame']>(() => Promise.resolve()),
     deleteGame: vi.fn<HelmHandlers['deleteGame']>(() => Promise.resolve()),
     dismissSheet: vi.fn<HelmHandlers['dismissSheet']>(() => Promise.resolve()),
+    readGameFile: vi.fn<HelmHandlers['readGameFile']>(() =>
+      Promise.resolve({ ok: false, message: "helmArray can't find Rover's controls file." }),
+    ),
   };
   const off = registerHelmIpc(registry, { state: () => STATE, ...calls });
   const call = (channel: string, ...args: unknown[]) =>
@@ -107,6 +110,7 @@ describe('the IPC channels', () => {
         CHANNELS.saveGame,
         CHANNELS.deleteGame,
         CHANNELS.dismissSheet,
+        CHANNELS.readGameFile,
       ].sort(),
     );
   });
@@ -287,6 +291,15 @@ describe('the game channels', () => {
     expect(calls.dismissSheet).toHaveBeenCalledWith('rover');
   });
 
+  it('passes the game whose file is to be read through, and gives back what was read', async () => {
+    const { call, calls } = setup();
+    expect(await call(CHANNELS.readGameFile, 'rover')).toEqual({
+      ok: false,
+      message: "helmArray can't find Rover's controls file.",
+    });
+    expect(calls.readGameFile).toHaveBeenCalledWith('rover');
+  });
+
   it('passes a game id to be deleted through', async () => {
     const { call, calls } = setup();
     await call(CHANNELS.deleteGame, 'rover');
@@ -313,6 +326,7 @@ describe('the game channels', () => {
     ['deleteGame', ['con'], "deleteGame: that isn't an id."],
     ['deleteGame', [7], "deleteGame: that isn't an id."],
     ['dismissSheet', ['../x'], "dismissSheet: that isn't an id."],
+    ['readGameFile', ['../games/x'], "readGameFile: that isn't an id."],
   ] as const)('refuses %s with %j, saying why', async (name, args, message) => {
     const { call, calls } = setup();
     await expect(call(CHANNELS[name], ...args)).rejects.toThrow(message);

@@ -93,6 +93,24 @@ describe('the merged library', () => {
     });
   });
 
+  it("says why a Steam game's own file can't be used, on its tile only while helmArray has no data for it", () => {
+    const note = "Everspace 2's controls file has nothing helmArray can read.";
+    const entries = mergeLibrary({
+      steam: [steam('1128920', 'EVERSPACE 2'), steam('553850', 'HELLDIVERS 2')],
+      games: [HD2],
+      schemes: none,
+      activeSchemeOf: () => null,
+      fileNotes: new Map([
+        ['1128920', note],
+        ['553850', 'never shown: helmArray has data for it'],
+      ]),
+    });
+    expect(entries.map((e) => [e.appId, e.fileNote])).toEqual([
+      ['553850', undefined],
+      ['1128920', note],
+    ]);
+  });
+
   it('keeps a known game Steam does not list, with the placeholder (Steam absent)', () => {
     const entries = mergeLibrary({
       steam: [],

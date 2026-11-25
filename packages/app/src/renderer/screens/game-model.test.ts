@@ -384,8 +384,35 @@ describe('loadedOf', () => {
     });
   });
 
+  it('opens a game read from its file just now as not saved, under its own id, its file readable', () => {
+    expect(
+      loadedOf({ kind: 'edit', gameId: 'rover' }, [
+        { game: two, builtIn: false, found: true, readsFile: true },
+      ]),
+    ).toEqual({
+      game: two,
+      builtIn: false,
+      edited: false,
+      saved: false,
+      found: true,
+      readsFile: true,
+      reserved: { modes: [], actions: [] },
+    });
+  });
+
   it('is nothing for a game that isn’t there any more', () => {
     expect(loadedOf({ kind: 'edit', gameId: 'gone' }, entries)).toBeNull();
+  });
+
+  it("says, for a new game, why its own file couldn't be used", () => {
+    const note = "Everspace 2's controls file has nothing helmArray can read.";
+    expect(loadedOf({ kind: 'new', name: 'Everspace 2', note }, entries)?.note).toBe(note);
+  });
+
+  it('says nothing of a file for a new game that has no note', () => {
+    expect(Object.keys(loadedOf({ kind: 'new', name: 'Rover' }, entries) ?? {})).not.toContain(
+      'note',
+    );
   });
 
   it('makes a new game, not saved yet, with an id no game has', () => {

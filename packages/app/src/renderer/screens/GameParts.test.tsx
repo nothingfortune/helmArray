@@ -13,6 +13,7 @@ import {
   ActionTable,
   AddAction,
   BackLink,
+  FileRead,
   ModeHead,
   ModeTabs,
   Notices,
@@ -28,6 +29,7 @@ const PARTS = new Set<unknown>([
   ActionTable,
   AddAction,
   BackLink,
+  FileRead,
   ModeHead,
   ModeTabs,
   Notices,
@@ -634,6 +636,97 @@ describe('the title bar', () => {
       'Added by you',
       'New game',
     ]);
+  });
+
+  it("says a game read from its file just now is the file's, whatever else it is", () => {
+    expect(titleNote(false, false, false, true)).toBe("Read from the game's file");
+  });
+
+  it("offers Read from the game's file beside the rest, for a game whose file helmArray reads", () => {
+    const onReadFile = vi.fn();
+    const { node } = bar({ readsFile: true, onReadFile });
+    fire(named(node, "Read from the game's file"), 'onClick');
+    expect([names(node), onReadFile.mock.calls.length]).toEqual([
+      [
+        'Library',
+        'Game name',
+        'Undo',
+        'Redo',
+        "Read from the game's file",
+        'Delete game',
+        'Xbox controller',
+        "Game's own keys",
+      ],
+      1,
+    ]);
+  });
+
+  it('says it is reading, and takes no second click meanwhile', () => {
+    const button = named(bar({ readsFile: true, reading: true }).node, 'Reading…');
+    expect(button.props['disabled']).toBe(true);
+  });
+
+  it('offers no read while it asks before a delete', () => {
+    expect(names(bar({ readsFile: true, confirming: true }).node)).not.toContain(
+      "Read from the game's file",
+    );
+  });
+});
+
+describe("what reading the game's file found", () => {
+  const take = vi.fn();
+  const drop = vi.fn();
+  const read = (r: Parameters<typeof FileRead>[0]['read']) => (
+    <FileRead read={r} onTake={take} onDrop={drop} />
+  );
+
+  it('lists what saving it changes, with one button to save and one to put it away', () => {
+    const node = read({
+      kind: 'changes',
+      game,
+      lines: ['Map: default key M → N.', 'New mode: Menus.'],
+    });
+    take.mockClear();
+    drop.mockClear();
+    fire(named(node, 'Save these changes'), 'onClick');
+    fire(named(node, 'Cancel'), 'onClick');
+    expect({
+      html: renderToStaticMarkup(node).includes(
+        '<li>Map: default key M → N.</li><li>New mode: Menus.</li>',
+      ),
+      buttons: names(node),
+      took: take.mock.calls.length,
+      dropped: drop.mock.calls.length,
+    }).toEqual({ html: true, buttons: ['Save these changes', 'Cancel'], took: 1, dropped: 1 });
+  });
+
+  it('says there is nothing to change, with what of yours stays, and only Close', () => {
+    const node = read({
+      kind: 'same',
+      message: 'Nothing to change.',
+      lines: ['Boost keeps yours.'],
+    });
+    expect([
+      names(node),
+      renderToStaticMarkup(node).includes('<li>Boost keeps yours.</li>'),
+    ]).toEqual([['Close'], true]);
+  });
+
+  it('draws no list when nothing of yours stays either', () => {
+    expect(
+      renderToStaticMarkup(read({ kind: 'same', message: 'Nothing to change.', lines: [] })),
+    ).not.toContain('<ul');
+  });
+
+  it("says why it couldn't read the file, as an alert, and Close puts it away", () => {
+    drop.mockClear();
+    const node = read({ kind: 'failed', message: "helmArray can't find it." });
+    fire(named(node, 'Close'), 'onClick');
+    expect([
+      renderToStaticMarkup(node).includes('role="alert"'),
+      renderToStaticMarkup(node).includes('helmArray can&#x27;t find it.'),
+      drop.mock.calls.length,
+    ]).toEqual([true, true, 1]);
   });
 });
 

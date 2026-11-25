@@ -9,6 +9,7 @@ import type {
 } from '../../shared/api';
 import {
   START,
+  byHandSection,
   canApply,
   drawerView,
   gameSection,
@@ -280,6 +281,16 @@ describe('the game half of the drawer', () => {
     expect(gameSection({ via: 'sheet', rows: [row()] })).toEqual({
       title: "In the game's controls",
       summary: '1 to set by hand',
+      groups: [{ label: null, lines: ['Set Reload to Xbox Y'] }],
+    });
+  });
+
+  it("says why the rows are set by hand when the game's file helmArray would write isn't there", () => {
+    const note = "helmArray can't find Skiff's controls file, so set these in the game's own menu.";
+    expect(gameSection({ via: 'sheet', rows: [row()], note })).toEqual({
+      title: "In the game's controls",
+      summary: '1 to set by hand',
+      note,
       groups: [{ label: null, lines: ['Set Reload to Xbox Y'] }],
     });
   });
@@ -703,6 +714,57 @@ describe("the game's file in the drawer", () => {
       note: 'It already holds these bindings.',
       groups: [],
     });
+  });
+
+  it("lists apart, to set by hand, the actions the file doesn't have, before Apply and after", () => {
+    const wave = row({
+      set: 'keyboard',
+      action: 'wave',
+      actionName: 'Wave',
+      to: { kind: 'key', code: 'C' },
+      from: null,
+    });
+    const game = { via: 'file' as const, rows: [row()], file: FILE, byHand: [wave] };
+    const before = drawerView(ready({ game }));
+    const after = drawerView(
+      reduce(reduce(ready({ game }), { type: 'apply' }), { type: 'applied', result: OK }),
+    );
+    const failed = drawerView(
+      reduce(reduce(ready({ game }), { type: 'apply' }), { type: 'applied', result: FAILED }),
+    );
+    expect({
+      file: before.game?.groups[0]?.lines,
+      byHand: before.byHand,
+      after: after.sheet?.title,
+      failed: failed.sheet,
+    }).toEqual({
+      file: ['Reload · Xbox Y'],
+      byHand: {
+        title: "In the game's controls",
+        summary: '1 to set by hand',
+        note: "Skiff's controls file doesn't have this action, so set it in the game's own menu.",
+        groups: [{ label: null, lines: ['Set Wave to C'] }],
+      },
+      after: "Now, in Skiff's controls",
+      failed: null,
+    });
+  });
+
+  it("says 'these actions' for more than one the file doesn't have, and nothing for none", () => {
+    const wave = row({ action: 'wave', actionName: 'Wave' });
+    const bow = row({ action: 'bow', actionName: 'Bow' });
+    expect([
+      byHandSection(preview({ game: { via: 'file', rows: [], file: FILE, byHand: [wave, bow] } }))
+        ?.note,
+      byHandSection(
+        preview({ gameName: '', game: { via: 'file', rows: [], file: FILE, byHand: [wave] } }),
+      )?.note,
+      byHandSection(preview({ game: { via: 'file', rows: [], file: FILE } })),
+    ]).toEqual([
+      "Skiff's controls file doesn't have these actions, so set them in the game's own menu.",
+      "The game's controls file doesn't have this action, so set it in the game's own menu.",
+      null,
+    ]);
   });
 
   it("names no file it hasn't found", () => {

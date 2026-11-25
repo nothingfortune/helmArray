@@ -16,6 +16,8 @@ export interface LibraryInput {
   activeSchemeOf(gameId: string): string | null;
   /** The scheme of the game applied last, when, and its changes since; null when none was. */
   appliedOf?(gameId: string): { schemeId: string; at: number; changes: number } | null;
+  /** By Steam app id: why a game's own file, there, can't be used, in a sentence. */
+  fileNotes?: ReadonlyMap<string, string>;
 }
 
 const refOf = (scheme: Scheme): LibrarySchemeRef => ({
@@ -42,6 +44,13 @@ export function mergeLibrary(input: LibraryInput): LibraryEntry[] {
       known.set(String(game.steamAppId), game);
   }
 
+  /** For a Steam game helmArray has no data for: why its file can't be used, when it can't. */
+  const fileNoteOf = (game: Game | undefined, steam: SteamGame | undefined) => {
+    const note =
+      game === undefined && steam !== undefined ? input.fileNotes?.get(steam.appId) : undefined;
+    return note === undefined ? null : { fileNote: note };
+  };
+
   const entryOf = (game: Game | undefined, steam: SteamGame | undefined): LibraryEntry => {
     const appId = steam?.appId ?? (game?.steamAppId !== undefined ? String(game.steamAppId) : null);
     const schemes = game ? (input.schemes.get(game.id) ?? []).map(refOf) : [];
@@ -65,6 +74,7 @@ export function mergeLibrary(input: LibraryInput): LibraryEntry[] {
       hasCover: steam?.cover !== undefined,
       hasHeader: steam?.header !== undefined,
       actionCount: game?.actions.length ?? 0,
+      ...(fileNoteOf(game, steam) ?? {}),
     };
   };
 
@@ -111,6 +121,8 @@ export interface LibraryDeps {
   lastApplied(gameId: string): Promise<{ schemeId: string; at: number } | null>;
   /** How many changes a scheme has had since it was last applied (the sync pill's count). */
   changesOf?(schemeId: string): Promise<number>;
+  /** By Steam app id: why a game's own file, there, can't be used. */
+  fileNotes?(): Promise<ReadonlyMap<string, string>>;
 }
 
 export interface LibraryService {
@@ -149,9 +161,11 @@ export function createLibraryService(deps: LibraryDeps): LibraryService {
           applied.set(game.id, { ...last, changes: (await deps.changesOf?.(last.schemeId)) ?? 0 });
         }
       }
+      const fileNotes = await deps.fileNotes?.();
       return mergeLibrary({
         steam: library.games,
         games,
+        ...(fileNotes === undefined ? {} : { fileNotes }),
         schemes,
         activeSchemeOf: deps.activeSchemeOf,
         appliedOf: (gameId) => applied.get(gameId) ?? null,

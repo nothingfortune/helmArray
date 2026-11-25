@@ -35,6 +35,9 @@ function api(over: Partial<EditorApi> = {}) {
           } as Scheme)),
     ),
     setActive: vi.fn<HelmApi['setActive']>(over.setActive ?? (() => Promise.resolve())),
+    readGameFile: vi.fn<HelmApi['readGameFile']>(
+      over.readGameFile ?? (() => Promise.resolve({ ok: false, message: 'No file.' })),
+    ),
   };
 }
 
@@ -46,6 +49,8 @@ const open = (
     saved: boolean;
     taken: string[];
     reserved: { modes: string[]; actions: string[] };
+    found: boolean;
+    readsFile: boolean;
   }> = {},
   calls = api(),
 ) => ({
@@ -613,5 +618,142 @@ describe('the wait and the question belong to the mode shown: every move ends th
     editor.wait({ action: 'jump', part: 'key' });
     editor.setMode('default');
     expect(editor.state.waiting).toEqual({ action: 'jump', part: 'key' });
+  });
+});
+
+describe("reading the game's own file", () => {
+  /** Rover as its file has it now: Jump moved to J, and a new action. */
+  const fileRover: Game = {
+    ...rover,
+    file: { format: 'unreal-ini' },
+    actions: [
+      {
+        ...(rover.actions[0] as Game['actions'][number]),
+        native: { key: { kind: 'key', code: 'J' } },
+      },
+      { id: 'duck', name: 'Duck', mode: 'default', required: false },
+    ],
+  };
+  const reads = () =>
+    api({ readGameFile: () => Promise.resolve({ ok: true, file: fileRover, held: null }) });
+
+  it('is offered only for a game whose file helmArray reads', () => {
+    expect([
+      open(rover, { readsFile: true }).editor.readsFile,
+      open(rover).editor.readsFile,
+    ]).toEqual([true, false]);
+  });
+
+  it('shows what saving it changes, and saves nothing until asked', async () => {
+    const { editor, calls } = open(rover, { readsFile: true }, reads());
+    const reading = editor.readFile();
+    const during = editor.state.fileRead;
+    await reading;
+    expect({
+      during,
+      read: editor.state.fileRead,
+      asked: calls.readGameFile.mock.calls,
+      saved: calls.saveGame.mock.calls.length,
+    }).toEqual({
+      during: 'reading',
+      read: {
+        kind: 'changes',
+        game: expect.objectContaining({ file: { format: 'unreal-ini' } }) as Game,
+        lines: [
+          "Apply can write the game's controls file from now on.",
+          '1 new action in Default: Duck.',
+          'Jump keeps your default key, Space (the file has J).',
+        ],
+      },
+      asked: [['rover']],
+      saved: 0,
+    });
+  });
+
+  it('saves the changes with the one button, as one edit undo takes back', async () => {
+    const { editor, calls } = open(rover, { readsFile: true }, reads());
+    await editor.readFile();
+    editor.takeFile();
+    const taken = editor.game;
+    editor.undo();
+    expect({
+      ids: taken.actions.map((a) => a.id),
+      saved: calls.saveGame.mock.calls[0]?.[0],
+      list: editor.state.fileRead,
+      undone: editor.game,
+    }).toEqual({ ids: ['jump', 'duck'], saved: taken, list: null, undone: rover });
+  });
+
+  it('keeps the key you set, on a game never read before: every value it has is yours', async () => {
+    const { editor } = open(rover, { readsFile: true }, reads());
+    await editor.readFile();
+    editor.takeFile();
+    expect(editor.game.actions[0]?.native?.key).toEqual({ kind: 'key', code: 'Space' });
+  });
+
+  it('puts the list away with Cancel, saving nothing', async () => {
+    const { editor, calls } = open(rover, { readsFile: true }, reads());
+    await editor.readFile();
+    editor.dropFile();
+    editor.takeFile();
+    expect([editor.state.fileRead, editor.game, calls.saveGame.mock.calls.length]).toEqual([
+      null,
+      rover,
+      0,
+    ]);
+  });
+
+  it('drops a list made before an edit: it would undo the edit', async () => {
+    const { editor } = open(rover, { readsFile: true }, reads());
+    await editor.readFile();
+    editor.edit((g) => renameGame(g, 'Rover 2'));
+    editor.takeFile();
+    expect([editor.state.fileRead, editor.game.name, editor.game.actions.length]).toEqual([
+      null,
+      'Rover 2',
+      1,
+    ]);
+  });
+
+  it('drops a list made before an undo', async () => {
+    const { editor } = open(rover, { readsFile: true }, reads());
+    editor.edit((g) => renameGame(g, 'Rover 2'));
+    await editor.readFile();
+    editor.undo();
+    expect(editor.state.fileRead).toBeNull();
+  });
+
+  it("says why when the file can't be read, and when the ask itself fails", async () => {
+    const failing = open(rover, { readsFile: true });
+    await failing.editor.readFile();
+    const broken = open(
+      rover,
+      { readsFile: true },
+      api({ readGameFile: () => Promise.reject(new Error('IPC gone')) }),
+    );
+    await broken.editor.readFile();
+    expect([failing.editor.state.fileRead, broken.editor.state.fileRead]).toEqual([
+      { kind: 'failed', message: 'No file.' },
+      { kind: 'failed', message: "Couldn't read the game's file. IPC gone" },
+    ]);
+  });
+
+  it('asks once while a read is under way', async () => {
+    const { editor, calls } = open(rover, { readsFile: true }, reads());
+    const first = editor.readFile();
+    await editor.readFile();
+    await first;
+    expect(calls.readGameFile).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('a game read from its file and not saved yet', () => {
+  it('is saved under the id helmArray knows it by at its first edit', () => {
+    const { editor, calls } = open(
+      { ...rover, id: 'everspace2', name: 'Everspace 2' },
+      { saved: false, found: true },
+    );
+    editor.edit((g) => renameGame(g, 'ES2'));
+    expect(calls.saveGame.mock.calls[0]?.[0]?.id).toBe('everspace2');
   });
 });

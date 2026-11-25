@@ -12,8 +12,11 @@ import type { History } from './editor-model';
 /** Which game the Game screen opens on. */
 export type GameTarget =
   | { kind: 'edit'; gameId: string }
-  /** A game helmArray doesn't have yet: from a Steam tile (its name and app id), or by name. */
-  | { kind: 'new'; name: string; steamAppId?: number };
+  /**
+   * A game helmArray doesn't have yet: from a Steam tile (its name and app id, and why its own
+   * file couldn't be used, when it has one helmArray reads), or by name.
+   */
+  | { kind: 'new'; name: string; steamAppId?: number; note?: string };
 
 /** The mode a new game starts with: one is needed, and most games have only one. */
 const FIRST_MODE = { id: 'default', name: 'Default' };
@@ -264,13 +267,23 @@ export function loadedOf(
   builtIn: boolean;
   edited: boolean;
   saved: boolean;
+  found?: boolean;
+  readsFile?: boolean;
   taken?: string[];
   reserved?: Reserved;
+  note?: string;
 } | null {
   if (target.kind === 'new') {
     const taken = games.map((g) => g.game.id);
     const game = newGame(target.name, taken, target.steamAppId);
-    return { game, builtIn: false, edited: false, saved: false, taken };
+    return {
+      game,
+      builtIn: false,
+      edited: false,
+      saved: false,
+      taken,
+      ...(target.note === undefined ? {} : { note: target.note }),
+    };
   }
   const entry = games.find((g) => g.game.id === target.gameId);
   if (entry === undefined) return null;
@@ -278,7 +291,10 @@ export function loadedOf(
     game: entry.game,
     builtIn: entry.builtIn,
     edited: entry.edited === true,
-    saved: true,
+    // A game read from its file just now is saved at its first edit, under the id it has.
+    saved: entry.found !== true,
+    ...(entry.found === true ? { found: true } : {}),
+    ...(entry.readsFile === true ? { readsFile: true } : {}),
     reserved: referencedIds(schemes),
   };
 }

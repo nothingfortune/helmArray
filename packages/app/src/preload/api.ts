@@ -7,6 +7,7 @@ import type {
   ApplyPreview,
   ApplyResult,
   GameEntry,
+  GameFileRead,
   HelmApi,
   LibraryEntry,
 } from '../shared/api';
@@ -67,5 +68,6 @@ export function createHelmApi(bridge: IpcBridge): HelmApi {
     dismissSheet: async (gameId) => {
       await bridge.invoke(CHANNELS.dismissSheet, gameId);
     },
+    readGameFile: (gameId) => bridge.invoke(CHANNELS.readGameFile, gameId) as Promise<GameFileRead>,
   };
 }

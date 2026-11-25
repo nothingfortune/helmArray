@@ -155,6 +155,13 @@ export interface Game {
    * the game's file; a built-in game has none.
    */
   retired?: { modes: readonly ModeId[]; actions: readonly ActionId[] };
+  /**
+   * What the game's own file held when helmArray last read it (`mergeHarvest`, harvest.ts): its
+   * modes and actions, with each default as the file had it, less the bindings helmArray had put
+   * there itself. A re-read is compared with it, so what you changed since is kept. Absent until
+   * the file is read.
+   */
+  fromFile?: { modes: readonly Mode[]; actions: readonly Action[] };
 }
 
 /** A press is a slot on a control. Long and double delay the tap by design. */

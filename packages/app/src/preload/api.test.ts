@@ -137,6 +137,7 @@ describe('window.helm', () => {
       await api.saveGame(game);
       await api.deleteGame('skiff');
       await api.dismissSheet('skiff');
+      await api.readGameFile('skiff');
       expect(b.invoked).toEqual([
         [CHANNELS.listGames, []],
         [CHANNELS.getScheme, ['skiff-own-keys']],
@@ -152,6 +153,7 @@ describe('window.helm', () => {
         [CHANNELS.saveGame, [game]],
         [CHANNELS.deleteGame, ['skiff']],
         [CHANNELS.dismissSheet, ['skiff']],
+        [CHANNELS.readGameFile, ['skiff']],
       ]);
     });
 

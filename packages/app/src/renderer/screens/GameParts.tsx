@@ -9,6 +9,7 @@ import { PAD_CONTROLS, ROLES } from '@helmarray/core';
 import { ROLE_WORDS } from './role-words';
 import type { Preset } from '../../shared/api';
 import { CANT_PRESS, mouseSignalOf } from './capture';
+import type { FileReadView } from './file-read';
 import { padWord, signalText } from './editor-view';
 import { NAME_FIELD, modeNameField } from './game-editor';
 import type { Waiting } from './game-editor';
@@ -47,7 +48,13 @@ export function BackLink({ onBack }: { onBack(): void }) {
 }
 
 /** The line under the game's name: whose game it is. */
-export function titleNote(builtIn: boolean, edited: boolean, saved: boolean): string {
+export function titleNote(
+  builtIn: boolean,
+  edited: boolean,
+  saved: boolean,
+  found = false,
+): string {
+  if (found) return "Read from the game's file";
   if (builtIn)
     return edited
       ? "Your copy of helmArray's game"
@@ -75,6 +82,12 @@ export interface TitleBarProps {
   onStart(preset: Preset): void;
   /** The name is typed: the field is left, or Enter. */
   onNameDone(): void;
+  /** Read from the game's file just now, not saved yet. */
+  found?: boolean;
+  /** *Read from the game's file* is offered: with it, the reading. */
+  readsFile?: boolean;
+  reading?: boolean;
+  onReadFile?(): void;
 }
 
 /**
@@ -101,6 +114,10 @@ export function TitleBar({
   onDrop,
   onStart,
   onNameDone,
+  found = false,
+  readsFile = false,
+  reading = false,
+  onReadFile,
 }: TitleBarProps) {
   return (
     <div className="gm-bar">
@@ -122,7 +139,7 @@ export function TitleBar({
             if (e.key === 'Enter') onNameDone();
           }}
         />
-        <span className="gm-note">{titleNote(builtIn, edited, saved)}</span>
+        <span className="gm-note">{titleNote(builtIn, edited, saved, found)}</span>
       </div>
       <button
         type="button"
@@ -148,6 +165,11 @@ export function TitleBar({
           <path d="M11 4l3 3-3 3M14 7H6.5a4 4 0 000 8H9" stroke="currentColor" strokeWidth="1.7" />
         </svg>
       </button>
+      {readsFile && !confirming && (
+        <button type="button" className="btn ghost" disabled={reading} onClick={onReadFile}>
+          {reading ? 'Reading…' : "Read from the game's file"}
+        </button>
+      )}
       {builtIn && edited && !confirming && (
         <button type="button" className="btn ghost" onClick={() => onConfirm(true)}>
           Back to helmArray&apos;s
@@ -186,6 +208,65 @@ export function TitleBar({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * What *Read from the game's file* found: why it couldn't, that there is nothing to change, or the
+ * one list of what saving it changes, with the one button that saves it. Nothing is saved before.
+ */
+export function FileRead({
+  read,
+  onTake,
+  onDrop,
+}: {
+  read: FileReadView;
+  onTake(): void;
+  onDrop(): void;
+}) {
+  if (read.kind === 'failed') {
+    return (
+      <div className="gm-read" role="alert" aria-label="From the game's file">
+        <p className="gm-read-head tone-error">{read.message}</p>
+        <button type="button" className="btn ghost" onClick={onDrop}>
+          Close
+        </button>
+      </div>
+    );
+  }
+  const lines = (
+    <ul className="gm-read-lines">
+      {read.lines.map((line) => (
+        <li key={line}>{line}</li>
+      ))}
+    </ul>
+  );
+  if (read.kind === 'same') {
+    return (
+      <section className="gm-read" aria-label="From the game's file">
+        <p className="gm-read-head" role="status">
+          {read.message}
+        </p>
+        {read.lines.length > 0 && lines}
+        <button type="button" className="btn ghost" onClick={onDrop}>
+          Close
+        </button>
+      </section>
+    );
+  }
+  return (
+    <section className="gm-read" aria-label="From the game's file">
+      <p className="gm-read-head">Reading the game's file changes this:</p>
+      {lines}
+      <div className="gm-read-buttons">
+        <button type="button" className="btn" onClick={onTake}>
+          Save these changes
+        </button>
+        <button type="button" className="btn ghost" onClick={onDrop}>
+          Cancel
+        </button>
+      </div>
+    </section>
   );
 }
 

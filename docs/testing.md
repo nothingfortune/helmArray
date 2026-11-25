@@ -12,7 +12,7 @@ coverage, and the coverage drift check. If it passes locally it passes in CI.
 | ------------------ | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------ | --------- |
 | Unit               | Pure modules: core, azeron, games, app's shared and renderer logic; the renderer's parts drawn to markup with `react-dom/server` (what each state shows; clicks are e2e's) | `*.test.ts(x)` beside the source, and root `test/`     | In the gate |
 | Integration        | Main-process services wired together, with a fake HID unit and temp folders                          | `test/integration/`, `*.test.ts` in `packages/app/src/main` |  In the gate |
-| End to end         | The real app: Playwright on Electron over fake units, a temp data folder, a fake Steam and a fake game folder (the M4 journeys, the game's file in Apply, the layout at 1440 and 1280 px, the fonts, the keyboard, axe) | `packages/app/e2e/*.spec.ts`, run by `pnpm test:e2e` | Outside the gate |
+| End to end         | The real app: Playwright on Electron over fake units, a temp data folder, a fake Steam and a fake game folder (the M4 journeys, the game's file in Apply and read into the game's data, the layout at 1440 and 1280 px, the fonts, the keyboard, axe) | `packages/app/e2e/*.spec.ts`, run by `pnpm test:e2e` | Outside the gate |
 | Mutation           | Whether the tests notice when the code is broken: Stryker, over the pure logic that can do damage   | `pnpm test:mutation`, `.github/workflows/mutation.yml` | Outside the gate, informational |
 | Hardware checklist | The real units, pedals and a game, run by hand                                                       | [`hardware-checklist.md`](hardware-checklist.md)       | Manual    |
 
@@ -152,16 +152,16 @@ The pure logic that can do damage, listed in `stryker.config.mjs` (`mutate`):
 - `packages/azeron/src`: the report and command protocol, the record encoding, the profile, the
   session, what is read back and what a write is verified against. Not `index.ts` or `fake.ts`.
 - `packages/core/src`: `resolve.ts`, the presets, `checks.ts` (the findings), `placed.ts` (whether
-  an action is placed, on a control or a stick), `sticks.ts`, the games and `game-data.ts` (a
-  game's data checked before it is saved).
+  an action is placed, on a control or a stick), `sticks.ts`, the games, `game-data.ts` (a
+  game's data checked before it is saved) and `harvest.ts` (a game's file merged into its data).
 - `packages/games/src`.
 - `packages/app/src/main`: `apply-units`, `apply-service`, `gated-session`, `plan-fingerprint`,
   `scheme-plan`, `active-plans`, `sync-state`, `devices` and `devices-gate`, `hands`,
   `hand-finder`, `store`, `hid-transport`, `processes`, `game-file` (the game's file written by
-  Apply), `exchange-log`, `e2e-seam` and `compose`.
+  Apply), `game-harvest` (the game's file read into its data), `exchange-log`, `e2e-seam` and `compose`.
 - `packages/app/src/renderer`: the pure models `editor-model`, `editor-view`, `libraryView`,
-  `libraryFlow`, `applyFlow`, the checks' `fixes` and `check-groups`, `offer-work` and `offer-slices`, `recent-games` and `reveal`, the `action-picker`, and the Game screen's `game-model`, `game-editor`, `capture`
-  (press-to-set), `press-listener` and `gameTile`.
+  `libraryFlow`, `applyFlow`, the checks' `fixes` and `check-groups`, `offer-work` and `offer-slices`, `recent-games` and `reveal`, the `action-picker`, and the Game screen's `game-model`, `game-editor`, `file-read`
+  (what reading the game's file changes), `capture` (press-to-set), `press-listener` and `gameTile`.
 
 Not React components, CSS, `index.ts` or the preload: the Playwright e2e suite covers those, and
 mutating them would measure the wrong suite.
