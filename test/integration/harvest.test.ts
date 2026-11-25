@@ -712,9 +712,9 @@ describe('Everspace 2 typed in on the Game screen, used, then read from its file
     expect([placed, plan.findings.filter((f) => f.rule === 'action-deleted')]).toEqual([true, []]);
   });
 
-  it("leaves the scheme made before the read off the game's file: it was made when the game had none, so its bindings go on the bind sheet", async () => {
+  it("turns the game's file on for the scheme made before the read: its bindings go into the file, not on the bind sheet", async () => {
     const p = await world.helm.previewApply(before.id);
-    expect([p.game.via, p.game.file]).toEqual(['sheet', undefined]);
+    expect([p.game.via, p.game.file?.name]).toEqual(['file', 'Input.ini']);
   });
 
   it("follows what the game holds to the file's id", async () => {

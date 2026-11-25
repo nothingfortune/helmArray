@@ -397,6 +397,16 @@ describe('loadedOf', () => {
     ]);
   });
 
+  it('counts the game’s saved schemes that don’t write its file, and says nothing of none', () => {
+    const off = { ...blankKeysScheme(two), writeGameFile: false };
+    const on = { ...off, id: 'on', writeGameFile: true };
+    expect([
+      loadedOf({ kind: 'edit', gameId: 'rover' }, entries, [off, on, { ...off, id: 'off2' }])
+        ?.setupsOff,
+      Object.keys(loadedOf({ kind: 'edit', gameId: 'rover' }, entries, [on]) ?? {}),
+    ]).toEqual([2, ['game', 'builtIn', 'edited', 'saved', 'reserved', 'uses']]);
+  });
+
   it('opens a game read from its file just now as not saved, under its own id, its file readable', () => {
     expect(
       loadedOf({ kind: 'edit', gameId: 'rover' }, [

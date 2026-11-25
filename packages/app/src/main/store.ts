@@ -44,6 +44,7 @@ import type {
 } from '@helmarray/core';
 import {
   AZERON_USES,
+  BUILT_IN_DEVICES,
   NOTHING_HELD,
   NO_BASELINES,
   heldBy,
@@ -62,6 +63,7 @@ import {
   moveInScheme,
   own,
   store,
+  writingFile,
   xboxControllerPreset,
 } from '@helmarray/core';
 import type { GameEntry, Preset } from '../shared/api';
@@ -93,7 +95,7 @@ export const ON_GAME_DELETED: Readonly<Record<StoredKind, string>> = {
 export const ON_ACTION_MOVED: Readonly<Record<StoredKind, string>> = {
   game: 'written last, as the read left it: the actions under the ids and modes of the file',
   scheme:
-    "each scheme of the game: its placements (to the action's new mode, on the same control and press), key labels and kept findings (core's moveInScheme). Its ledger is per control and press and names no action",
+    "each scheme of the game: its placements (to the action's new mode, on the same control and press), key labels and kept findings (core's moveInScheme). Its ledger is per control and press and names no action. With the game's file format, one made before it had one writes the file from then on (core's writingFile)",
   applied:
     "the plan applied for each scheme of the game, and what the game held after its scheme was deleted (`<game>.held`): bindings, game bindings, bind sheet rows and findings (core's moveInPlan)",
   settings: 'nothing: it names games and schemes, never an action',
@@ -598,11 +600,16 @@ export class DataStore {
    * the store won't write over (saved by a newer helmArray, or one the disk won't give up) refuses
    * the whole read and nothing is written. A write that fails part way puts back the files written
    * before it. The game goes last. A waiting edit of the game or of one of its schemes is taken into
-   * it, so no later write puts an old id back. With no move it is `saveGame`.
+   * it, so no later write puts an old id back.
+   *
+   * A read that gives the game its file format turns file writing on for each scheme of it made
+   * before, which the presets left off (core's `writingFile`): in the same write, under the same
+   * rules, moves or none. It goes by what each scheme has, not by what the game had: a scheme left
+   * off by an earlier read is turned on by the next. With no move and no format it is `saveGame`.
    */
   saveFileRead(game: Game, moves: readonly ActionMove[]): Promise<void> {
     try {
-      if (moves.length === 0) {
+      if (moves.length === 0 && (game as { file?: unknown } | null)?.file === undefined) {
         this.saveGame(game);
         return Promise.resolve();
       }
@@ -631,7 +638,7 @@ export class DataStore {
     return this.track(run);
   }
 
-  /** `saveFileRead`'s work, in the write queue's turn. */
+  /** `saveFileRead`'s work, in the write queue's turn: the moves, and file writing turned on. */
   private async moveActions(game: Game, moves: readonly ActionMove[]): Promise<void> {
     // The waiting edits this takes in: only these are dropped once it is written, never a newer one.
     const waiting = new Map([...this.unsaved].filter(([, s]) => s.gameId === game.id));
@@ -640,7 +647,8 @@ export class DataStore {
     // Every scheme file, the ones it can't read included: one that may name an old id refuses it.
     const schemes = await this.gameSchemes(game.id);
     for (const scheme of schemes) {
-      const moved = moveInScheme(scheme, moves);
+      // Moved first: the keys it deals are worked out against the game as the read left it.
+      const moved = writingFile(moveInScheme(scheme, moves), game, BUILT_IN_DEVICES);
       // A waiting edit is written now, moved or not: its timer is called off below.
       if (moved !== scheme || this.unsaved.has(scheme.id))
         docs.push({ kind: 'scheme', file: `schemes/${scheme.id}.json`, doc: moved });

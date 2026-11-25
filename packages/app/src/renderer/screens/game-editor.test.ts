@@ -53,6 +53,7 @@ const open = (
     uses: { mode: string; action: string }[];
     found: boolean;
     readsFile: boolean;
+    setupsOff: number;
   }> = {},
   calls = api(),
 ) => ({
@@ -1026,6 +1027,63 @@ describe("reading the game's own file into a game typed in on the Game screen", 
     editor.takeFile();
     await settle();
     expect(editor.game.modes.map((m) => m.id)).toEqual(['default', 'ground']);
+  });
+});
+
+describe("reading the game's own file, with setups made before the game had its file format", () => {
+  /** Rover's file: Run only, none of the game's actions by name, so nothing moves. */
+  const fileRover: Game = {
+    ...rover,
+    file: { format: 'unreal-ini' },
+    actions: [{ id: 'Run', name: 'Run', mode: 'default', required: false }],
+  };
+  const reads = (over: Partial<EditorApi> = {}) =>
+    api({
+      readGameFile: () => Promise.resolve({ ok: true, file: fileRover, held: null }),
+      ...over,
+    });
+
+  it('says the setups will now write the controls file', async () => {
+    const { editor } = open(rover, { readsFile: true, setupsOff: 2 }, reads());
+    await editor.readFile();
+    const read = editor.state.fileRead;
+    expect(read !== null && read !== 'reading' && read.kind === 'changes' && read.lines).toContain(
+      'Your 2 setups for Rover will now write its controls file.',
+    );
+  });
+
+  it('saves it through main with the setups, though nothing moved, and not as a plain save', async () => {
+    const { editor, calls } = open(rover, { readsFile: true, setupsOff: 2 }, reads());
+    await editor.readFile();
+    editor.takeFile();
+    await settle();
+    expect({
+      file: calls.saveFileRead.mock.calls,
+      plain: calls.saveGame.mock.calls.length,
+      canUndo: editor.canUndo,
+      saved: editor.state.saved,
+    }).toEqual({ file: [[editor.game, []]], plain: 0, canUndo: false, saved: true });
+  });
+
+  it('says nothing of the setups on the next read, once main has turned them on', async () => {
+    const { editor } = open(rover, { readsFile: true, setupsOff: 2 }, reads());
+    await editor.readFile();
+    editor.takeFile();
+    await settle();
+    await editor.readFile();
+    expect(editor.state.fileRead).toMatchObject({ kind: 'same' });
+  });
+
+  it('is a plain edit, to undo like any other, with no setup to turn on', async () => {
+    const { editor, calls } = open(rover, { readsFile: true }, reads());
+    await editor.readFile();
+    editor.takeFile();
+    await settle();
+    expect({
+      file: calls.saveFileRead.mock.calls.length,
+      plain: calls.saveGame.mock.calls.length,
+      canUndo: editor.canUndo,
+    }).toEqual({ file: 0, plain: 1, canUndo: true });
   });
 });
 

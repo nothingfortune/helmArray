@@ -554,3 +554,57 @@ describe('what the Game screen shows of a read', () => {
     expect(fileReadView(reordered, { ok: true, file: FILE, held: null }).kind).toBe('same');
   });
 });
+
+describe('a read that gives the game its file format, with setups made before it', () => {
+  const typed: Game = {
+    id: 'everspace_2',
+    name: 'Everspace 2',
+    modes: [{ id: 'flight', name: 'Flight' }],
+    actions: [act({ id: 'Boost', name: 'Boost' })],
+  };
+  const read = { ok: true as const, file: FILE, held: null };
+  const view = (setups: number, game: Game = typed) => fileReadView(game, read, [], setups);
+
+  it('says, right after the format, that the setups will now write the controls file', () => {
+    const shown = view(2);
+    const lines = shown.kind === 'changes' ? shown.lines : [];
+    const at = lines.indexOf("Apply can write the game's controls file from now on.");
+    expect(lines.slice(at, at + 2)).toEqual([
+      "Apply can write the game's controls file from now on.",
+      'Your 2 setups for Everspace 2 will now write its controls file.',
+    ]);
+  });
+
+  it('says it of one setup in its own words', () => {
+    expect(view(1)).toMatchObject({
+      kind: 'changes',
+      lines: expect.arrayContaining([
+        'Your setup for Everspace 2 will now write its controls file.',
+      ]) as unknown,
+      fileOn: 1,
+    });
+  });
+
+  it('counts the setups for main to turn on, and says nothing of none', () => {
+    const none = view(0);
+    expect([
+      (view(2) as { fileOn?: number }).fileOn,
+      'fileOn' in none,
+      none.kind === 'changes' && none.lines.some((l) => l.includes('setup')),
+    ]).toEqual([2, false, false]);
+  });
+
+  it('turns them on when a read before this one gave the format and left them off: the one change', () => {
+    const before = mergeHarvest(typed, FILE).game;
+    expect([view(0, before).kind, view(1, before)]).toEqual([
+      'same',
+      {
+        kind: 'changes',
+        game: before,
+        lines: ['Your setup for Everspace 2 will now write its controls file.'],
+        moves: [],
+        fileOn: 1,
+      },
+    ]);
+  });
+});

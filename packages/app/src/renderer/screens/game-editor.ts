@@ -76,6 +76,11 @@ export interface Loaded {
   reserved?: Reserved;
   /** Where the game's saved schemes place its actions: a read keeps a mode one still uses. */
   uses?: readonly ActionUse[];
+  /**
+   * How many of the game's saved schemes don't write its file (made before it had its file
+   * format): a read that gives it one turns them on.
+   */
+  setupsOff?: number;
 }
 
 export interface GameEditorState {
@@ -121,6 +126,8 @@ export class GameEditor {
   private readonly taken: readonly string[];
   private readonly reserved: Reserved;
   private readonly uses: readonly ActionUse[];
+  /** The game's setups that don't write its file yet; none once a read has turned them on. */
+  private setupsOff: number;
   /** Whether *Read from the game's file* is offered. */
   readonly readsFile: boolean;
   /** What main has taken of the game: a refused save goes back to it. */
@@ -153,6 +160,7 @@ export class GameEditor {
     this.taken = loaded.taken ?? [];
     this.reserved = loaded.reserved ?? { modes: [], actions: [] };
     this.uses = loaded.uses ?? [];
+    this.setupsOff = loaded.setupsOff ?? 0;
     this.saves = new Saves(loaded.game);
     this.loaded = loaded;
   }
@@ -411,21 +419,24 @@ export class GameEditor {
     } catch (error) {
       read = { ok: false, message: `Couldn't read the game's file. ${plainReason(error)}`.trim() };
     }
-    this.set({ fileRead: fileReadView(this.game, read, this.uses) });
+    this.set({ fileRead: fileReadView(this.game, read, this.uses, this.setupsOff) });
   };
 
   /**
    * The one button under the list: the merged game is the next edit (undo takes it back). One in
-   * which actions of yours took the file's ids is saved with them, for main to follow everywhere
+   * which actions of yours took the file's ids, or that turns file writing on for setups made
+   * before the game had its format, is saved with them, for main to follow everywhere at once
    * (`saveFileRead`), and taken here only once main has saved it: the history then starts again
-   * from it (an undo would bring back ids the setups no longer name). Until main answers nothing
+   * from it (an undo would bring back ids the setups no longer name, or a game with no format whose
+   * setups write its file). Until main answers nothing
    * else changes the game; if main refuses it, the game and its history stay as they were, and the
    * list says why in one sentence.
    */
   readonly takeFile = (): void => {
     const read = this.current.fileRead;
     if (read === null || read === 'reading' || read.kind !== 'changes' || this.savingRead) return;
-    if (read.moves.length === 0) {
+    // Only a read that changes nothing else is a plain edit, undone like any other.
+    if (read.moves.length === 0 && read.fileOn === undefined) {
       this.set({ fileRead: null });
       this.edit(() => read.game);
       return;
@@ -437,6 +448,7 @@ export class GameEditor {
       () => {
         this.saves.took(n, read.game);
         this.savingRead = false;
+        if (read.fileOn !== undefined) this.setupsOff = 0;
         this.lastField = null;
         this.set({
           busy: false,

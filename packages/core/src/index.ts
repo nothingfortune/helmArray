@@ -20,3 +20,4 @@ export * from './game-data';
 export * from './sheets';
 export * from './harvest';
 export * from './moves';
+export * from './presets/file';

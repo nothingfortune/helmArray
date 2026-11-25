@@ -22,8 +22,12 @@ export type FileReadView =
   | { kind: 'failed'; message: string }
   /** Nothing to save; `lines` says what of yours stays though the file differs. */
   | { kind: 'same'; message: string; lines: string[] }
-  /** `moves`: the actions of yours that took the file's ids, for main to follow when it saves. */
-  | { kind: 'changes'; game: Game; lines: string[]; moves: ActionMove[] };
+  /**
+   * `moves`: the actions of yours that took the file's ids, for main to follow when it saves.
+   * `fileOn`: how many of the game's setups the read turns file writing on for (made before the
+   * game had its file format), when there are some: main turns them on as it saves.
+   */
+  | { kind: 'changes'; game: Game; lines: string[]; moves: ActionMove[]; fileOn?: number };
 
 /** How many new actions of one mode are named before the rest are counted. */
 const NAMED = 5;
@@ -209,14 +213,21 @@ const sameData = (a: Game, b: Game): boolean => {
   return canon(a) === canon(b);
 };
 
+/** The setups that will write the game's file from now on, in one line. */
+const setupsLine = (game: Game, n: number): string =>
+  `Your ${n === 1 ? 'setup' : `${n} setups`} for ${game.name} will now write its controls file.`;
+
 /**
  * What a read of the game's file means for the game as the screen has it. `uses`: where the game's
- * setups place its actions, so a mode of yours one still places something in stays.
+ * setups place its actions, so a mode of yours one still places something in stays. `setups`: how
+ * many of the game's setups don't write its file (made before it had a format): with the format,
+ * the read turns them on, and says so after the format's line.
  */
 export function fileReadView(
   game: Game,
   read: GameFileRead,
   uses: readonly ActionUse[] = [],
+  setups = 0,
 ): FileReadView {
   if (!read.ok) return { kind: 'failed', message: read.message };
   let merged: ReturnType<typeof mergeHarvest>;
@@ -230,7 +241,12 @@ export function fileReadView(
     };
   }
   const lines = readLines(merged.changes, merged.game);
-  if (sameData(merged.game, game))
+  const fileOn = merged.game.file === undefined ? 0 : setups;
+  if (fileOn > 0) {
+    const format = lines.indexOf("Apply can write the game's controls file from now on.");
+    lines.splice(format + 1, 0, setupsLine(merged.game, fileOn));
+  }
+  if (sameData(merged.game, game) && fileOn === 0)
     return {
       kind: 'same',
       message: `Nothing to change from ${game.name}'s file.`,
@@ -245,5 +261,6 @@ export function fileReadView(
         ? lines
         : ['Nothing you see changes: helmArray notes what the file has now.'],
     moves: merged.moves,
+    ...(fileOn === 0 ? {} : { fileOn }),
   };
 }

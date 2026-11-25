@@ -298,6 +298,7 @@ export function loadedOf(
   taken?: string[];
   reserved?: Reserved;
   uses?: ActionUse[];
+  setupsOff?: number;
   note?: string;
 } | null {
   const entry = target.kind === 'new' ? undefined : games.find((g) => g.game.id === target.gameId);
@@ -314,6 +315,7 @@ export function loadedOf(
     };
   }
   if (entry === undefined) return null;
+  const off = schemes.filter((s) => !s.writeGameFile).length;
   return {
     game: entry.game,
     builtIn: entry.builtIn,
@@ -324,5 +326,7 @@ export function loadedOf(
     ...(entry.readsFile === true ? { readsFile: true } : {}),
     reserved: referencedIds(schemes),
     uses: usesOf(schemes),
+    // The setups made before the game had its file format: a read that gives it one turns them on.
+    ...(off === 0 ? {} : { setupsOff: off }),
   };
 }
