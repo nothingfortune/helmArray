@@ -342,10 +342,9 @@ describe('a file with nothing helmArray can read', () => {
         processNames: null,
       },
     };
-    expect(await harvester({ kinds }).read(ES2)).toEqual({
-      ok: false,
-      reason: 'unreadable',
-      message: NOTHING_ES2,
+    expect({ read: await harvester({ kinds }).read(ES2), lines }).toEqual({
+      read: { ok: false, reason: 'unreadable', message: NOTHING_ES2 },
+      lines: [`everspace2: ${iniPath} has nothing helmArray can use: there is no action in it.`],
     });
   });
 

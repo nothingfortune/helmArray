@@ -409,6 +409,12 @@ describe('loadedOf', () => {
     expect(loadedOf({ kind: 'new', name: 'Everspace 2', note }, entries)?.note).toBe(note);
   });
 
+  it('says nothing of a file for a new game that has no note', () => {
+    expect(Object.keys(loadedOf({ kind: 'new', name: 'Rover' }, entries) ?? {})).not.toContain(
+      'note',
+    );
+  });
+
   it('makes a new game, not saved yet, with an id no game has', () => {
     expect(loadedOf({ kind: 'new', name: 'Rover', steamAppId: 7 }, entries)).toEqual({
       game: {
