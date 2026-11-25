@@ -7,7 +7,8 @@
 //                       wins; deleting it brings helmArray's back). Built-in games ship inside
 //                       the app and are never written.
 //   schemes/<id>.json   one scheme
-//   settings.json       the active game, and the active scheme of each game
+//   settings.json       the active game, and the active scheme of each game; the games read from
+//                       their own file that were deleted, kept out of those found by their file
 //   units.json          what each unit was last written with: which scheme, of which game, when
 //   sheets.json         the bindings each game holds as far as helmArray knows (its baseline),
 //                       where they differ from what it ships; moved only by *Done* and by
@@ -72,7 +73,8 @@ export const ON_GAME_DELETED: Readonly<Record<StoredKind, string>> = {
   game: 'removed: its file',
   scheme: 'removed: every scheme of the game',
   applied: 'removed: the plan applied for each of its schemes, and what the game held',
-  settings: 'removed: no longer the active game, and no scheme picked for it',
+  settings:
+    'removed: no longer the active game, and no scheme picked for it. A game read from its own file is then kept out of the games found by their file (`dismissFile`, by the services), and that stays',
   sheets: 'removed: its baseline (the bindings the game held)',
   units:
     'kept as history, marked: what each unit was last written with is still true, but the record is marked as of a deleted game, so a game added later under the id is never taken for it',
@@ -163,7 +165,9 @@ const isSettings = (value: unknown): value is AppSettings =>
   isRecord(value) &&
   (value['activeGameId'] === null || typeof value['activeGameId'] === 'string') &&
   isRecord(value['activeScheme']) &&
-  Object.values(value['activeScheme']).every((id) => typeof id === 'string');
+  Object.values(value['activeScheme']).every((id) => typeof id === 'string') &&
+  (value['dismissed'] === undefined ||
+    (Array.isArray(value['dismissed']) && value['dismissed'].every(isSafeId)));
 
 /** A unit of a plan: absent for a unit the setup doesn't use, else a profile. */
 const isUnitOrNone = (value: unknown) => value === undefined || isRecord(value);
@@ -641,6 +645,7 @@ export class DataStore {
       const before = this.settings;
       if (before.activeGameId !== gameId && own(before.activeScheme, gameId) === undefined) return;
       const next: AppSettings = {
+        ...before,
         activeGameId: before.activeGameId === gameId ? null : before.activeGameId,
         activeScheme: Object.fromEntries(
           Object.entries(before.activeScheme).filter(([id]) => id !== gameId),
@@ -870,6 +875,7 @@ export class DataStore {
     // The other games' choices stay; this game's is replaced, or dropped for null.
     const others = Object.entries(before.activeScheme).filter(([id]) => id !== gameId);
     const next: AppSettings = {
+      ...before,
       activeGameId: gameId,
       activeScheme: Object.fromEntries(
         schemeId === null ? others : [...others, [gameId, schemeId]],
@@ -883,6 +889,45 @@ export class DataStore {
       if (this.settings === next) this.settings = before;
       throw error;
     }
+  }
+
+  /** The games read from their own file that were deleted: not found from their file again. */
+  dismissedFiles(): string[] {
+    return [...(this.settings.dismissed ?? [])];
+  }
+
+  /** Keeps a game read from its own file out of those found by their file, once it is deleted. */
+  dismissFile(gameId: string): Promise<void> {
+    return this.changeDismissed(gameId, (list) => [...new Set([...list, gameId])]);
+  }
+
+  /** Lets a game be found by its file again: it is set up again from its tile. */
+  restoreFile(gameId: string): Promise<void> {
+    return this.changeDismissed(gameId, (list) => list.filter((id) => id !== gameId));
+  }
+
+  private changeDismissed(
+    gameId: string,
+    change: (list: readonly string[]) => readonly string[],
+  ): Promise<void> {
+    if (!isSafeId(gameId)) return Promise.reject(new StoreError('There is no such game.'));
+    const run = this.settingsTurn.then(async () => {
+      const before = this.settings;
+      const list = before.dismissed ?? [];
+      const after = change(list);
+      // The same ids: nothing to write.
+      if (after.length === list.length) return;
+      const next: AppSettings = { ...before, dismissed: [...after] };
+      this.settings = next;
+      try {
+        await this.put('settings', 'settings.json', next);
+      } catch (error) {
+        if (this.settings === next) this.settings = before;
+        throw error;
+      }
+    });
+    this.settingsTurn = run.catch(() => undefined);
+    return this.track(run);
   }
 
   // Applied plans -----------------------------------------------------------------------------

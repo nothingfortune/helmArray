@@ -67,6 +67,11 @@ export interface Found {
   games: Game[];
   /** Each game whose file is there and can't be used, by its Steam id, with why in a sentence. */
   unreadable: { steamAppId: number; message: string }[];
+  /**
+   * Each game read from its file that was deleted (`dismissed`) and whose file is there and usable:
+   * not found, but set up afresh from its Steam tile.
+   */
+  restorable: { steamAppId: number; gameId: string }[];
 }
 
 export interface HarvestDeps {
@@ -86,9 +91,14 @@ export interface GameHarvester {
   /**
    * The games helmArray has a file format for whose file is found, and that none of `known` is
    * (by id or Steam id): each as a first read leaves it, ready to save, or why its file can't be
-   * used.
+   * used. One `dismissed` (deleted after it was read) isn't found, only said to be restorable.
    */
-  found(known: readonly Pick<Game, 'id' | 'steamAppId'>[]): Promise<Found>;
+  found(
+    known: readonly Pick<Game, 'id' | 'steamAppId'>[],
+    dismissed?: readonly string[],
+  ): Promise<Found>;
+  /** The id of the game with a file format that this game is (by its id or Steam id), or null. */
+  fileGameOf(game: Pick<Game, 'id' | 'steamAppId'>): string | null;
 }
 
 const messageOf = (error: unknown): string =>
@@ -162,13 +172,15 @@ export function createGameHarvester(deps: HarvestDeps): GameHarvester {
     return { ok: true, game: harvested };
   };
 
-  const found: GameHarvester['found'] = async (have) => {
-    const out: Found = { games: [], unreadable: [] };
+  const found: GameHarvester['found'] = async (have, dismissed = []) => {
+    const out: Found = { games: [], unreadable: [], restorable: [] };
     for (const game of games) {
       const taken = have.some((g) => g.id === game.id || g.steamAppId === game.steamAppId);
       if (taken) continue;
       const got = await read({ ...game, file: { format: game.format } });
-      if (got.ok)
+      if (got.ok && dismissed.includes(game.id))
+        out.restorable.push({ steamAppId: game.steamAppId, gameId: game.id });
+      else if (got.ok)
         out.games.push({
           ...mergeHarvest(null, got.game).game,
           steamAppId: game.steamAppId,
@@ -180,5 +192,5 @@ export function createGameHarvester(deps: HarvestDeps): GameHarvester {
     return out;
   };
 
-  return { formatOf, read, found };
+  return { formatOf, read, found, fileGameOf: (game) => known(game)?.id ?? null };
 }

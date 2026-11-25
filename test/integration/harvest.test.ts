@@ -417,6 +417,119 @@ describe('Everspace 2 with an action added by hand, applied', () => {
   });
 });
 
+describe('Everspace 2 read from its file, used, edited and deleted', () => {
+  let world: World;
+  let afterDelete: { library: LibraryEntry[]; games: GameEntry[] };
+  let afterRestart: { library: LibraryEntry[]; games: GameEntry[] };
+  let settings: { dismissed?: string[] };
+  let restored: { library: LibraryEntry[]; games: GameEntry[] };
+  let settingsAfter: { dismissed?: string[] };
+  const look = async () => ({
+    library: await world.helm.listLibrary(),
+    games: await world.helm.listGames(),
+  });
+  const readSettings = async () =>
+    JSON.parse(await readFile(join(world.dataDir, 'settings.json'), 'utf8')) as {
+      dismissed?: string[];
+    };
+
+  beforeAll(async () => {
+    world = await World.create({ steam: STEAM });
+    await placeFiles(world);
+    await world.boot();
+    await world.helm.createScheme(ES2, 'keys');
+    // An edit of yours, so a fresh read is told from the data you had.
+    const mine = entryOf(await world.helm.listGames(), ES2)?.game as Game;
+    await world.helm.saveGame({ ...mine, name: 'My Everspace' });
+    await world.app.data.flush();
+    await world.helm.deleteGame(ES2);
+    await world.idle();
+    afterDelete = await look();
+    settings = await readSettings();
+    await world.quit();
+    await world.boot();
+    afterRestart = await look();
+    // *Set up* on its Steam tile.
+    await world.helm.restoreGame(ES2);
+    restored = await look();
+    settingsAfter = await readSettings();
+  });
+
+  afterAll(async () => {
+    await world.dispose();
+  });
+
+  it('stays deleted: its tile is Set up under Steam’s name, and reads its file afresh from there', () => {
+    const tile = tileOf(afterDelete.library, '1128920');
+    expect({
+      tile: [tile?.name, tile?.gameId, tile?.restores],
+      found: entryOf(afterDelete.games, ES2),
+    }).toEqual({ tile: ['EVERSPACE™ 2', null, ES2], found: undefined });
+  });
+
+  it('keeps it deleted in your data, and after the app starts again', () => {
+    expect({
+      dismissed: settings.dismissed,
+      tile: tileOf(afterRestart.library, '1128920')?.gameId,
+      found: entryOf(afterRestart.games, ES2),
+    }).toEqual({ dismissed: [ES2], tile: null, found: undefined });
+  });
+
+  it('leaves Elite as it was: still found from its file', () => {
+    expect(entryOf(afterDelete.games, 'elite-dangerous')?.found).toBe(true);
+  });
+
+  it('is found again once set up from its tile, fresh from the file, not as you had it', () => {
+    const entry = entryOf(restored.games, ES2);
+    expect({
+      found: entry?.found,
+      game: entry?.game,
+      tile: tileOf(restored.library, '1128920')?.gameId,
+      dismissed: settingsAfter.dismissed,
+    }).toEqual({
+      found: true,
+      game: {
+        ...mergeHarvest(null, ES2_HARVEST).game,
+        steamAppId: 1128920,
+        needsKeyStick: true,
+      },
+      tile: ES2,
+      dismissed: [],
+    });
+  });
+});
+
+describe('a game typed in by hand under Everspace 2’s Steam id, deleted', () => {
+  let world: World;
+  let library: LibraryEntry[];
+
+  beforeAll(async () => {
+    world = await World.create({ steam: STEAM });
+    await placeFiles(world);
+    await world.boot();
+    await world.helm.saveGame({
+      id: 'everspace_2',
+      name: 'Everspace 2',
+      steamAppId: 1128920,
+      modes: [{ id: 'default', name: 'Default' }],
+      actions: [{ id: 'boost', name: 'Boost', mode: 'default', required: false }],
+    });
+    await world.app.data.flush();
+    await world.helm.deleteGame('everspace_2');
+    await world.idle();
+    library = await world.helm.listLibrary();
+  });
+
+  afterAll(async () => {
+    await world.dispose();
+  });
+
+  it("doesn't come back as the game found by its file: its tile is Set up, from the file", () => {
+    const tile = tileOf(library, '1128920');
+    expect([tile?.gameId, tile?.restores]).toEqual([null, ES2]);
+  });
+});
+
 describe('games whose file has nothing helmArray can read', () => {
   let world: World;
   let ini: string;

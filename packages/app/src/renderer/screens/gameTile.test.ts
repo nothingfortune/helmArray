@@ -50,6 +50,14 @@ describe('gameTarget', () => {
     ).toEqual({ kind: 'new', name: 'Everspace 2', steamAppId: 1128920, note });
   });
 
+  it('sets up afresh from its file a game read from it and deleted since', () => {
+    expect(
+      gameTarget(
+        entry({ gameId: null, name: 'EVERSPACE™ 2', appId: '1128920', restores: 'everspace2' }),
+      ),
+    ).toEqual({ kind: 'restore', gameId: 'everspace2', name: 'EVERSPACE™ 2', steamAppId: 1128920 });
+  });
+
   it('opens the game helmArray knows', () => {
     expect(gameTarget(entry({ gameId: 'helldivers2' }))).toEqual({
       kind: 'edit',

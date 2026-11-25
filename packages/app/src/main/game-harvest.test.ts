@@ -229,6 +229,7 @@ describe('the games found by their file', () => {
         { ...mergeHarvest(null, ELITE_HARVEST).game, steamAppId: 359320 },
       ],
       unreadable: [],
+      restorable: [],
     });
   });
 
@@ -252,7 +253,7 @@ describe('the games found by their file', () => {
       { id: 'everspace2' },
       { id: 'my-elite', steamAppId: 359320 },
     ]);
-    expect(found).toEqual({ games: [], unreadable: [] });
+    expect(found).toEqual({ games: [], unreadable: [], restorable: [] });
   });
 
   it('start Everspace 2 with its sticks sending keys, and Elite with no such rule', async () => {
@@ -272,7 +273,51 @@ describe('the games found by their file', () => {
     expect(await harvester({ localAppData: [join(root, 'elsewhere')] }).found([])).toEqual({
       games: [],
       unreadable: [],
+      restorable: [],
     });
+  });
+});
+
+describe('a game read from its file and deleted', () => {
+  it('is not found again, but said to be there to set up afresh from its tile', async () => {
+    const found = await harvester().found([], ['everspace2']);
+    expect({
+      games: found.games.map((g) => g.id),
+      restorable: found.restorable,
+    }).toEqual({
+      games: ['elite-dangerous'],
+      restorable: [{ steamAppId: 1128920, gameId: 'everspace2' }],
+    });
+  });
+
+  it('is not there to set up from its file when its file is gone', async () => {
+    await rm(iniPath);
+    expect((await harvester().found([], ['everspace2'])).restorable).toEqual([]);
+  });
+
+  it("still says why, when its file is there and can't be used", async () => {
+    await writeFile(iniPath, '');
+    const found = await harvester().found([], ['everspace2']);
+    expect([found.restorable, found.unreadable.map((u) => u.steamAppId)]).toEqual([[], [1128920]]);
+  });
+
+  it('is not there to set up when the app has data for that game again', async () => {
+    expect(
+      (await harvester().found([{ id: 'mine', steamAppId: 1128920 }], ['everspace2'])).restorable,
+    ).toEqual([]);
+  });
+});
+
+describe('the game a file game is', () => {
+  it('is found by its id or its Steam id, and is no game for any other', () => {
+    const h = harvester();
+    expect([
+      h.fileGameOf({ id: 'everspace2' }),
+      h.fileGameOf({ id: 'everspace_2', steamAppId: 1128920 }),
+      h.fileGameOf({ id: 'elite-dangerous', steamAppId: 359320 }),
+      h.fileGameOf({ id: 'helldivers2', steamAppId: 553850 }),
+      h.fileGameOf({ id: 'mine' }),
+    ]).toEqual(['everspace2', 'everspace2', 'elite-dangerous', null, null]);
   });
 });
 

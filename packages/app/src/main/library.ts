@@ -18,6 +18,8 @@ export interface LibraryInput {
   appliedOf?(gameId: string): { schemeId: string; at: number; changes: number } | null;
   /** By Steam app id: why a game's own file, there, can't be used, in a sentence. */
   fileNotes?: ReadonlyMap<string, string>;
+  /** By Steam app id: the game read from its file and deleted, set up afresh from its tile. */
+  restorable?: ReadonlyMap<string, string>;
 }
 
 const refOf = (scheme: Scheme): LibrarySchemeRef => ({
@@ -44,11 +46,18 @@ export function mergeLibrary(input: LibraryInput): LibraryEntry[] {
       known.set(String(game.steamAppId), game);
   }
 
-  /** For a Steam game helmArray has no data for: why its file can't be used, when it can't. */
+  /**
+   * For a Steam game helmArray has no data for: why its file can't be used, when it can't; and the
+   * game it is set up as afresh from its file, when it was read from it and deleted.
+   */
   const fileNoteOf = (game: Game | undefined, steam: SteamGame | undefined) => {
-    const note =
-      game === undefined && steam !== undefined ? input.fileNotes?.get(steam.appId) : undefined;
-    return note === undefined ? null : { fileNote: note };
+    if (game !== undefined || steam === undefined) return {};
+    const note = input.fileNotes?.get(steam.appId);
+    const restores = input.restorable?.get(steam.appId);
+    return {
+      ...(note === undefined ? {} : { fileNote: note }),
+      ...(restores === undefined ? {} : { restores }),
+    };
   };
 
   const entryOf = (game: Game | undefined, steam: SteamGame | undefined): LibraryEntry => {
@@ -74,7 +83,7 @@ export function mergeLibrary(input: LibraryInput): LibraryEntry[] {
       hasCover: steam?.cover !== undefined,
       hasHeader: steam?.header !== undefined,
       actionCount: game?.actions.length ?? 0,
-      ...(fileNoteOf(game, steam) ?? {}),
+      ...fileNoteOf(game, steam),
     };
   };
 
@@ -123,6 +132,8 @@ export interface LibraryDeps {
   changesOf?(schemeId: string): Promise<number>;
   /** By Steam app id: why a game's own file, there, can't be used. */
   fileNotes?(): Promise<ReadonlyMap<string, string>>;
+  /** By Steam app id: the game read from its file and deleted, set up afresh from its tile. */
+  restorable?(): Promise<ReadonlyMap<string, string>>;
 }
 
 export interface LibraryService {
@@ -162,10 +173,12 @@ export function createLibraryService(deps: LibraryDeps): LibraryService {
         }
       }
       const fileNotes = await deps.fileNotes?.();
+      const restorable = await deps.restorable?.();
       return mergeLibrary({
         steam: library.games,
         games,
         ...(fileNotes === undefined ? {} : { fileNotes }),
+        ...(restorable === undefined ? {} : { restorable }),
         schemes,
         activeSchemeOf: deps.activeSchemeOf,
         appliedOf: (gameId) => applied.get(gameId) ?? null,

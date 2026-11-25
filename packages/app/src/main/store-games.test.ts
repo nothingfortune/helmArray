@@ -372,6 +372,77 @@ describe('deleting the active game', () => {
   });
 });
 
+// A game read from its own file and then deleted stays deleted: the store keeps, in the settings,
+// the ids of those games, and the Library doesn't find them from their file again until each is set
+// up from its tile (docs/plans/02-architecture.md, *Harvesting a game's defaults*).
+describe('the games read from their file that were deleted', () => {
+  it('are none to start with', async () => {
+    const { data } = await openStore();
+    expect(data.dismissedFiles()).toEqual([]);
+  });
+
+  it('are kept, each once, and still there when the app opens again', async () => {
+    const { data } = await openStore();
+    await data.dismissFile('everspace2');
+    await data.dismissFile('everspace2');
+    await data.dismissFile('elite-dangerous');
+    const reopened = await openStore();
+    expect([data.dismissedFiles(), reopened.data.dismissedFiles()]).toEqual([
+      ['everspace2', 'elite-dangerous'],
+      ['everspace2', 'elite-dangerous'],
+    ]);
+  });
+
+  it('let one go when it is set up again, and only that one', async () => {
+    const { data } = await openStore();
+    await data.dismissFile('everspace2');
+    await data.dismissFile('elite-dangerous');
+    await data.restoreFile('everspace2');
+    const reopened = await openStore();
+    expect([data.dismissedFiles(), reopened.data.dismissedFiles()]).toEqual([
+      ['elite-dangerous'],
+      ['elite-dangerous'],
+    ]);
+  });
+
+  it('write nothing when nothing changes', async () => {
+    const { data } = await openStore();
+    await data.restoreFile('everspace2');
+    await expect(stat(join(root, 'settings.json'))).rejects.toThrow('ENOENT');
+  });
+
+  it('stay through deleting a game, making another active, and deleting a scheme', async () => {
+    const { data } = await openStore();
+    data.saveGame(ROVER);
+    const scheme = await data.createSchemeFromPreset('rover', 'keys');
+    await data.setActive('rover', scheme.id);
+    await data.dismissFile('everspace2');
+    await data.setActive('skiff', null);
+    await data.setActive('rover', scheme.id);
+    await data.deleteScheme(scheme.id);
+    await data.deleteGame('rover');
+    const reopened = await openStore();
+    expect([data.dismissedFiles(), reopened.data.dismissedFiles()]).toEqual([
+      ['everspace2'],
+      ['everspace2'],
+    ]);
+  });
+
+  it('make a settings file whose list is not of ids one the store reports, not one it reads', async () => {
+    await writeFile(
+      join(root, 'settings.json'),
+      JSON.stringify({ schemaVersion: 1, activeGameId: null, activeScheme: {}, dismissed: [7] }),
+    );
+    const { data, problems } = await openStore();
+    expect([data.dismissedFiles(), problems.map((p) => p.file)]).toEqual([[], ['settings.json']]);
+  });
+
+  it('refuse an id that could never be a game', async () => {
+    const { data } = await openStore();
+    await expect(data.dismissFile('../x')).rejects.toThrow('There is no such game.');
+  });
+});
+
 // Everything the store keeps per game is listed in one place (`ON_GAME_DELETED`), so a new kind of
 // per-game data can't be forgotten when a game added by hand is deleted, and a game added later
 // under its id never inherits any of it.

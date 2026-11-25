@@ -16,7 +16,13 @@ export type GameTarget =
    * A game helmArray doesn't have yet: from a Steam tile (its name and app id, and why its own
    * file couldn't be used, when it has one helmArray reads), or by name.
    */
-  | { kind: 'new'; name: string; steamAppId?: number; note?: string };
+  | { kind: 'new'; name: string; steamAppId?: number; note?: string }
+  /**
+   * A game read from its own file and deleted since, set up again from its Steam tile: its file is
+   * read afresh (`restoreGame`), and the game found opened. A new game from the tile's name and app
+   * id should the file be gone meanwhile.
+   */
+  | { kind: 'restore'; gameId: string; name: string; steamAppId?: number };
 
 /** The mode a new game starts with: one is needed, and most games have only one. */
 const FIRST_MODE = { id: 'default', name: 'Default' };
@@ -273,7 +279,8 @@ export function loadedOf(
   reserved?: Reserved;
   note?: string;
 } | null {
-  if (target.kind === 'new') {
+  const entry = target.kind === 'new' ? undefined : games.find((g) => g.game.id === target.gameId);
+  if (target.kind === 'new' || (target.kind === 'restore' && entry === undefined)) {
     const taken = games.map((g) => g.game.id);
     const game = newGame(target.name, taken, target.steamAppId);
     return {
@@ -282,10 +289,9 @@ export function loadedOf(
       edited: false,
       saved: false,
       taken,
-      ...(target.note === undefined ? {} : { note: target.note }),
+      ...(target.kind === 'new' && target.note !== undefined ? { note: target.note } : {}),
     };
   }
-  const entry = games.find((g) => g.game.id === target.gameId);
   if (entry === undefined) return null;
   return {
     game: entry.game,

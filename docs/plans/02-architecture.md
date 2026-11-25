@@ -211,8 +211,10 @@ yet is listed as a game helmArray knows (its Steam tile, *Game's own keys* offer
 the first time it is used: a scheme made from it, or an edit on the Game screen. So setting one up
 from its tile is a click on the tile, one on the preset, and Apply, as for a game that ships with
 helmArray. A game with a file format (or known by its id or Steam id) has *Read from the game's file*
-on the Game screen. Deleting a game read this way brings it back from its file, fresh, the next
-time the Library looks.
+on the Game screen. A game read this way and deleted stays deleted: the settings keep its id
+(`dismissed`; deleting any game helmArray knows by that id or Steam id does the same), and the
+Library no longer finds it from its file. Its Steam tile says *Set up* under Steam's name, and that
+click reads the file afresh, as a head start no one has used yet.
 
 ## Targets
 
@@ -275,7 +277,8 @@ open Play view, quit.
 
 ## Storage
 
-- `%APPDATA%/helmArray/`: `games/<id>.json`, `schemes/<id>.json`, `settings.json`.
+- `%APPDATA%/helmArray/`: `games/<id>.json`, `schemes/<id>.json`, `settings.json` (the
+  active game and scheme, and the games read from their file that you deleted).
   Each file carries `schemaVersion`; migrations run on load, one function per version. (Scheme
   version 3 added `devices`: an older scheme is both Azerons and nothing else. Applied plan
   version 2 added `gameBindings`: an older plan claims none.)

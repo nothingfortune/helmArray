@@ -248,3 +248,66 @@ test.describe('Everspace 2 read again once its file is empty', () => {
     expect(await readFile(savedGame(helm.dataDir), 'utf8')).toBe(before);
   });
 });
+
+/** Everspace 2's data in the app, read from its file and used, a name of yours on it. */
+const usedOnce: Seed = {
+  files: async (dataDir) => {
+    await everspace2.files(dataDir);
+    const { game } = JSON.parse(await readFile(HARVEST, 'utf8')) as { game: object };
+    await mkdir(join(dataDir, 'games'), { recursive: true });
+    await writeFile(
+      join(dataDir, 'games', 'everspace2.json'),
+      JSON.stringify({ schemaVersion: 1, ...game, name: 'My Everspace', steamAppId: 1128920 }),
+    );
+  },
+};
+
+test.describe('Everspace 2 read from its file, then deleted', () => {
+  test.use({ helmSeed: usedOnce });
+
+  test('stays deleted, and Set up on its tile reads the file afresh: 3 clicks to apply from there', async ({
+    helm,
+  }) => {
+    const { page } = helm;
+    await page.getByRole('button', { name: 'Edit actions: My Everspace' }).click();
+    await page.getByRole('button', { name: 'Delete game' }).click();
+    await page
+      .getByRole('group', { name: 'Are you sure?' })
+      .getByRole('button', { name: 'Delete' })
+      .click();
+    // Back in the Library: the game isn't found from its file again, its tile is Steam's Set up.
+    const setUp = page.getByRole('button', { name: 'Set up EVERSPACE™ 2' });
+    await expect(setUp).toBeVisible();
+    await expect(tile(page)).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^My Everspace\. / })).toHaveCount(0);
+    await expect
+      .poll(async () => {
+        const settings = JSON.parse(
+          await readFile(join(helm.dataDir, 'settings.json'), 'utf8').catch(() => '{}'),
+        ) as { dismissed?: string[] };
+        return settings.dismissed;
+      })
+      .toEqual(['everspace2']);
+
+    const counted = await countInput(page);
+    await setUp.click();
+    // The file read afresh: helmArray's name for the game, not yours, and every action in it.
+    await expect(page.getByRole('textbox', { name: 'Game name' })).toHaveValue('Everspace 2');
+    await page.getByRole('button', { name: "Game's own keys" }).click();
+    await expect(drawer(page)).toBeVisible();
+    await expect(drawer(page).getByLabel('Game file')).toContainText('Input.ini');
+    await applyInDrawer(page).click();
+    await expect(drawer(page).getByLabel('Result')).toContainText(
+      'Everspace 2 already has these controls.',
+    );
+    expect(await counted()).toEqual({ clicks: 3, drags: 0 });
+    await expect
+      .poll(async () => {
+        const saved = JSON.parse(
+          await readFile(savedGame(helm.dataDir), 'utf8').catch(() => '{}'),
+        ) as { name?: string; needsKeyStick?: boolean };
+        return [saved.name, saved.needsKeyStick];
+      })
+      .toEqual(['Everspace 2', true]);
+  });
+});

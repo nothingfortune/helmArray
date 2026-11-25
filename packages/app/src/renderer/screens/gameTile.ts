@@ -12,12 +12,16 @@ import type { GameTarget } from './game-model';
 export const needsSetUp = (entry: LibraryEntry): boolean =>
   entry.gameId === null || (entry.actionCount === 0 && entry.schemes.length === 0);
 
-/** The Game screen for this tile: the game helmArray knows, or a new one from Steam's entry. */
+/**
+ * The Game screen for this tile: the game helmArray knows, one read afresh from its file (deleted
+ * since it was), or a new one from Steam's entry.
+ */
 export function gameTarget(entry: LibraryEntry): GameTarget {
   if (entry.gameId !== null) return { kind: 'edit', gameId: entry.gameId };
   const appId = Number(entry.appId);
+  const steamAppId = Number.isSafeInteger(appId) && appId > 0 ? { steamAppId: appId } : {};
+  if (entry.restores !== undefined)
+    return { kind: 'restore', gameId: entry.restores, name: entry.name, ...steamAppId };
   const note = entry.fileNote === undefined ? {} : { note: entry.fileNote };
-  return Number.isSafeInteger(appId) && appId > 0
-    ? { kind: 'new', name: entry.name, steamAppId: appId, ...note }
-    : { kind: 'new', name: entry.name, ...note };
+  return { kind: 'new', name: entry.name, ...steamAppId, ...note };
 }

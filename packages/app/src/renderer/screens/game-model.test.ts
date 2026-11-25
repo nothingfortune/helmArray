@@ -415,6 +415,34 @@ describe('loadedOf', () => {
     );
   });
 
+  it('opens a game set up afresh from its file as the game found, not saved yet', () => {
+    expect(
+      loadedOf({ kind: 'restore', gameId: 'rover', name: 'ROVER™', steamAppId: 7 }, [
+        { game: two, builtIn: false, found: true, readsFile: true },
+      ]),
+    ).toEqual({
+      game: two,
+      builtIn: false,
+      edited: false,
+      saved: false,
+      found: true,
+      readsFile: true,
+      reserved: { modes: [], actions: [] },
+    });
+  });
+
+  it('makes a new game of one set up from its file when the file is gone meanwhile', () => {
+    expect(
+      loadedOf({ kind: 'restore', gameId: 'gone', name: 'Rover', steamAppId: 7 }, entries)?.game,
+    ).toEqual({
+      id: 'rover_2',
+      name: 'Rover',
+      steamAppId: 7,
+      modes: [{ id: 'default', name: 'Default' }],
+      actions: [],
+    });
+  });
+
   it('makes a new game, not saved yet, with an id no game has', () => {
     expect(loadedOf({ kind: 'new', name: 'Rover', steamAppId: 7 }, entries)).toEqual({
       game: {
