@@ -18,11 +18,10 @@ export type FileReadView =
 /** How many new actions of one mode are named before the rest are counted. */
 const NAMED = 5;
 
-const FIELD_WORDS: Readonly<Record<HarvestField, string>> = {
-  name: 'name',
+/** A field's name in a line; a name and *required* are said their own way. */
+const FIELD_WORDS: Readonly<Record<Exclude<HarvestField, 'name' | 'required'>, string>> = {
   mode: 'mode',
   role: 'role',
-  required: 'required',
   key: 'default key',
   pad: 'default controller button',
 };
@@ -48,10 +47,11 @@ function valueWords(game: Game, field: HarvestField, value: unknown): string {
 
 /** A list of names: `A`, `A and B`, `A, B and C`, past five `A, B, C, D, E and 12 more`. */
 function names(list: readonly string[]): string {
-  if (list.length > NAMED)
-    return `${list.slice(0, NAMED).join(', ')} and ${list.length - NAMED} more`;
-  if (list.length < 2) return list.join('');
-  return `${list.slice(0, -1).join(', ')} and ${list.at(-1) ?? ''}`;
+  const more = list.length - NAMED;
+  if (more > 0) return `${list.slice(0, NAMED).join(', ')} and ${more} more`;
+  // Stryker disable next-line StringLiteral: names is only given a list with a name in it, so it always has a last
+  const last = list.at(-1) ?? '';
+  return list.length === 1 ? last : `${list.slice(0, -1).join(', ')} and ${last}`;
 }
 
 /** One line for a field the file changed. */
@@ -66,6 +66,19 @@ function changedLine(game: Game, c: Extract<HarvestChange, { kind: 'changed' }>)
       return c.to === true ? `${c.name} is now required.` : `${c.name} is no longer required.`;
     default:
       return `${c.name}: ${FIELD_WORDS[c.field]} ${valueWords(game, c.field, c.from)} → ${to}.`;
+  }
+}
+
+/** One line for a field of yours that stays, though the file has another value. */
+function keptLine(game: Game, c: Extract<HarvestChange, { kind: 'kept' }>): string {
+  const file = valueWords(game, c.field, c.file);
+  switch (c.field) {
+    case 'name':
+      return `${c.name} keeps the name you gave it (the file calls it ${file}).`;
+    case 'required':
+      return `${c.name} stays ${valueWords(game, c.field, c.yours)}, as you set it (the file says ${file}).`;
+    default:
+      return `${c.name} keeps your ${FIELD_WORDS[c.field]}, ${valueWords(game, c.field, c.yours)} (the file has ${file}).`;
   }
 }
 
@@ -97,9 +110,7 @@ export function readLines(changes: readonly HarvestChange[], after: Game): strin
         added.set(c.mode, [...(added.get(c.mode) ?? []), c.name]);
         break;
       case 'kept':
-        kept.push(
-          `${c.name} keeps your ${FIELD_WORDS[c.field]}, ${valueWords(after, c.field, c.yours)} (the file has ${valueWords(after, c.field, c.file)}).`,
-        );
+        kept.push(keptLine(after, c));
         break;
       case 'gone':
         gone.push(c.name);

@@ -77,10 +77,7 @@ export function createGameHarvester(deps: HarvestDeps): GameHarvester {
   };
 
   const known = (game: Pick<Game, 'id' | 'steamAppId'>): FileGame | undefined =>
-    games.find(
-      (g) =>
-        g.id === game.id || (game.steamAppId !== undefined && g.steamAppId === game.steamAppId),
-    );
+    games.find((g) => g.id === game.id || g.steamAppId === game.steamAppId);
 
   const formatOf: GameHarvester['formatOf'] = (game) =>
     game.file?.format ?? known(game)?.format ?? null;

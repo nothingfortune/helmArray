@@ -113,6 +113,76 @@ describe('the words for what a read of the file changes', () => {
     ]);
   });
 
+  it('names five new actions with no count of more', () => {
+    const five = ['A', 'B', 'C', 'D', 'E'].map((name): HarvestChange => ({
+      kind: 'added',
+      action: name,
+      name,
+      mode: 'flight',
+    }));
+    expect(readLines(five, FIRST)).toEqual(['5 new actions in Flight: A, B, C, D and E.']);
+  });
+
+  it('names three gone, the last with and', () => {
+    const gone = ['A', 'B', 'C'].map((name): HarvestChange => ({
+      kind: 'gone',
+      action: name,
+      name,
+    }));
+    expect(readLines(gone, FIRST)).toEqual(["A, B and C aren't in the file any more, and stay."]);
+  });
+
+  it.each<[string, HarvestChange, string]>([
+    [
+      'a name',
+      {
+        kind: 'kept',
+        action: 'Boost',
+        name: 'Afterburner',
+        field: 'name',
+        yours: 'Afterburner',
+        file: 'Boost',
+      },
+      'Afterburner keeps the name you gave it (the file calls it Boost).',
+    ],
+    [
+      'a mode',
+      {
+        kind: 'kept',
+        action: 'Boost',
+        name: 'Boost',
+        field: 'mode',
+        yours: 'flight',
+        file: 'menu',
+      },
+      'Boost keeps your mode, Flight (the file has Menus).',
+    ],
+    [
+      'required',
+      { kind: 'kept', action: 'Boost', name: 'Boost', field: 'required', yours: true, file: false },
+      'Boost stays required, as you set it (the file says not required).',
+    ],
+    [
+      'a role',
+      {
+        kind: 'kept',
+        action: 'Boost',
+        name: 'Boost',
+        field: 'role',
+        yours: 'travel',
+        file: 'movement',
+      },
+      'Boost keeps your role, Travel (the file has Movement).',
+    ],
+    [
+      'a controller button taken off',
+      { kind: 'kept', action: 'Boost', name: 'Boost', field: 'pad', yours: undefined, file: 'LB' },
+      'Boost keeps your default controller button, none (the file has Xbox LB).',
+    ],
+  ])('says what of yours stays: %s', (_what, change, line) => {
+    expect(readLines([change], FIRST)).toEqual([line]);
+  });
+
   it('says one new action as one', () => {
     expect(
       readLines([{ kind: 'added', action: 'Scan', name: 'Scan', mode: 'flight' }], FIRST),

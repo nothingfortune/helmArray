@@ -57,6 +57,12 @@ describe('mergeHarvest: the first read', () => {
   it('is a game that can be saved', () => {
     expect(gameProblem(first)).toBeNull();
   });
+
+  it('lists no format for a file that has none', () => {
+    const noFormat = { ...FILE };
+    delete noFormat.file;
+    expect(mergeHarvest(null, noFormat).changes.map((c) => c.kind)).not.toContain('format');
+  });
 });
 
 describe('mergeHarvest: a re-read', () => {
@@ -141,6 +147,30 @@ describe('mergeHarvest: a re-read', () => {
       { ...BOOST, native: { key: { mods: ['shift', 'ctrl'], code: 'K', kind: 'key' } } },
     ]);
     expect(mergeHarvest(mine, again).changes).toEqual([]);
+  });
+
+  it('counts a key with other modifiers as another key', () => {
+    const file = fileGame([{ ...BOOST, native: { key: key('K', ['ctrl']) } }]);
+    const mine = mergeHarvest(null, file).game;
+    const again = fileGame([{ ...BOOST, native: { key: key('K', ['shift']) } }]);
+    expect(mergeHarvest(mine, again).changes.map((c) => c.kind)).toEqual(['changed']);
+  });
+
+  it('puts an action new in the file after the last of its own mode, not at the very end', () => {
+    const modes = [
+      { id: 'flight', name: 'Flight' },
+      { id: 'menu', name: 'Menus' },
+    ];
+    const mine = mergeHarvest(
+      null,
+      fileGame([BOOST, act({ id: 'Open', mode: 'menu' })], modes),
+    ).game;
+    const later = fileGame([BOOST, act({ id: 'Open', mode: 'menu' }), act({ id: 'Scan' })], modes);
+    expect(mergeHarvest(mine, later).game.actions.map((a) => a.id)).toEqual([
+      'Boost',
+      'Scan',
+      'Open',
+    ]);
   });
 
   it('adds an action new in the file at the end of its mode', () => {
@@ -360,6 +390,43 @@ describe('mergeHarvest: what helmArray put in the file itself', () => {
     const now = fileGame([{ ...BOOST, native: { key: key('G'), pad: 'LB' } }, FIRE]);
     const held = heldOf([{ signal: key('F13') }]);
     expect(boostOf(mergeHarvest(first, now, held).game)?.native?.key).toEqual(key('G'));
+  });
+
+  it('is only for the action it was written for: another action cleared in the file is news', () => {
+    const now = fileGame([{ ...BOOST, native: { pad: 'LB' } }, FIRE]);
+    const held = heldOf([{ action: 'Fire', signal: key('F13') }]);
+    expect(boostOf(mergeHarvest(first, now, held).game)?.native).toEqual({ pad: 'LB' });
+  });
+
+  it('is news when the player took a key off that helmArray had put there', () => {
+    const now = fileGame([{ ...BOOST, native: { pad: 'LB' } }, FIRE]);
+    const held = heldOf([{ signal: key('F13') }, { signal: null }]);
+    expect(boostOf(mergeHarvest(first, now, held).game)?.native).toEqual({ pad: 'LB' });
+  });
+
+  it('is news when the player bound a key where helmArray had put nothing', () => {
+    const now = fileGame([{ ...BOOST, native: { key: key('G'), pad: 'LB' } }, FIRE]);
+    expect(boostOf(mergeHarvest(first, now, heldOf([{ signal: null }])).game)?.native?.key).toEqual(
+      key('G'),
+    );
+  });
+
+  it('is either of two keys helmArray put there', () => {
+    const now = fileGame([{ ...BOOST, native: { key: key('G'), pad: 'LB' } }, FIRE]);
+    const held = heldOf([{ signal: key('F13') }, { signal: key('G') }]);
+    expect(mergeHarvest(first, now, held).changes).toEqual([]);
+  });
+
+  it('reads each binding set on its own: a controller set cleared says nothing of the keys', () => {
+    const now = fileGame([{ ...BOOST, native: { pad: 'LB' } }, FIRE]);
+    const held = heldOf([{ set: 'controller', signal: null }]);
+    expect(boostOf(mergeHarvest(first, now, held).game)?.native).toEqual({ pad: 'LB' });
+  });
+
+  it('reads each binding set on its own: keys cleared say nothing of the controller', () => {
+    const now = fileGame([{ ...BOOST, native: { key: key('LShift') } }, FIRE]);
+    const held = heldOf([{ set: 'keyboard', signal: null }]);
+    expect(boostOf(mergeHarvest(first, now, held).game)?.native).toEqual({ key: key('LShift') });
   });
 
   it('is nothing for an action helmArray put on nothing new, on a game never read before', () => {

@@ -58,12 +58,14 @@ export interface HarvestMerge {
   changes: HarvestChange[];
 }
 
-/** A value as comparable text: object keys in order, a key's modifiers in any order the same. */
+/**
+ * A value as comparable text: object keys in order, a key's modifiers in any order the same (the
+ * only arrays a field holds). Nothing at all is no text, which no value is either.
+ */
 function canon(value: unknown): string {
-  if (value === undefined) return '~';
-  return JSON.stringify(value, (key, v: unknown) => {
-    if (key === 'mods' && Array.isArray(v)) return [...(v as string[])].sort();
-    if (typeof v !== 'object' || v === null || Array.isArray(v)) return v;
+  return JSON.stringify(value, (_key, v: unknown) => {
+    if (Array.isArray(v)) return [...(v as string[])].sort();
+    if (typeof v !== 'object' || v === null) return v;
     return Object.fromEntries(
       Object.entries(v as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)),
     );
@@ -115,7 +117,7 @@ function setAside(
     rows.length > 0 &&
     (value === undefined
       ? rows.every((r) => r.signal === null)
-      : rows.some((r) => r.signal !== null && same(r.signal, value)));
+      : rows.some((r) => same(r.signal, value)));
   return actions.map((action) => {
     const rows = held.filter((r) => r.action === action.id);
     const keyRows = rows.filter((r) => r.set === 'keyboard');
@@ -123,7 +125,6 @@ function setAside(
     const pad = action.native?.pad;
     const keyHeld = matches(keyRows, action.native?.key);
     const padHeld = matches(padRows, pad === undefined ? undefined : { kind: 'pad', control: pad });
-    if (!keyHeld && !padHeld) return action;
     const before = base.get(action.id);
     return actionOf(action.id, (field) => {
       if (field === 'key' && keyHeld) return fieldOf(before, 'key');
@@ -160,8 +161,8 @@ export function mergeHarvest(
     return { game, changes };
   }
 
-  const retiredModes = new Set(mine.retired?.modes ?? []);
-  const retiredActions = new Set(mine.retired?.actions ?? []);
+  const retiredModes = new Set(mine.retired?.modes);
+  const retiredActions = new Set(mine.retired?.actions);
 
   // Modes: each of yours, renamed only where you hadn't; then the file's new ones.
   const fileModes = new Map(file.modes.map((m) => [m.id, m]));

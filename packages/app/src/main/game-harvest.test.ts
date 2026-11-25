@@ -145,7 +145,8 @@ describe('reading a game file', () => {
   it("says why when the file can't be read", async () => {
     const disk = {
       ...nodeGameFileDisk,
-      read: () => Promise.reject(new Error('EBUSY: resource busy or locked.')),
+      // A sentence's own full stop and space are dropped: it goes inside one.
+      read: () => Promise.reject(new Error('EBUSY: resource busy or locked. ')),
     };
     expect(await harvester({ disk }).read(ES2)).toEqual({
       ok: false,
