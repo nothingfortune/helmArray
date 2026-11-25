@@ -141,12 +141,10 @@ export async function composeServices(options: ComposeOptions): Promise<Services
   const files = options.gameFiles;
   // A game's install folder, as Steam has it for the game helmArray knows the format by: where
   // Elite's shipped preset is, for a player with no file of their own. Looked up afresh each time.
-  const installDir =
-    files?.installDir ??
-    (async (format: GameFileFormat): Promise<string | null> => {
-      const game = FILE_GAMES.find((g) => g.format === format);
-      return game === undefined ? null : steamInstallDir(options.steam, game.steamAppId);
-    });
+  const installDir = async (format: GameFileFormat): Promise<string | null> => {
+    const game = FILE_GAMES.find((g) => g.format === format);
+    return game === undefined ? null : steamInstallDir(options.steam, game.steamAppId);
+  };
   const harvester =
     files === undefined
       ? undefined

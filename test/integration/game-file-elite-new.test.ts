@@ -306,10 +306,63 @@ describe('Elite with no file of its own: when the file is not to be made', () =>
     ],
   ];
 
-  for (const [step, fails, message] of steps) {
+  /**
+   * The real disk, where the first read of `path` after its `writes`-th write gives back `stale`
+   * (the write didn't hold); every other read is real.
+   */
+  const staleRead = (path: () => string, writes: number, stale: () => Uint8Array): GameFileDisk => {
+    let written = 0;
+    let served = false;
+    return {
+      ...nodeGameFileDisk,
+      write: async (at, bytes) => {
+        await nodeGameFileDisk.write(at, bytes);
+        if (at === path()) written++;
+      },
+      read: (at) => {
+        if (at !== path() || written < writes || served) return nodeGameFileDisk.read(at);
+        served = true;
+        return Promise.resolve(stale());
+      },
+    };
+  };
+
+  const readBacks: [string, () => GameFileDisk, string][] = [
+    [
+      'reading the new file back',
+      () =>
+        staleRead(
+          () => elite.custom,
+          2,
+          () => SHIPPED_BYTES,
+        ),
+      `Elite Dangerous's controls file didn't read back as it was written${LEFT}`,
+    ],
+    [
+      'reading StartPreset back',
+      () =>
+        staleRead(
+          () => elite.start,
+          1,
+          () => new TextEncoder().encode(START),
+        ),
+      `StartPreset.4.start didn't read back as it was written${LEFT}`,
+    ],
+  ];
+
+  const cases: [string, () => GameFileDisk, string][] = [
+    ...steps.map(([step, fails, message]): [string, () => GameFileDisk, string] => [
+      step,
+      () => failingWrite(fails),
+      message,
+    ]),
+    ...readBacks,
+  ];
+
+  for (const [step, disk, message] of cases) {
     // After the units: the first case writes them, and the rest find them holding the layout.
     it(`a failure at ${step}: StartPreset stays, no new file, the baseline doesn't move`, async () => {
-      elite.world.gameDisk = failingWrite(fails);
+      elite.world.gameDisk = disk();
       const got = await attempt();
       expect({
         ok: got.result.ok,

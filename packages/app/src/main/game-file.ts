@@ -166,8 +166,6 @@ export interface GameFilesOptions {
   kinds?: Readonly<Partial<Record<GameFileFormat, GameFileKind>>>;
   /** The disk; the real one when not given. */
   disk?: GameFileDisk;
-  /** The games' install folders; Steam's, as the app reads it, when not given. */
-  installDir?: InstallDirOf;
 }
 
 /**

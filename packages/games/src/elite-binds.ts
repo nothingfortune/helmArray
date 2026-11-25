@@ -583,18 +583,20 @@ export interface EliteNewBinds {
 }
 
 /**
- * Where helmArray makes the player's own file, when the player has none: StartPreset is there (the
- * game has run), no line of it names a file of the player's, the folder holds no `Custom` file of
- * any version (one the game would read once StartPreset names `Custom`, and which a new one must
- * never be written over), and the install folder holds the preset the new file is made from. Null
- * otherwise.
+ * Where helmArray makes the player's own file, when the player has none: StartPreset is there and
+ * names a preset (the game has run), no line of it names a file of the player's, the folder holds
+ * no `Custom` file of any version (one the game would read once StartPreset names `Custom`, and
+ * which a new one must never be written over), and the install folder holds the preset the new
+ * file is made from. Null otherwise.
  */
 export function findEliteNewBinds(
   where: { installDir: string | null; localAppData: readonly string[] },
   fs: FolderReader,
 ): EliteNewBinds | null {
   const found = findEliteBinds({ installDir: null, localAppData: where.localAppData }, fs);
-  if (found === null || found.presets.some((p) => p.path !== null)) return null;
+  // A StartPreset that names nothing could not be pointed at the new file.
+  if (found === null || found.presets.length === 0) return null;
+  if (found.presets.some((p) => p.path !== null)) return null;
   if (presetFile(fs, found.folder, null, ELITE_NEW_PRESET) !== null) return null;
   const from = walk(fs, where.installDir, [...CONTROL_SCHEMES, BASE_PRESET]);
   if (from === null) return null;

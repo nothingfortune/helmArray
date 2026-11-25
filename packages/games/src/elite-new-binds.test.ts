@@ -158,6 +158,13 @@ describe('Elite: where the new file goes, and the preset it is made from', () =>
     ]).toEqual([null, null]);
   });
 
+  it('makes none when StartPreset names no preset at all: nothing would point the game at it', () => {
+    expect([
+      find({ [START]: '', [`${SCHEMES}/KeyboardMouseOnly.binds`]: '' }),
+      find({ [START]: '\r\n  \r\n', [`${SCHEMES}/KeyboardMouseOnly.binds`]: '' }),
+    ]).toEqual([null, null]);
+  });
+
   it('makes none before the game has run: no StartPreset', () => {
     expect(find({ [`${SCHEMES}/KeyboardMouseOnly.binds`]: '' })).toBeNull();
   });
