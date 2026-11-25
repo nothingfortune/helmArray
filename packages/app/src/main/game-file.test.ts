@@ -6,7 +6,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Game, GameBinding, GameFileFormat, Plan, Signal } from '@helmarray/core';
-import { harvestEliteBinds, harvestUnrealIni } from '@helmarray/games';
+import { harvestEliteBinds, harvestUnrealIni, writeUnrealIni } from '@helmarray/games';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { GameFileDisk } from './game-file-disk';
 import { nodeGameFileDisk } from './game-file-disk';
@@ -314,6 +314,34 @@ describe('the game-file target: a write', () => {
           "Everspace 2's controls file didn't read back as it was written, so it was put back as it was.",
       },
       file: ES2_BYTES,
+    });
+  });
+
+  it('notices a second key gone missing: what is checked is everything the file holds', async () => {
+    const twoKeys = planOf(ES2_GAME, [row('Boost', key('B')), row('Boost', key('C'))]);
+    let writes = 0;
+    const disk = failingWrites(async (path, bytes) => {
+      // The first write holds Boost's first key only; putting the file back goes through.
+      writes++;
+      const one = writeUnrealIni(ES2_BYTES.toString('utf8'), [row('Boost', key('B'))]);
+      await nodeGameFileDisk.write(path, writes === 1 ? new TextEncoder().encode(one) : bytes);
+    });
+    const written = await target().write(ES2_GAME, twoKeys);
+    const second = harvestUnrealIni((await ini()).toString('utf8'), ES2_GAME).kept;
+    await writeFile(iniPath, ES2_BYTES);
+    expect({
+      written: written.ok,
+      second,
+      faulty: await target({ disk }).write(ES2_GAME, twoKeys),
+    }).toEqual({
+      written: true,
+      second: expect.arrayContaining([{ action: 'Boost', set: 'keyboard', text: 'C' }]),
+      faulty: {
+        ok: false,
+        written: false,
+        message:
+          "Everspace 2's controls file didn't read back as it was written, so it was put back as it was.",
+      },
     });
   });
 
