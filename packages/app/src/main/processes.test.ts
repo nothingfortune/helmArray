@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseTasklistCsv } from './process-list';
 import type { ProcessState } from './processes';
-import { azeronAppRunning, watchProcesses, writeBlock } from './processes';
+import { azeronAppRunning, programRunning, watchProcesses, writeBlock } from './processes';
 
 describe('azeronAppRunning', () => {
   it.each([
@@ -20,6 +20,23 @@ describe('azeronAppRunning', () => {
       expect(azeronAppRunning(names)).toBe(false);
     },
   );
+});
+
+describe('programRunning', () => {
+  it.each([['Game.exe'], ['game.EXE'], ['GAME'], [' Game.exe ']])(
+    'knows a program of the list as %s, in any case, with or without .exe',
+    (name) => {
+      expect(programRunning(['explorer.exe', name], ['Other.exe', 'Game.exe'])).toBe(true);
+    },
+  );
+
+  it.each([
+    [['explorer.exe'], ['Game.exe']],
+    [['Game Launcher.exe'], ['Game.exe']],
+    [['Game.exe'], []],
+  ])('is false when none of them is there: %j for %j', (names, wanted) => {
+    expect(programRunning(names, wanted)).toBe(false);
+  });
 });
 
 describe('writeBlock', () => {

@@ -172,11 +172,11 @@ export interface ReadyCheck {
   ok: boolean;
   text: string;
   /**
-   * What it is about: the Azeron app (shown always: it is the one thing the person may have to
-   * do), a unit, the scheme's errors, or another apply running. The drawer shows the others only
-   * when they are not ready.
+   * What it is about: the Azeron app, or the game whose file is written (each shown always: the
+   * one thing the person may have to do is close it), a unit, the game's file, the scheme's
+   * errors, or another apply running. The drawer shows the others only when they are not ready.
    */
-  kind?: 'azeron-app' | 'unit' | 'scheme' | 'busy';
+  kind?: 'azeron-app' | 'game' | 'unit' | 'game-file' | 'scheme' | 'busy';
 }
 
 /**
