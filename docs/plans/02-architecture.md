@@ -191,6 +191,14 @@ name), with what the file has now, what it had at the last read, and what the da
   id is retired (you deleted it, or its mode: the Game screen's rule, so it never comes back) or
   its mode isn't there. One in the data and not in the file stays: added by hand, or gone from
   the file.
+- An action you typed in by hand (in the data, not in the file, and not in it at the last read)
+  whose name is that of an action the file has in the same mode, compared in any case and with any
+  spaces, is the file's action: yours stays as you have it, and the file's isn't added beside it.
+  Each of yours stands for one of the file's. The list says so in one line ("Boost is in the file
+  too: yours stays, and the file's isn't added beside it."). A game typed in by hand before its
+  file was read (`everspace_2`, under Everspace 2's Steam id) reads the file into itself, never
+  into a second id. (A game made on the Game screen starts with one mode, `default`, which no file
+  has: its actions match none of the file's until they are in the same mode.)
 - `file.format` is the file's; the game's name, Steam id, retired ids and *the sticks must send
   keys* are the data's.
 

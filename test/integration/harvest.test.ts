@@ -15,6 +15,7 @@ import { gameProblem, mergeHarvest } from '@helmarray/core';
 import { harvestEliteBinds, harvestUnrealIni, writeUnrealIni } from '@helmarray/games';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { assign } from '../../packages/app/src/renderer/screens/editor-model';
+import { addAction, newGame } from '../../packages/app/src/renderer/screens/game-model';
 import type {
   ApplyPreview,
   ApplyResult,
@@ -527,6 +528,89 @@ describe('a game typed in by hand under Everspace 2’s Steam id, deleted', () =
   it("doesn't come back as the game found by its file: its tile is Set up, from the file", () => {
     const tile = tileOf(library, '1128920');
     expect([tile?.gameId, tile?.restores]).toEqual([null, ES2]);
+  });
+});
+
+describe('Everspace 2 typed in by hand before its file was read', () => {
+  let world: World;
+  let typed: Game;
+  let flightTyped: Game;
+
+  beforeAll(async () => {
+    world = await World.create({ steam: STEAM });
+    await placeFiles(world);
+    await world.boot();
+    // As *Set up* on its Steam tile makes it, then two actions typed in.
+    typed = newGame('Everspace 2', [], 1128920);
+    typed = addAction(typed, 'default', 'Boost [HOLD]').game;
+    typed = addAction(typed, 'default', 'Wave').game;
+    await world.helm.saveGame(typed);
+    await world.idle();
+    // The same, its actions in a mode with the file's id for flight.
+    flightTyped = {
+      ...typed,
+      modes: [{ id: 'flight', name: 'Flight' }],
+      actions: typed.actions.map((a) => ({ ...a, mode: 'flight' })),
+    };
+  });
+
+  afterAll(async () => {
+    await world.dispose();
+  });
+
+  it('is the game the Library has for Everspace 2: its file is found under no second id', async () => {
+    const games = await world.helm.listGames();
+    const tile = tileOf(await world.helm.listLibrary(), '1128920');
+    expect({
+      id: typed.id,
+      tile: tile?.gameId,
+      found: games.filter((e) => e.found === true).map((e) => e.game.id),
+      readsFile: entryOf(games, typed.id)?.readsFile,
+    }).toEqual({
+      id: 'everspace_2',
+      tile: 'everspace_2',
+      found: ['elite-dangerous'],
+      readsFile: true,
+    });
+  });
+
+  it("reads the file into that game, under that game's id", async () => {
+    const read = await world.helm.readGameFile(typed.id);
+    expect(read.ok && [read.file.id, read.file.actions.length]).toEqual([
+      'everspace_2',
+      ES2_HARVEST.actions.length,
+    ]);
+  });
+
+  it("keeps an action typed in under a name the file has in the same mode, and says so: the file's isn't added beside it", async () => {
+    const read = await world.helm.readGameFile(typed.id);
+    // As the Game screen merges it.
+    const { game, changes } = mergeHarvest(flightTyped, (read as { file: Game }).file);
+    const boosts = game.actions.filter((a) => a.name === 'Boost [HOLD]').map((a) => a.id);
+    expect({
+      boosts,
+      wave: game.actions.some((a) => a.id === 'wave'),
+      all: game.actions.length,
+      same: changes.filter((c) => c.kind === 'same-name'),
+    }).toEqual({
+      boosts: ['boost_hold'],
+      wave: true,
+      all: ES2_HARVEST.actions.length + 1,
+      same: [{ kind: 'same-name', action: 'boost_hold', name: 'Boost [HOLD]', file: 'Boost' }],
+    });
+  });
+
+  it('saves that read, and a second read adds nothing more', async () => {
+    const first = await world.helm.readGameFile(typed.id);
+    await world.helm.saveGame(mergeHarvest(flightTyped, (first as { file: Game }).file).game);
+    await world.idle();
+    const saved = entryOf(await world.helm.listGames(), typed.id)?.game as Game;
+    const again = await world.helm.readGameFile(typed.id);
+    const { game, changes } = mergeHarvest(saved, (again as { file: Game }).file);
+    expect([game.actions.length, changes.map((c) => c.kind)]).toEqual([
+      saved.actions.length,
+      ['same-name'],
+    ]);
   });
 });
 

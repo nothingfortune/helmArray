@@ -311,3 +311,64 @@ test.describe('Everspace 2 read from its file, then deleted', () => {
       .toEqual(['Everspace 2', true]);
   });
 });
+
+/** Everspace 2 typed in by hand under its Steam id before its file was read: two actions of yours. */
+const typedByHand: Seed = {
+  files: async (dataDir) => {
+    await everspace2.files(dataDir);
+    await mkdir(join(dataDir, 'games'), { recursive: true });
+    const action = (id: string, name: string) => ({ id, name, mode: 'flight', required: false });
+    await writeFile(
+      join(dataDir, 'games', 'everspace_2.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        id: 'everspace_2',
+        name: 'Everspace 2',
+        steamAppId: 1128920,
+        modes: [{ id: 'flight', name: 'Flight' }],
+        actions: [action('boost_hold', 'boost [hold]'), action('wave', 'Wave')],
+      }),
+    );
+  },
+};
+
+test.describe('Everspace 2 typed in by hand, then read from its file', () => {
+  test.use({ helmSeed: typedByHand });
+
+  test("reads the file into that game, and an action of yours the file has too isn't shown twice", async ({
+    helm,
+  }) => {
+    const { page } = helm;
+    // One tile for the game: the file isn't found as a second one.
+    await expect(page.getByRole('button', { name: /^Everspace 2\. / })).toHaveCount(1);
+    await page.getByRole('button', { name: 'Edit actions: Everspace 2' }).click();
+    await page.getByRole('button', { name: "Read from the game's file" }).click();
+    const found = page.getByRole('region', { name: "From the game's file" });
+    await expect(found).toContainText(
+      "boost [hold] is in the file too: yours stays, and the file's isn't added beside it.",
+    );
+    await found.getByRole('button', { name: 'Save these changes' }).click();
+    await expect(found).toHaveCount(0);
+    await expect
+      .poll(async () => {
+        const saved = JSON.parse(
+          await readFile(join(helm.dataDir, 'games', 'everspace_2.json'), 'utf8').catch(() => '{}'),
+        ) as { actions?: { id: string; name: string }[] };
+        const ids = (saved.actions ?? []).map((a) => a.id);
+        return [
+          ids.includes('boost_hold'),
+          ids.includes('Boost'),
+          ids.includes('wave'),
+          ids.length > 50,
+        ];
+      })
+      .toEqual([true, false, true, true]);
+    // On the screen: yours, once, and no row for the file's of the same name.
+    await expect(
+      page.getByRole('textbox', { name: 'boost [hold], name', exact: true }),
+    ).toHaveCount(1);
+    await expect(
+      page.getByRole('textbox', { name: 'Boost [HOLD], name', exact: true }),
+    ).toHaveCount(0);
+  });
+});
