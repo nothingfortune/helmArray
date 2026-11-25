@@ -8,7 +8,7 @@ import { helldivers2 } from './games/helldivers2';
 import type { Scheme, SetupDevices, Signal } from './model';
 import { AZERONS_ONLY } from './model';
 import type { GameBinding, Plan } from './plan';
-import { gameKeysPreset } from './presets/keys';
+import { blankKeysScheme } from './presets/keys';
 import { xboxControllerPreset } from './presets/xbox';
 import { bindingChanged, resolve } from './resolve';
 
@@ -259,7 +259,7 @@ describe('a stick keeps the actions it sends for', () => {
 
 describe('the keyboard rebinds the game’s keyboard set', () => {
   const keyboard: Scheme = {
-    ...gameKeysPreset(helldivers2),
+    ...blankKeysScheme(helldivers2),
     devices: devices({ azerons: 'none', keyboard: true }),
     map: { default: { 'key.G': { tap: 'reload' } } },
   };
@@ -355,7 +355,7 @@ describe('the keyboard and Azerons sending keys share the keyboard set', () => {
   // Throw grenade is on the keyboard's R, where the game ships Reload. Reload is on an Azeron button
   // with the game's own keys: its own key is taken, so the button gets one of the pool's.
   const plan = run({
-    ...gameKeysPreset(helldivers2),
+    ...blankKeysScheme(helldivers2),
     devices: devices({ keyboard: true }),
     map: { default: { 'key.R': { tap: 'grenade' }, 'L.index_1': { tap: 'reload' } } },
   });
@@ -444,7 +444,7 @@ describe('a stick sending W, A, S and D beside buttons sending Xbox controls', (
 describe('an Xbox stick beside buttons sending keys', () => {
   it('reaches the moves on the stick directions the game ships them on', () => {
     const plan = run({
-      ...gameKeysPreset(helldivers2),
+      ...blankKeysScheme(helldivers2),
       behaviour: {
         'L.stick': { stick: { mode: 'pad-left' } },
         'R.stick': { stick: { mode: 'mouse' } },

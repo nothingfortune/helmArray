@@ -1,5 +1,5 @@
 import type { Game, Scheme } from '@helmarray/core';
-import { gameKeysPreset } from '@helmarray/core';
+import { blankKeysScheme } from '@helmarray/core';
 import { describe, expect, it, vi } from 'vitest';
 import type { HelmApi } from '../../shared/api';
 import { GameEditor } from './game-editor';
@@ -30,7 +30,7 @@ function api(over: Partial<EditorApi> = {}) {
       over.createScheme ??
         ((gameId) =>
           Promise.resolve({
-            ...gameKeysPreset({ ...rover, id: gameId }),
+            ...blankKeysScheme({ ...rover, id: gameId }),
             id: 'rover-keys-1',
           } as Scheme)),
     ),

@@ -16,6 +16,7 @@ import {
   leftUnit,
   pill,
   schemePicker,
+  startBlankKeys,
   startFrom,
 } from './screens';
 
@@ -30,20 +31,25 @@ async function applyAndWait(page: Page, result: string | RegExp) {
 const slotNames = async (helm: Helm) => (await helm.units()).map((u) => u.slots.map((s) => s.name));
 
 test.describe('setups', () => {
-  test('J1: Helldivers 2 as a controller is two clicks, and Apply writes both units', async ({
+  test('J1: Helldivers 2 as a controller is three clicks, and Apply writes both units', async ({
     helm,
   }) => {
     const { page } = helm;
-    // Click 1, the game; click 2, the default.
+    // Click 1, the game; click 2, the default: nothing to fix, so the drawer opens on it.
     await helldivers(page).click();
     await page.getByRole('button', { name: 'Xbox controller' }).click();
-    await expect(page.getByRole('heading', { name: 'Helldivers 2' })).toBeVisible();
+    await expect(drawer(page)).toBeVisible();
+    // Click 3, the drawer's Apply.
+    await expect(applyInDrawer(page)).toBeEnabled();
+    await applyInDrawer(page).click();
+    await expect(drawer(page).getByLabel('Result')).toContainText('Both units now run the layout.');
+    // Under it, the Editor on the new setup: both Azerons, as a controller.
+    await drawer(page).getByRole('button', { name: 'Close' }).click();
     await expect(azeronsSend(page).getByRole('button', { name: 'Controller' })).toHaveAttribute(
       'aria-pressed',
       'true',
     );
     await expect(deviceTab(page, 'Azerons')).toHaveAttribute('aria-pressed', 'true');
-    await applyAndWait(page, 'Both units now run the layout.');
     await expect.poll(() => slotNames(helm)).toEqual([['Xbox controller'], ['Xbox controller']]);
     await expect(pill(page)).toHaveText('In sync');
   });
@@ -100,7 +106,8 @@ test.describe('setups', () => {
     helm,
   }) => {
     const { page } = helm;
-    await startFrom(page, "Game's own keys");
+    // A game's own keys scheme with nothing placed: the preset places every action now.
+    await startBlankKeys(page);
     const left = leftUnit(page);
     // Throw grenade on the left index 2's long press, nothing on its tap.
     await left.getByRole('button', { name: 'Empty, index 2' }).click();
@@ -118,7 +125,8 @@ test.describe('setups', () => {
     helm,
   }) => {
     const { page } = helm;
-    await startFrom(page, "Game's own keys");
+    // A game's own keys scheme with nothing placed: the preset places every action now.
+    await startBlankKeys(page);
     const left = leftUnit(page);
     await left.getByRole('button', { name: 'Empty, index 2' }).click();
     await page.locator('.ed-panel').getByRole('button', { name: /^Long/ }).click();
@@ -207,7 +215,8 @@ test.describe('setups', () => {
     helm,
   }) => {
     const { page } = helm;
-    await startFrom(page, "Game's own keys");
+    // A game's own keys scheme with nothing placed: the preset places every action now.
+    await startBlankKeys(page);
     await chooseDevice(page, 'Keyboard and mouse');
     await chooseDevice(page, 'None');
     await expect(deviceTab(page, 'Keyboard')).toHaveAttribute('aria-pressed', 'true');

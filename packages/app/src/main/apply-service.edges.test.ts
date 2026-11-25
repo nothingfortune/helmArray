@@ -4,7 +4,7 @@
 // sentences and branches no other test noticed.
 import { describe, expect, it } from 'vitest';
 import type { Game, Hand, Plan, Scheme } from '@helmarray/core';
-import { BUILT_IN_DEVICES, gameKeysPreset, resolve } from '@helmarray/core';
+import { BUILT_IN_DEVICES, blankKeysScheme, resolve } from '@helmarray/core';
 import { BUSY_SENTENCE, changedRows, createApplyService } from './apply-service';
 import type { ApplyDevices, ApplyServiceDeps } from './apply-service';
 import type { UnitSnapshot } from './devices';
@@ -20,7 +20,7 @@ const game: Game = {
   file: { format: 'elite-binds' },
 };
 const scheme: Scheme = {
-  ...gameKeysPreset(game),
+  ...blankKeysScheme(game),
   name: 'Main',
   writeGameFile: false,
   accepted: [
@@ -497,7 +497,7 @@ describe('the game rows that change, in the game’s words', () => {
   const planOf = (): Plan =>
     resolve(
       {
-        ...gameKeysPreset(twoModes),
+        ...blankKeysScheme(twoModes),
         writeGameFile: false,
         accepted: [
           { rule: 'stick-no-directions', control: 'L.stick', reason: 'x' },

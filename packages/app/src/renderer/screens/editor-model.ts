@@ -14,27 +14,23 @@ import type {
   Game,
   ModeId,
   PadControl,
-  Plan,
   Press,
   Scheme,
   SetupDevices,
-  StickBehaviour,
-  StickDirections,
 } from '@helmarray/core';
 import {
-  BUILT_IN_DEVICES,
   CHECK_RULES,
   DEFAULT_TURBO_INTERVAL,
   KEYBOARD_MOUSE,
   XBOX_PAD,
   PAD_CONTROLS,
   PRESSES,
-  STICK_DIRECTIONS,
   controlSet,
   inSetup,
   own,
   padSignalOf,
   setupOf,
+  stickForOutput,
   stickPadsOf,
   withOwn,
 } from '@helmarray/core';
@@ -521,88 +517,6 @@ export function unacceptFinding(scheme: Scheme, finding: Finding): Scheme {
   return { ...scheme, accepted: scheme.accepted.filter((a) => !sameFinding(a, finding)) };
 }
 
-// ---- Fixes: the obvious one-click answer to a finding, where there is one ----
-
-export interface Fix {
-  /** The button's words. */
-  label: string;
-  apply: (scheme: Scheme) => Scheme;
-}
-
-const nameOf = (game: Game, id: ActionId): string =>
-  game.actions.find((a) => a.id === id)?.name ?? id;
-
-/** The slots of a control, in a mode, that hold an action. */
-function slotsOn(
-  scheme: Scheme,
-  mode: ModeId,
-  control: ControlId,
-): (Slot & { action: ActionId })[] {
-  const presses = own(own(scheme.map, mode) ?? {}, control) ?? {};
-  return PRESSES.flatMap((press) => {
-    const action = presses[press];
-    return action === undefined ? [] : [{ mode, control, press, action }];
-  });
-}
-
-const clearAll = (scheme: Scheme, slots: readonly Slot[]): Scheme =>
-  slots.reduce((s, slot) => clear(s, slot), scheme);
-
-/**
- * The one edit that clears a finding, when one clear edit does. Key collisions, a missing
- * required action and the stick findings have no obvious fix: which of two actions should give
- * way is the player's call.
- */
-export function fixFor(finding: Finding, scheme: Scheme, game: Game, plan: Plan): Fix | undefined {
-  const { control, mode } = finding;
-  if (control === undefined) return undefined;
-  switch (finding.rule) {
-    case 'hold-on-movement':
-      return { label: 'Turn off hold to latch', apply: (s) => setLatch(s, control, false) };
-    case 'combat-tap-delayed': {
-      // The unit keeps one setting per button for every mode, so the delay reaches them all.
-      const slots = game.modes.flatMap((m) =>
-        slotsOn(scheme, m.id, control).filter((s) => s.press !== 'tap'),
-      );
-      if (slots.length === 0) return undefined;
-      const hasLong = slots.some((s) => s.press === 'long');
-      const hasDouble = slots.some((s) => s.press === 'double');
-      const what =
-        hasLong && hasDouble ? 'long press and double tap' : hasLong ? 'long press' : 'double tap';
-      return { label: `Remove ${what}`, apply: (s) => clearAll(s, slots) };
-    }
-    case 'menu-with-combat': {
-      if (mode === undefined) return undefined;
-      const slots = slotsOn(scheme, mode, control).filter(
-        (s) => game.actions.find((a) => a.id === s.action)?.role === 'menu',
-      );
-      const first = slots[0];
-      if (first === undefined) return undefined;
-      return { label: `Take ${nameOf(game, first.action)} off`, apply: (s) => clearAll(s, slots) };
-    }
-    case 'sends-nothing': {
-      if (mode === undefined) return undefined;
-      // The same reading core's check makes of each press. A unit's button sends what its pin
-      // says. A fixed control (a key, a mouse button, a pad button) only taps, so only its
-      // other presses send nothing: its tap must survive. A control no device has sends nothing.
-      const pin = [...(plan.units.left?.pins ?? []), ...(plan.units.right?.pins ?? [])].find(
-        (p) => p.control === control,
-      );
-      // A control of a device the setup doesn't use sends nothing on any press.
-      const known =
-        inSetup(setupOf(scheme.devices), control) &&
-        BUILT_IN_DEVICES.some((d) => d.controls.some((c) => c.id === control));
-      const sendsNothing = (press: Press): boolean =>
-        pin !== undefined ? pin.presses[press] === undefined : known ? press !== 'tap' : true;
-      const slots = slotsOn(scheme, mode, control).filter((s) => sendsNothing(s.press));
-      if (slots.length === 0) return undefined;
-      return { label: 'Take it off the button', apply: (s) => clearAll(s, slots) };
-    }
-    default:
-      return undefined;
-  }
-}
-
 // ---- Undo and redo, in memory, per scheme ----
 
 export interface History<T> {
@@ -722,47 +636,14 @@ export function isTextEntry(target: {
 const isAzeron = (control: ControlId): boolean =>
   control.startsWith('L.') || control.startsWith('R.');
 
-const STICK_PAD_DIRECTIONS = {
-  L: { up: 'LS_UP', down: 'LS_DOWN', left: 'LS_LEFT', right: 'LS_RIGHT' },
-  R: { up: 'RS_UP', down: 'RS_DOWN', left: 'RS_LEFT', right: 'RS_RIGHT' },
-} as const;
-
-/**
- * What a unit's stick does once the Azerons send `output`: its hand's Xbox stick for a controller;
- * for keys, the keys the game ships the actions of its Xbox directions on (the left stick's up is
- * Move forward, so W), or the mouse when none of them has one. Tuning is kept; the old
- * directions are not.
- */
-function stickFor(
-  prefix: 'L' | 'R',
-  before: StickBehaviour | undefined,
-  output: Scheme['output'],
-  game: Game,
-): StickBehaviour {
-  const tuning: Partial<StickBehaviour> = { ...before };
-  delete tuning.mode;
-  delete tuning.directions;
-  if (output === 'pad') return { ...tuning, mode: prefix === 'L' ? 'pad-left' : 'pad-right' };
-  const directions: StickDirections = {};
-  for (const direction of STICK_DIRECTIONS) {
-    const pad = STICK_PAD_DIRECTIONS[prefix][direction];
-    const key = game.actions.find((a) => a.native?.pad === pad && a.native.key?.kind === 'key')
-      ?.native?.key;
-    // keyed-write-ok: the key is a stick direction, one of four names
-    if (key !== undefined) directions[direction] = key;
-  }
-  return Object.keys(directions).length === 0
-    ? { ...tuning, mode: 'mouse' }
-    : { ...tuning, mode: 'keys', directions };
-}
-
 /**
  * "Azerons send: Keys | Controller". Every Azeron button keeps the action on its tap, now sent as
  * the other kind of signal, in the other binding set of the game: with a controller each gets an
  * Xbox control (THE PAD RULE, rule 2: the one the game ships its action on when free), with keys
  * the pad map empties. What a button showed only through its Xbox control (the controller's button
  * carries it) becomes its own. A controller button only taps, so a long press or a double tap
- * comes off (its action is unplaced); switching to keys keeps them. Each stick follows (`stickFor`). The keyboard and the mouse keep what
+ * comes off (its action is unplaced); switching to keys keeps them. Each stick follows (core's
+ * `stickForOutput`). The keyboard and the mouse keep what
  * they have, and the ledger is never touched. With a controller in the setup, it keeps doing what
  * it did: switching to keys gives its buttons the actions they showed through an Azeron button,
  * and switching to a controller puts an Azeron button on the control the controller already has
@@ -822,7 +703,7 @@ export function setOutput(scheme: Scheme, output: Scheme['output'], game: Game):
     const before: Behaviour = own(scheme.behaviour, id) ?? {};
     behaviour = withOwn<Behaviour>(behaviour, id, {
       ...before,
-      stick: stickFor(prefix, before.stick, output, game),
+      stick: stickForOutput(prefix === 'L' ? 'left' : 'right', before.stick, output, game),
     });
   }
   const out: Scheme = { ...scheme, output, padMap: {}, map, behaviour };

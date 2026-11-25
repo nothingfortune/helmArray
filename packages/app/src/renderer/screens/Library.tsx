@@ -294,7 +294,8 @@ export function Library({
   onSheetDone,
 }: {
   state: AppState | null;
-  onOpenEditor: (schemeId: string) => void;
+  /** `made`: the scheme was just made from a preset (J1), not one opened. */
+  onOpenEditor: (schemeId: string, made?: boolean) => void;
   /** The Game screen: *Set up*, *Edit actions* and *Add a game*. */
   onOpenGame: OpenGame;
   /** *Done* on what is still to set by hand in a game's controls (`state.sheets`). */
@@ -321,7 +322,7 @@ export function Library({
       void runMake(window.helm, command.gameId, command.preset).then((outcome) => {
         if (outcome.ok) {
           send({ type: 'finished' });
-          onOpenEditor(outcome.schemeId);
+          onOpenEditor(outcome.schemeId, true);
         } else send({ type: 'failed', message: outcome.message });
       });
     }

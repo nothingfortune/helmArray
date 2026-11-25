@@ -161,7 +161,12 @@ test.describe('keyboard: the setups', () => {
     await deviceTab(page, 'Controller').click();
     const stops = await walkTabOrder(page);
     expect(stops.map((s) => s.label)).toEqual(
-      expect.arrayContaining(['X, Reload', 'L stick, Stick', 'LT, Aim']),
+      // The left stick names the actions on its directions (it said "Stick" before the audit).
+      expect.arrayContaining([
+        'X, Reload',
+        expect.stringMatching(/^L stick, Move forward/),
+        'LT, Aim',
+      ]),
     );
     expect(unseen(stops)).toEqual([]);
   });

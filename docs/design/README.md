@@ -72,3 +72,14 @@ and has not drawn them on the canvas yet:
   Keyboard tab the mouse goes under the keyboard when beside it the keyboard would be under 0.8.
 - **The Apply drawer's game half**, "In the game's controls", one line per binding ("Set Reload
   to Xbox Y"), and after Apply the same lines as the bind sheet.
+- **Recent games** in the Editor's bar, after the game's name: a muted "Recent" and up to three
+  games as ghost buttons, each opening that game's scheme in one click (J3).
+- **A check with no fix it can offer** says why after its sentence, in the secondary colour ("Every
+  controller button is in use; clear one first."). A fix button is drawn only when applying it
+  removes the finding and adds no error.
+- **The checks' groups**: findings of one rule about actions of one role are one line ("**4
+  movement actions** aren't on a button.") with one fix for them all, and *Show each* opens them.
+- **The stick in the side panel** lists its four directions read only (each with its action and
+  what it sends), and the action list has an *On the stick* group for the actions a stick does.
+- **J1 from a preset** opens the Apply drawer straight away when the new scheme has nothing to
+  fix (the owner, 2026-11-24): tile, preset, the drawer's Apply.

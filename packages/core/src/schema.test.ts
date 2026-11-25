@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AppSettings, Game, Scheme } from './model';
-import { copyScheme, gameKeysPreset } from './presets/keys';
+import { copyScheme, blankKeysScheme } from './presets/keys';
 import type { Migration } from './schema';
 import { MIGRATIONS, SchemaError, currentVersion, load, runMigrations, store } from './schema';
 // Frozen: what a scheme looked like on disk at version 1. Never regenerate it.
@@ -97,7 +97,7 @@ describe('the baselines (sheets.json, version 2)', () => {
 
 describe('store and load', () => {
   it('stamp the current version, and give back the same scheme', () => {
-    const scheme = copyScheme(gameKeysPreset(game), 'mine', 'Mine');
+    const scheme = copyScheme(blankKeysScheme(game), 'mine', 'Mine');
     const stored = store('scheme', scheme);
     expect(Object.keys(stored)[0]).toBe('schemaVersion');
     expect(stored.schemaVersion).toBe(currentVersion('scheme'));
@@ -116,7 +116,7 @@ describe('store and load', () => {
   });
 
   it('give back the same applied plan', () => {
-    const plan = resolve(gameKeysPreset(game), game, BUILT_IN_DEVICES);
+    const plan = resolve(blankKeysScheme(game), game, BUILT_IN_DEVICES);
     const stored = store('applied', plan);
     expect(stored.schemaVersion).toBe(currentVersion('applied'));
     expect(load('applied', JSON.parse(JSON.stringify(stored)))).toEqual(plan);
@@ -131,7 +131,7 @@ describe('store and load', () => {
   });
 
   it('share nothing with what they were given', () => {
-    const scheme = gameKeysPreset(game);
+    const scheme = blankKeysScheme(game);
     const stored = store('scheme', scheme);
     stored.map['ship'] = { 'L.index_1': { tap: 'boost' } };
     expect(scheme.map['ship']).toEqual({});
@@ -213,14 +213,14 @@ describe('key labels (scheme version 4)', () => {
 
   it('keep the key labels a scheme was saved with', () => {
     const scheme: Scheme = {
-      ...gameKeysPreset(game),
+      ...blankKeysScheme(game),
       keyLabels: { ship: { 'L.index_1': 'Go' } },
     };
     expect(load('scheme', JSON.parse(JSON.stringify(store('scheme', scheme))))).toEqual(scheme);
   });
 
   it('start a preset with none', () => {
-    expect(gameKeysPreset(game).keyLabels).toEqual({});
+    expect(blankKeysScheme(game).keyLabels).toEqual({});
   });
 });
 

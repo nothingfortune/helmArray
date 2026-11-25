@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Game, Plan, Scheme, UnitWrite } from '@helmarray/core';
-import { BUILT_IN_DEVICES, CYBORG2_LEFT, gameKeysPreset, resolve, unitOf } from '@helmarray/core';
+import { BUILT_IN_DEVICES, CYBORG2_LEFT, blankKeysScheme, resolve, unitOf } from '@helmarray/core';
 import {
   Command,
   FakeUnit,
@@ -30,7 +30,7 @@ const game: Game = {
   file: { format: 'elite-binds' },
 };
 const scheme: Scheme = {
-  ...gameKeysPreset(game),
+  ...blankKeysScheme(game),
   name: 'Main',
   writeGameFile: false,
   // The sticks send nothing here, which the checks call an error until it is accepted.

@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { clone } from './clone';
 import { BUILT_IN_DEVICES } from './devices/index';
 import type { Game, Scheme } from './model';
-import { gameKeysPreset } from './presets/keys';
+import { blankKeysScheme } from './presets/keys';
 import { xboxControllerPreset } from './presets/xbox';
 import { resolve } from './resolve';
 
@@ -53,7 +53,7 @@ const without = (id: string): Game => ({
 
 /** The game's own keys, with Reload on the left index 1 tap and Jump on index 2. */
 function keysScheme(): Scheme {
-  const scheme = gameKeysPreset(game);
+  const scheme = blankKeysScheme(game);
   scheme.map['fight'] = {
     'L.index_1': { tap: 'reload' },
     'L.index_2': { tap: 'jump' },

@@ -1,6 +1,6 @@
 import { helldivers2 } from '@helmarray/core';
 import type { Game, Scheme } from '@helmarray/core';
-import { gameKeysPreset, xboxControllerPreset } from '@helmarray/core';
+import { blankKeysScheme, xboxControllerPreset } from '@helmarray/core';
 import { describe, expect, it, vi } from 'vitest';
 import type { GameEntry } from '../shared/api';
 import { coverUrl } from '../shared/cover';
@@ -163,7 +163,7 @@ describe('the merged library', () => {
   });
 
   it('ignores an active scheme id that is not one of the game schemes', () => {
-    const own = gameKeysPreset(SKIFF);
+    const own = blankKeysScheme(SKIFF);
     const [entry] = mergeLibrary({
       steam: [],
       games: [{ game: SKIFF, builtIn: false }],
@@ -175,7 +175,7 @@ describe('the merged library', () => {
   });
 
   it('carries the scheme applied last and when, only while that scheme is still the game own', () => {
-    const own = gameKeysPreset(SKIFF);
+    const own = blankKeysScheme(SKIFF);
     const input = (schemeId: string) => ({
       steam: [],
       games: [{ game: SKIFF, builtIn: false }],
@@ -193,7 +193,7 @@ describe('the merged library', () => {
   });
 
   it('asks the store which scheme of each game was applied last, and how it has changed since', async () => {
-    const own = gameKeysPreset(SKIFF);
+    const own = blankKeysScheme(SKIFF);
     const lastApplied = vi.fn((gameId: string) =>
       Promise.resolve(gameId === 'skiff' ? { schemeId: own.id, at: 77 } : null),
     );
@@ -215,8 +215,8 @@ describe('the merged library', () => {
 
   it('names what each scheme plays with', () => {
     const leftOnly = {
-      ...gameKeysPreset(SKIFF),
-      devices: { ...gameKeysPreset(SKIFF).devices, azerons: 'left' as const },
+      ...blankKeysScheme(SKIFF),
+      devices: { ...blankKeysScheme(SKIFF).devices, azerons: 'left' as const },
     };
     const [entry] = mergeLibrary({
       steam: [],

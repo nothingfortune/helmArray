@@ -155,7 +155,8 @@ function Rows({
             </span>
             <span className="dv-d" aria-hidden="true" />
             <span className="dv-a">
-              {row.stick ? 'Stick' : (label ?? 'Not used')}
+              {/* A stick names the actions on its directions, when it has any. */}
+              {row.stick ? (label ?? 'Stick') : (label ?? 'Not used')}
               <Said>{said}</Said>
             </span>
           </button>

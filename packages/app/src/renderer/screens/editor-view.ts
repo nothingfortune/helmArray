@@ -20,6 +20,7 @@ import type {
   StickDirection,
 } from '@helmarray/core';
 import {
+  BUILT_IN_DEVICES,
   KEYBOARD_MOUSE,
   PAD_CONTROLS,
   PRESSES,
@@ -29,15 +30,22 @@ import {
   inSetup,
   own,
   padSignalOf,
+  placedIn,
+  resolve,
   setupOf,
-  signalId,
+  stickActions,
+  stickDirections,
   stickPadsOf,
 } from '@helmarray/core';
 import { fixedWhere } from '../devices/layouts';
 import type { StickLabels, UnitKey } from '../unit/Unit';
 import { handPrefix, positionName, positionOf } from '../unit/layout';
-import { fixFor, isAcceptable, isStick, keyLabelOf, pressesOf, shownAction } from './editor-model';
-import type { Fix } from './editor-model';
+import { isAcceptable, isStick, keyLabelOf, pressesOf, shownAction } from './editor-model';
+import { groupChecks } from './check-groups';
+import type { CheckItem } from './check-groups';
+import { offerFor, settlesAll } from './fixes';
+import type { Offer } from './fixes';
+import type { Fix } from './fixes';
 
 // ---- Signals, as words for a caption ----
 
@@ -161,6 +169,11 @@ export interface PanelView {
   /** The tap's action, or "Empty"; "Stick" for the stick. */
   title: string;
   stick: boolean;
+  /**
+   * A stick's four directions, each with the action the game's bindings put on it and what it
+   * sends; empty for anything else. Read only: a stick's directions follow its mode.
+   */
+  directions: StickRow[];
   across: AcrossRow[];
   presses: PressRow[];
   /** Turbo and latch are the unit's own: only an Azeron button has them. */
@@ -182,6 +195,16 @@ export interface PanelView {
   keyLabel: { value: string; placeholder: string } | null;
 }
 
+/** One direction of a selected stick. */
+export interface StickRow {
+  direction: StickDirection;
+  /** "Up", "Down", "Left", "Right". */
+  word: string;
+  action?: ActionRef;
+  /** What the direction sends, in mono; null when it sends nothing. */
+  sends: string | null;
+}
+
 export interface FindingRow {
   /** Stable across edits, so a list does not flicker. */
   key: string;
@@ -192,7 +215,10 @@ export interface FindingRow {
   rest: string;
   /** True when the player may keep it: only the checks can be kept. */
   canKeep: boolean;
+  /** Its fix, only when applying it removes the finding and adds no error (THE FIX GATE). */
   fix?: Fix;
+  /** Why its rule's fix isn't offered here, in one plain sentence: it can't act, or wouldn't do. */
+  why?: string;
   /** The player's reason, for a finding that is kept. */
   kept?: string;
 }
@@ -260,8 +286,15 @@ export interface EditorView {
    * one moves it to the selected control (the canvas's "Already on a button").
    */
   moves: (ActionRef & { where: string })[];
+  /**
+   * The actions a stick does, in the sets of the lists: placed, so never in "Not on a button", and
+   * still to pick or drag onto a button as a second way to do them.
+   */
+  onStick: (ActionRef & { where: string })[];
   /** Findings still asking for attention: errors first. */
   findings: FindingRow[];
+  /** The same findings as the checks list them: repeats of one role grouped (`groupChecks`). */
+  checks: CheckItem[];
   /** Findings the player kept. */
   kept: FindingRow[];
 }
@@ -276,7 +309,18 @@ export interface EditorViewInput {
   press?: Press | undefined;
   /** The device tab asked for; the first the setup has when it has not that one. */
   tab?: DeviceTabId | undefined;
+  /**
+   * The fix offers worked out so far (`offerSteps`), by finding row and group key. Given, the view
+   * takes what is there and works none out: the fix gate re-resolves a scheme per finding, too
+   * slow for a draw on a large game. Left out, every offer is worked out now.
+   */
+  offers?: OfferBook | undefined;
 }
+
+/** A finding's offer, or whether a group's one fix passes the gate. */
+export type OfferEntry = Offer | { group: boolean };
+/** The offers worked out, by finding row key or group key. */
+export type OfferBook = ReadonlyMap<string, OfferEntry>;
 
 // ---- The pieces ----
 
@@ -440,30 +484,87 @@ function setsOfTab(
   return out;
 }
 
-/** The stick's four chips: the action whose own key a direction sends, else the key itself. */
+const DIRECTION_WORDS: Record<StickDirection, string> = {
+  up: 'Up',
+  down: 'Down',
+  left: 'Left',
+  right: 'Right',
+};
+
+/**
+ * A stick's four directions: the action the game's bindings put on what each sends (core's
+ * `stickActions`, the one place that says what is placed), and what it sends. A key stick's
+ * direction with no action shows its key.
+ */
+function stickRows(
+  scheme: Scheme,
+  game: Game,
+  plan: Plan,
+  mode: ModeId,
+  stick: ControlId,
+): StickRow[] {
+  const on = stickActions(scheme, plan).filter((s) => s.stick === stick && s.mode === mode);
+  const sent = stickDirections(scheme).filter((d) => d.stick === stick);
+  return STICK_DIRECTIONS.map((direction) => {
+    const found = on.find((s) => s.direction === direction);
+    const signal = sent.find((d) => d.direction === direction)?.signal;
+    return {
+      direction,
+      word: DIRECTION_WORDS[direction],
+      sends: signal === undefined ? null : signalText(signal),
+      ...(found === undefined ? {} : { action: actionRef(game, found.action) }),
+    };
+  });
+}
+
+/** The stick's four chips: the action on each direction, else a key stick's key itself. */
 function stickLabels(
   scheme: Scheme,
   game: Game,
+  plan: Plan,
   mode: ModeId,
   hand: Hand,
 ): StickLabels | undefined {
-  const stick = scheme.behaviour[`${handPrefix(hand)}.stick`]?.stick;
-  if (stick?.mode !== 'keys' || stick.directions === undefined) return undefined;
+  const stick = `${handPrefix(hand)}.stick`;
+  if (!inSetup(setupOf(scheme.devices), stick)) return undefined;
+  // An Xbox direction with no action shows the drawn word (Up): only a key says what it sends.
+  const keyed = new Set(
+    stickDirections(scheme)
+      .filter((d) => d.stick === stick && d.signal.kind === 'key')
+      .map((d) => d.direction),
+  );
   const labels: StickLabels = {};
-  for (const direction of STICK_DIRECTIONS) {
-    const signal = stick.directions[direction];
-    if (signal === undefined) continue;
-    const action = game.actions.find(
-      (a) =>
-        a.mode === mode &&
-        a.native?.key !== undefined &&
-        signalId(a.native.key) === signalId(signal),
-    );
+  for (const row of stickRows(scheme, game, plan, mode, stick)) {
+    const word = row.action?.name ?? (keyed.has(row.direction) ? row.sends : null);
     // keyed-write-ok: the key is a stick direction, one of four names
-    labels[direction] = action?.name ?? signalText(signal);
-    if (action?.role !== undefined && labels.role === undefined) labels.role = action.role;
+    if (word !== null) labels[row.direction] = word;
+    if (row.action?.role !== undefined && labels.role === undefined) labels.role = row.action.role;
   }
   return Object.keys(labels).length === 0 ? undefined : labels;
+}
+
+/**
+ * The controller's two sticks, as rows of the Controller tab: the actions on their directions, in
+ * one line ("Move forward, Move back, Strafe left, Strafe right"). No action of its own, so it is
+ * never dragged; a stick with none isn't listed.
+ */
+function padStickKeys(
+  scheme: Scheme,
+  game: Game,
+  plan: Plan,
+  mode: ModeId,
+): Record<ControlId, UnitKey> {
+  const keys: [ControlId, UnitKey][] = [];
+  for (const stick of ['pad.left_stick', 'pad.right_stick']) {
+    const actions = stickRows(scheme, game, plan, mode, stick).flatMap((r) =>
+      r.action === undefined ? [] : [r.action],
+    );
+    const first = actions[0];
+    if (first === undefined) continue;
+    const label = [...new Set(actions.map((a) => a.name))].join(', ');
+    keys.push([stick, first.role === undefined ? { label } : { label, role: first.role }]);
+  }
+  return Object.fromEntries(keys);
 }
 
 const keyFor = (f: Finding): string =>
@@ -605,6 +706,7 @@ function panelFor(input: PanelInput): PanelView {
       where,
       title: 'Stick',
       stick: true,
+      directions: stickRows(scheme, game, plan, mode, control),
       across: [],
       presses: [],
       behaviour: false,
@@ -628,6 +730,7 @@ function panelFor(input: PanelInput): PanelView {
     where,
     title: tap === undefined ? 'Empty' : actionRef(game, tap).name,
     stick: false,
+    directions: [],
     across: game.modes.map((m) => {
       const lead = leadingAction(scheme, m.id, control);
       return {
@@ -681,6 +784,14 @@ export const assignable = (game: Game, mode: ModeId, actionId: ActionId): boolea
 
 const SEVERITY_ORDER = { error: 0, warning: 1 } as const;
 
+/**
+ * Whether a scheme just made from a preset goes straight to the Apply drawer (J1): it has nothing
+ * to fix, the same reading that draws "Nothing to fix." under the units. Kept findings count as
+ * settled; any other, an error or a warning, keeps the Editor open to fix it.
+ */
+export const opensApply = (view: Pick<EditorView, 'findings'>): boolean =>
+  view.findings.length === 0;
+
 export function editorView(input: EditorViewInput): EditorView {
   const { scheme, game, plan, mode, selected } = input;
   // The press asked for, while the selected control can send it: a switch to a controller leaves
@@ -692,21 +803,12 @@ export function editorView(input: EditorViewInput): EditorView {
   const tabs = deviceTabs(scheme.devices);
   const tab = shownTab(tabs, input.tab);
 
-  // What is placed in each binding set: on a control of the setup bound through it, any press.
-  const placedIn = (set: BindingSet) => {
-    const on = new Map<ActionId, ControlId>();
-    for (const [control, presses] of Object.entries(own(scheme.map, mode) ?? {})) {
-      if (!inSetup(setup, control) || controlSet(scheme, control) !== set) continue;
-      for (const p of PRESSES) {
-        const id = presses[p];
-        if (id !== undefined && !on.has(id)) on.set(id, control);
-      }
-    }
-    return on;
-  };
+  // What is placed in each binding set, on a control or on a stick: core's `placedIn`, the one place
+  // the checks ask too, so a stick's action is never listed as on no button.
+  const placedOf = (set: BindingSet) => placedIn(scheme, game, plan, mode, set);
   const inMode = game.actions.filter((a) => a.mode === mode);
   const listOf = (set: BindingSet, word: ControlWord): ActionList => {
-    const placed = placedIn(set);
+    const placed = placedOf(set);
     return {
       set,
       word,
@@ -723,14 +825,22 @@ export function editorView(input: EditorViewInput): EditorView {
       : setsOfTab(scheme, tab).map(({ set, word }) => listOf(set, word));
   const moves =
     chosen !== undefined && chosenSet !== undefined
-      ? [...placedIn(chosenSet)]
-          .filter(([, control]) => control !== chosen)
+      ? [...placedOf(chosenSet)]
+          .filter(([, control]) => control !== chosen && !isStick(control))
           .map(([id, control]) => ({ ...actionRef(game, id), where: whereOf(control) }))
           .sort(
             (a, b) =>
               inMode.findIndex((x) => x.id === a.id) - inMode.findIndex((x) => x.id === b.id),
           )
       : [];
+  const listed = new Set(lists.map((l) => l.set));
+  const onStick = [
+    ...new Map(
+      stickActions(scheme, plan)
+        .filter((s) => s.mode === mode && listed.has(s.set))
+        .map((s) => [s.action, { ...actionRef(game, s.action), where: whereOf(s.stick) }]),
+    ).values(),
+  ];
 
   // Core can report the same rule on the same control more than once (one per press, one per
   // stick direction), so a repeat gets a number to keep every key unique.
@@ -746,14 +856,14 @@ export function editorView(input: EditorViewInput): EditorView {
       canKeep: isAcceptable(finding),
     };
     if (finding.accepted !== undefined) row.kept = finding.accepted;
-    else {
-      const fix = fixFor(finding, scheme, game, plan);
-      if (fix !== undefined) row.fix = fix;
-    }
     return row;
   });
   const bySeverity = (a: FindingRow, b: FindingRow) =>
     SEVERITY_ORDER[a.finding.severity] - SEVERITY_ORDER[b.finding.severity];
+  const bare = rows.filter((r) => r.kept === undefined).sort(bySeverity);
+  const book: OfferBook =
+    input.offers ?? new Map(offerSteps({ findings: bare }, scheme, game, plan));
+  const open = withOffers(bare, book);
 
   const conflicting = new Set(
     plan.findings
@@ -783,16 +893,17 @@ export function editorView(input: EditorViewInput): EditorView {
       ...keysOf(scheme, game, mode, 'key.'),
       ...keysOf(scheme, game, mode, 'mouse.'),
       ...(setup.controller ? keysOf(scheme, game, mode, 'pad.') : {}),
+      ...(setup.controller ? padStickKeys(scheme, game, plan, mode) : {}),
     },
     conflicts: conflicting,
     left: {
       keys: unitKeys(scheme, game, mode, 'left'),
-      stick: stickLabels(scheme, game, mode, 'left'),
+      stick: stickLabels(scheme, game, plan, mode, 'left'),
       conflicts: conflicts('left'),
     },
     right: {
       keys: unitKeys(scheme, game, mode, 'right'),
-      stick: stickLabels(scheme, game, mode, 'right'),
+      stick: stickLabels(scheme, game, plan, mode, 'right'),
       conflicts: conflicts('right'),
     },
     // A control of a device the setup no longer has (an undo took it away) shows no panel.
@@ -802,7 +913,13 @@ export function editorView(input: EditorViewInput): EditorView {
         : panelFor({ scheme, game, plan, mode, press, control: selected }),
     lists,
     moves,
-    findings: rows.filter((r) => r.kept === undefined).sort(bySeverity),
+    onStick,
+    findings: open,
+    // A group's one fix is offered only once it has passed the gate too (`offerSteps`).
+    checks: groupChecks(open, game, (_fix, _members, key) => {
+      const entry = book.get(key);
+      return entry !== undefined && entry !== null && 'group' in entry && entry.group;
+    }),
     kept: rows.filter((r) => r.kept !== undefined),
   };
 }
@@ -837,4 +954,44 @@ export function splitSubject(
     end += joint.length + next.length;
   }
   return { subject: message.slice(0, end), rest: message.slice(end) };
+}
+
+/** The rows with what the book has for each: its fix, or why there is none. */
+function withOffers(rows: readonly FindingRow[], book: OfferBook): FindingRow[] {
+  return rows.map((row) => {
+    const entry = book.get(row.key);
+    if (entry === undefined || entry === null || 'group' in entry) return row;
+    return 'fix' in entry ? { ...row, fix: entry.fix } : { ...row, why: entry.why };
+  });
+}
+
+/**
+ * The fix offers of a view's findings, one step at a time, for the Editor to work out after its
+ * draw (each step re-resolves a scheme): first each finding's (THE FIX GATE, fixes.ts), then
+ * whether each group's one fix passes the gate too: all its findings gone, no new error.
+ */
+export function* offerSteps(
+  view: Pick<EditorView, 'findings'>,
+  scheme: Scheme,
+  game: Game,
+  plan: Plan,
+): Generator<[string, OfferEntry]> {
+  const book = new Map<string, OfferEntry>();
+  for (const row of view.findings) {
+    const offer = offerFor(row.finding, scheme, game, plan);
+    book.set(row.key, offer);
+    yield [row.key, offer];
+  }
+  for (const item of groupChecks(withOffers(view.findings, book), game)) {
+    if (item.kind !== 'group' || item.fix === undefined) continue;
+    const made = item.fix.apply(scheme);
+    const passes =
+      made !== scheme &&
+      settlesAll(
+        item.rows.map((r) => r.finding),
+        plan,
+        resolve(made, game, BUILT_IN_DEVICES),
+      );
+    yield [item.key, { group: passes }];
+  }
 }

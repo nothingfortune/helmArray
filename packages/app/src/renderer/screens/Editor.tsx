@@ -33,9 +33,13 @@ import {
   unacceptFinding,
 } from './editor-model';
 import type { History } from './editor-model';
-import { assignable, editorView, gainedTab } from './editor-view';
+import { assignable, editorView, gainedTab, opensApply } from './editor-view';
 import { sidePanelWidth } from './editor-layout';
 import type { DeviceTabId } from './editor-view';
+import type { Fix } from './fixes';
+import { editedLocation, findingLocation, reveal } from './reveal';
+import { useOffers } from './useOffers';
+import type { EditorPlace, Location } from './reveal';
 import type { DragSource } from '../devices/drag';
 import { runMake, runPick } from './libraryFlow';
 import { runCopy, runDelete } from './schemeFlow';
@@ -49,6 +53,7 @@ import {
   Unplaced,
 } from './EditorParts';
 import type { PickerActions } from './EditorParts';
+import { RecentGames } from './RecentGames';
 import type { ApplyButton } from '../apply/applyButton';
 import './editor.css';
 
@@ -58,12 +63,18 @@ export interface EditorProps {
   /** The way back to the library. */
   onBack(): void;
   /**
-   * Opens another setup of the game (switched to, made, or what is left after a delete). Without it
-   * the Scheme picker only names the setup open.
+   * Opens another setup (switched to, made, or what is left after a delete; another game's, from
+   * the recent games). `made`: it was just made from a preset (J1), so the drawer opens on it when
+   * it has nothing to fix. Without it the Scheme picker only names the setup open.
    */
-  onOpenScheme?(schemeId: string): void;
+  onOpenScheme?(schemeId: string, made?: boolean): void;
   /** Opens the Apply drawer. Without it the Apply button is shown, disabled, with a reason. */
   onApply?(): void;
+  /**
+   * The scheme was just made from a preset (J1): once it is drawn, the Apply drawer opens by itself
+   * if it has nothing to fix (`opensApply`). With something to fix the Editor stays, to fix it.
+   */
+  applyWhenReady?: boolean;
   /**
    * Turns the Ctrl+Z / Ctrl+Y history shortcuts off. Set while something is over the editor (the
    * Apply drawer): an undo underneath would change the scheme being applied.
@@ -116,6 +127,7 @@ function EditorLoader({
   onApply,
   historyOff,
   keysKept,
+  applyWhenReady,
   applyButton,
 }: EditorProps) {
   const [load, setLoad] = useState<Load>({ kind: 'loading' });
@@ -152,6 +164,7 @@ function EditorLoader({
         onApply={onApply}
         historyOff={historyOff === true}
         keysKept={keysKept ?? 0}
+        applyWhenReady={applyWhenReady === true}
         applyButton={applyButton ?? { label: 'Apply', done: false }}
       />
     );
@@ -183,10 +196,11 @@ interface BodyProps {
   scheme: Scheme;
   game: Game;
   onBack(): void;
-  onOpenScheme: ((schemeId: string) => void) | undefined;
+  onOpenScheme: ((schemeId: string, made?: boolean) => void) | undefined;
   onApply: (() => void) | undefined;
   historyOff: boolean;
   keysKept: number;
+  applyWhenReady: boolean;
   applyButton: ApplyButton;
 }
 
@@ -198,6 +212,7 @@ function EditorBody({
   onApply,
   historyOff,
   keysKept,
+  applyWhenReady,
   applyButton,
 }: BodyProps) {
   const [history, setHistory] = useState<History<Scheme>>(() => startHistory(loaded));
@@ -231,17 +246,46 @@ function EditorBody({
     [change],
   );
 
+  // Where the Editor is, and THE ONE way it goes somewhere after an action (reveal.ts): the mode,
+  // the tab, the control and its press, all at once. A ref, so a key handler set up once sees now.
+  const placeRef = useRef<EditorPlace>({
+    mode: game.modes[0]?.id ?? 'default',
+    selected: undefined,
+    press: 'tap',
+    tab: undefined,
+    inspector: true,
+  });
+  const revealAt = useCallback((location: Location | undefined, on: Scheme) => {
+    if (location === undefined) return;
+    const next = reveal(placeRef.current, location, on);
+    setMode(next.mode);
+    setSelected(next.selected);
+    setPress(next.press);
+    setTab(next.tab);
+    setInspector(next.inspector);
+  }, []);
+  /** Undo or redo, and back to where the edit it undid or redid was made. */
+  const travel = useCallback(
+    (step: typeof undo) => {
+      const before = historyRef.current.present;
+      change(step);
+      const after = historyRef.current.present;
+      revealAt(editedLocation(before, after), after);
+    },
+    [change, revealAt],
+  );
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLElement && isTextEntry(e.target)) return;
       const wanted = historyAction(e, !historyOff);
       if (wanted === null) return;
       e.preventDefault();
-      change(wanted === 'undo' ? undo : redo);
+      travel(wanted === 'undo' ? undo : redo);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [change, historyOff]);
+  }, [travel, historyOff]);
 
   // An apply wrote the keys it dealt into the saved scheme: take them (never saved from here).
   const firstKeys = useRef(keysKept);
@@ -273,39 +317,57 @@ function EditorBody({
     }
   }, [scheme, game]);
 
+  // The fix offers are worked out after the draw, a slice at a time (useOffers): the draw takes
+  // what is there so far.
+  const offers = useOffers(scheme, game, 'plan' in planned ? planned.plan : null);
   const view = useMemo(
     () =>
       'plan' in planned
-        ? editorView({ scheme, game, plan: planned.plan, mode, selected, press, tab })
+        ? editorView({ scheme, game, plan: planned.plan, mode, selected, press, tab, offers })
         : null,
-    [planned, scheme, game, mode, selected, press, tab],
+    [planned, scheme, game, mode, selected, press, tab, offers],
   );
+
+  // J1: a scheme just made from a preset with nothing to fix goes straight to the drawer, once.
+  const offered = useRef(false);
+  useEffect(() => {
+    if (!applyWhenReady || offered.current || view === null) return;
+    offered.current = true;
+    if (opensApply(view)) onApply?.();
+  }, [applyWhenReady, view, onApply]);
+
+  useEffect(() => {
+    placeRef.current = { mode, selected, press, tab, inspector };
+  }, [mode, selected, press, tab, inspector]);
 
   const select = (id: ControlId) => {
     setSelected(selected === id ? undefined : id);
     setPress('tap');
     if (selected !== id) setInspector(true);
   };
+  /** A click on an action (from the list, or moved from another button): on the selected press. */
   const place = (control: ControlId, actionId: string, which: Press) => {
     if (isStick(control) || !assignable(game, mode, actionId)) return;
     edit((s) => assign(s, { mode, control, press: which }, actionId, game));
+    revealAt({ mode, control, press: which }, scheme);
   };
   /** A drop: from the list it puts the action on; dragged off another control it moves it. */
   const dropOn = (control: ControlId, actionId: string, from?: DragSource) => {
     if (isStick(control) || !assignable(game, mode, actionId)) return;
     edit((s) => drop(s, mode, control, actionId, from, game));
-    setSelected(control);
-    setPress('tap');
+    revealAt({ mode, control, press: 'tap' }, scheme);
   };
   /** Opens a setup the picker made or switched to; a step that failed says why in one sentence. */
-  const opened = (outcome: { ok: true; schemeId: string } | { ok: false; message: string }) => {
-    if (outcome.ok) onOpenScheme?.(outcome.schemeId);
-    else setProblem(outcome.message);
-  };
+  const opened =
+    (made: boolean) =>
+    (outcome: { ok: true; schemeId: string } | { ok: false; message: string }) => {
+      if (outcome.ok) onOpenScheme?.(outcome.schemeId, made);
+      else setProblem(outcome.message);
+    };
   const picker: PickerActions = {
-    switchTo: (id) => void runPick(window.helm, game.id, id).then(opened),
-    make: (preset) => void runMake(window.helm, game.id, preset).then(opened),
-    copy: () => void runCopy(window.helm, game.id, scheme.id).then(opened),
+    switchTo: (id) => void runPick(window.helm, game.id, id).then(opened(false)),
+    make: (preset) => void runMake(window.helm, game.id, preset).then(opened(true)),
+    copy: () => void runCopy(window.helm, game.id, scheme.id).then(opened(false)),
     rename: (name) => edit((s) => renameScheme(s, name)),
     remove: () =>
       void runDelete(window.helm, game.id, scheme.id).then((after) => {
@@ -321,6 +383,13 @@ function EditorBody({
     if (added !== undefined) setTab(added);
     setSelected(undefined);
     setPress('tap');
+  };
+  /** A fix, applied, and where it put something revealed: its mode, its control, its press. */
+  const applyFix = (fix: Fix) => {
+    const present = historyRef.current.present;
+    const where = fix.reveal?.(present);
+    edit(fix.apply);
+    revealAt(where, historyRef.current.present);
   };
   const showTab = (id: DeviceTabId) => {
     setTab(id);
@@ -345,6 +414,9 @@ function EditorBody({
               actions={onOpenScheme === undefined ? null : picker}
             />
           </div>
+          {onOpenScheme !== undefined && (
+            <RecentGames openGameId={game.id} onOpen={(id) => onOpenScheme(id)} />
+          )}
           <span className="ed-rule" aria-hidden="true" />
           {view !== null && view.tabs.length > 0 && (
             <div className="ed-seg" role="group" aria-label="Device">
@@ -421,7 +493,7 @@ function EditorBody({
             aria-label="Undo"
             title="Undo (Ctrl+Z)"
             disabled={!canUndo(history)}
-            onClick={() => change(undo)}
+            onClick={() => travel(undo)}
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <path
@@ -437,7 +509,7 @@ function EditorBody({
             aria-label="Redo"
             title="Redo (Ctrl+Shift+Z)"
             disabled={!canRedo(history)}
-            onClick={() => change(redo)}
+            onClick={() => travel(redo)}
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <path
@@ -498,9 +570,14 @@ function EditorBody({
               />
               <Checks
                 view={view}
-                onFix={(row) => row.fix && edit(row.fix.apply)}
+                onFix={(row) => row.fix && applyFix(row.fix)}
                 onKeep={(row) => edit((s) => acceptFinding(s, row.finding))}
                 onFlag={(row) => edit((s) => unacceptFinding(s, row.finding))}
+                onFixAll={(group) => group.fix && applyFix(group.fix)}
+                onKeepAll={(group) =>
+                  edit((s) => group.rows.reduce((x, row) => acceptFinding(x, row.finding), s))
+                }
+                onShow={(row) => revealAt(findingLocation(row.finding), scheme)}
               />
             </section>
             {inspector && (

@@ -39,6 +39,33 @@
   margin: 0;
   font: 700 var(--size-title) / 1.1 var(--font-name);
 }
+/* The recent games: another game's Editor in one click. */
+.ed-recent {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+.ed-recent-label {
+  color: var(--color-muted);
+  font-size: var(--size-caption);
+  margin-right: var(--space-4);
+}
+.ed-recent-game {
+  max-width: 150px;
+  padding: 0 var(--space-8);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Below 1440 px the bar is tight: the games' names alone, shorter, so Apply stays on its row. */
+@media (max-width: 1439px) {
+  .ed-recent-label {
+    display: none;
+  }
+  .ed-recent-game {
+    max-width: 104px;
+  }
+}
 .ed-scheme {
   color: var(--color-muted);
   font-size: var(--size-label);
@@ -211,6 +238,59 @@
 .ed-fix {
   background: var(--color-raised);
   border-color: var(--color-line-key);
+}
+/* A finding's sentence, as a button that shows where it is: plain text until pointed at. */
+.ed-check-go {
+  flex: 1;
+  min-width: 240px;
+  display: flex;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ed-check-go:hover .ed-check-text {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.ed-check-why {
+  color: var(--color-secondary);
+}
+.ed-check-subject {
+  font-weight: 600;
+}
+/* A group's findings, one by one, under "Show each". */
+.ed-check-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.ed-check-each {
+  color: var(--color-muted);
+  font-size: var(--size-label);
+}
+.ed-check-each summary {
+  cursor: pointer;
+  width: fit-content;
+  padding: var(--space-4) 0 var(--space-4) 14px;
+}
+.ed-check-each > .ed-check {
+  margin: var(--space-4) 0 0 var(--space-24);
+  font-size: var(--size-body);
+}
+/* A stick's four directions in the side panel: read only, so plain rows, not buttons. */
+.ed-direction {
+  gap: var(--space-8);
+  align-items: baseline;
+  padding: 7px var(--space-12);
+}
+.ed-direction-sends {
+  margin-left: auto;
+  color: var(--color-muted);
+  font: 500 12px var(--font-signal);
 }
 .ed-kept {
   color: var(--color-muted);

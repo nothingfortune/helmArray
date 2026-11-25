@@ -1,4 +1,4 @@
-import { gameKeysPreset } from '@helmarray/core';
+import { blankKeysScheme } from '@helmarray/core';
 import type { Game } from '@helmarray/core';
 import { describe, expect, it, vi } from 'vitest';
 import type { AppState, ApplyPreview, ApplyUnitChange } from '../shared/api';
@@ -23,7 +23,7 @@ const GAME: Game = {
   modes: [{ id: 'ship', name: 'Ship' }],
   actions: [],
 };
-const SCHEME = gameKeysPreset(GAME);
+const SCHEME = blankKeysScheme(GAME);
 const UNIT: Omit<ApplyUnitChange, 'hand'> = {
   used: true,
   connected: true,

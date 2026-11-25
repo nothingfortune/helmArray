@@ -54,6 +54,8 @@ export default {
     'packages/core/src/resolve.ts',
     'packages/core/src/presets/**/*.ts',
     'packages/core/src/checks.ts',
+    'packages/core/src/placed.ts', // whether an action is placed: the checks and the editor ask it
+    'packages/core/src/sticks.ts', // what a stick does for the Azerons' output
     'packages/core/src/games/**/*.ts',
     'packages/core/src/game-data.ts', // a game's data checked before it is saved
     '!packages/core/src/**/*.test.ts',
@@ -84,6 +86,12 @@ export default {
     'packages/app/src/renderer/screens/editor-view.ts',
     'packages/app/src/renderer/screens/libraryView.ts',
     'packages/app/src/renderer/screens/libraryFlow.ts',
+    'packages/app/src/renderer/screens/fixes.ts', // the checks' fix buttons
+    'packages/app/src/renderer/screens/check-groups.ts',
+    'packages/app/src/renderer/screens/recent-games.ts',
+    'packages/app/src/renderer/screens/reveal.ts', // where the Editor goes after an action
+    'packages/app/src/renderer/screens/offer-work.ts', // the fix offers, worked out after the draw
+    'packages/app/src/renderer/screens/offer-slices.ts',
     'packages/app/src/renderer/apply/applyFlow.ts',
     // The Game screen: its edits, its state, press-to-set and what it listens to while waiting.
     'packages/app/src/renderer/screens/game-model.ts',

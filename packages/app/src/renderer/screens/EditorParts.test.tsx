@@ -123,7 +123,16 @@ describe('the device area', () => {
 
 describe('the checks', () => {
   const draw = (scheme: Scheme) =>
-    renderToStaticMarkup(<Checks view={view(scheme)} onFix={none} onKeep={none} onFlag={none} />);
+    renderToStaticMarkup(
+      <Checks
+        view={view(scheme)}
+        onFix={none}
+        onKeep={none}
+        onFlag={none}
+        onFixAll={none}
+        onKeepAll={none}
+      />,
+    );
 
   it('says there is nothing to fix', () => {
     expect(draw(padScheme())).toContain('Nothing to fix.');
@@ -197,8 +206,11 @@ describe('the side panel', () => {
     ]).toEqual([true, true, false]);
   });
 
-  it('shows the stick as a stick', () => {
-    expect(panel(padScheme(), 'L.stick')).toContain('The stick sends its four directions.');
+  it('shows the stick as a stick: its four directions, where a button has its presses', () => {
+    // It said "The stick sends its four directions. Changing them isn't possible here yet." until
+    // the audit asked for the four direction rows in its place.
+    const html = panel(padScheme(), 'L.stick');
+    expect([html.includes('Directions'), html.includes('Press')]).toEqual([true, false]);
   });
 
   it('shows the button in every mode', () => {
@@ -276,7 +288,9 @@ describe('a check, drawn', () => {
       map: { ship: { 'L.index_1': { tap: 'boost' } }, srv: {} },
     };
     const v = editorView({ scheme, game, plan: plan(scheme), mode: 'ship' });
-    const html = renderToStaticMarkup(<Checks view={v} onFix={none} onKeep={none} onFlag={none} />);
+    const html = renderToStaticMarkup(
+      <Checks view={v} onFix={none} onKeep={none} onFlag={none} onFixAll={none} onKeepAll={none} />,
+    );
     expect(html).toContain(
       '<strong class="ed-check-subject">Frame shift drive</strong> isn&#x27;t on a button in Ship.',
     );

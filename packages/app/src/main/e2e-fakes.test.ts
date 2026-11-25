@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { UnitSession, unitRecords } from '@helmarray/azeron';
 import type { Game, Plan, Scheme } from '@helmarray/core';
-import { BUILT_IN_DEVICES, CYBORG2_LEFT, gameKeysPreset, resolve, unitOf } from '@helmarray/core';
+import { BUILT_IN_DEVICES, CYBORG2_LEFT, blankKeysScheme, resolve, unitOf } from '@helmarray/core';
 import type { E2eControl } from './e2e-fakes';
 import { fakeBackends } from './e2e-fakes';
 import { E2E_UNIT_IDS } from './e2e-seam';
@@ -97,7 +97,7 @@ describe('what the control says the units hold', () => {
     file: { format: 'elite-binds' },
   };
   const scheme: Scheme = {
-    ...gameKeysPreset(game),
+    ...blankKeysScheme(game),
     writeGameFile: false,
     map: { ship: { 'L.index_1': { tap: 'boost' } } },
   };

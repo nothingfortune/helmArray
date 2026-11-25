@@ -4,7 +4,7 @@ import { isKeyCode } from '../keys';
 import type { PadControl, Role, Signal, StickDirections } from '../model';
 import type { Plan } from '../plan';
 import { xboxControllerPreset } from '../presets/xbox';
-import { gameKeysPreset } from '../presets/keys';
+import { blankKeysScheme } from '../presets/keys';
 import { resolve } from '../resolve';
 import { helldivers2 } from './helldivers2';
 
@@ -127,7 +127,7 @@ describe('Helldivers 2 through the presets and the resolver', () => {
   });
 
   it("resolves a scheme on the game's own keys, sending each action's own key", () => {
-    const scheme = gameKeysPreset(helldivers2);
+    const scheme = blankKeysScheme(helldivers2);
     scheme.map['default'] = { 'L.index_1': { tap: 'sprint' }, 'L.index_2': { tap: 'dive' } };
     const plan = resolve(scheme, helldivers2, BUILT_IN_DEVICES);
     expect(plan.bindings.map((b) => [b.action, b.signal])).toEqual([
@@ -145,7 +145,7 @@ describe('Helldivers 2 through the presets and the resolver', () => {
       right: { kind: 'key', code: 'D' },
     } satisfies StickDirections;
     const play = (stick: StickDirections) => {
-      const scheme = gameKeysPreset(helldivers2);
+      const scheme = blankKeysScheme(helldivers2);
       scheme.map['default'] = {
         'L.index_1': { tap: 'fire_primary' },
         'L.index_2': { tap: 'stratagem' },

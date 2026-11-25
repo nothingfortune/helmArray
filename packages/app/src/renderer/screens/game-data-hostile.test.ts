@@ -1,6 +1,6 @@
 // A game's data, and the action-deleted check, against the hostile ids of editor-fixture.ts: modes
 // and actions named `__proto__`, `constructor`, `toString` and `hasOwnProperty`.
-import { BUILT_IN_DEVICES, gameKeysPreset, gameProblem, resolve } from '@helmarray/core';
+import { BUILT_IN_DEVICES, blankKeysScheme, gameProblem, resolve } from '@helmarray/core';
 import type { Game, Scheme } from '@helmarray/core';
 import { describe, expect, it } from 'vitest';
 import { assign } from './editor-model';
@@ -47,7 +47,7 @@ describe('the action-deleted check, on hostile ids', () => {
     const at = (s: Scheme, control: string, action: string) =>
       assign(s, { mode: '__proto__', control, press: 'tap' }, action, hostileGame);
     return at(
-      at(gameKeysPreset(hostileGame), 'L.index_1', '__proto__'),
+      at(blankKeysScheme(hostileGame), 'L.index_1', '__proto__'),
       'L.index_2',
       'constructor',
     );

@@ -9,7 +9,7 @@ import {
   BUILT_IN_DEVICES,
   CYBORG2_LEFT,
   CYBORG2_RIGHT,
-  gameKeysPreset,
+  blankKeysScheme,
   helldivers2,
   resolve,
   unitOf,
@@ -37,7 +37,7 @@ const planOf = (scheme: Scheme): Plan => resolve(scheme, game, BUILT_IN_DEVICES)
 
 /** A setup of Helldivers 2 from the game's own keys, playing with these devices. */
 const setup = (azerons: SetupDevices['azerons'], other: 'keyboard' | 'controller'): Scheme => ({
-  ...gameKeysPreset(game),
+  ...blankKeysScheme(game),
   devices: {
     azerons,
     keyboard: other === 'keyboard',

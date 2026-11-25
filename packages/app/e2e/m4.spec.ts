@@ -1,5 +1,6 @@
 // The M4 screens, driven in the real window over the fake units (docs/plans/04-roadmap.md, M4
-// "Done when": J1 takes 2 clicks, J2 is a drag plus Apply on Helldivers 2). Input is Playwright's
+// "Done when": J1 takes 2 clicks, J2 is a drag plus Apply on Helldivers 2; J1 is 3 since the owner's
+// decision of 2026-11-24, counted in journeys.spec.ts). Input is Playwright's
 // own, into the page: no OS-level keyboard or mouse input is ever sent.
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -14,6 +15,7 @@ import {
   keepEveryCheck,
   pill,
   schemeFiles,
+  startBlankKeys,
   startFrom,
 } from './screens';
 
@@ -53,7 +55,8 @@ test.describe('the M4 screens', () => {
   }) => {
     // Helldivers 2 ships its Xbox defaults (packages/core/src/games/helldivers2.ts), so the
     // preset puts all six required actions on buttons and the left stick: nothing is flagged.
-    // J1 is two clicks, the game and the preset, then Apply.
+    // The game and the preset open the drawer by itself (startFrom cancels it); journeys.spec.ts
+    // counts J1's three clicks.
     const { page } = helm;
     await startFrom(page, 'Xbox controller');
     await expect(page.getByRole('button', { name: 'Keep, I know' })).toHaveCount(0);
@@ -120,7 +123,8 @@ test.describe('the M4 screens', () => {
 
   test('J2: drag an action onto a button, Apply, and the unit holds that key', async ({ helm }) => {
     const { page } = helm;
-    await startFrom(page, "Game's own keys");
+    // A game's own keys scheme with nothing placed: the preset places every action now.
+    await startBlankKeys(page);
     const left = page.locator('.unit[data-hand="left"]');
     const button = left.getByRole('button', { name: 'Empty, index 1' });
     const action = page.locator('.ed-actions').getByRole('button', { name: 'Move forward' });

@@ -16,6 +16,7 @@ import {
   editorApply,
   helldivers,
   keepEveryCheck,
+  startBlankKeys,
   leftUnit,
   pill,
   seriousViolations,
@@ -72,7 +73,8 @@ test.describe('one drag is one change', () => {
     helm,
   }) => {
     const { page } = helm;
-    await startFrom(page, "Game's own keys");
+    // A game's own keys scheme with nothing placed: the preset places every action now.
+    await startBlankKeys(page);
     await keepEveryCheck(page);
     await applyAndClose(page);
     await expect(pill(page)).toHaveText('In sync');

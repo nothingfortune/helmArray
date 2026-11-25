@@ -5,7 +5,7 @@ import type { Game, Scheme, SetupDevices, Signal, StickDirections } from './mode
 import { AZERONS_ONLY } from './model';
 import type { Plan } from './plan';
 import { KEY_POOL, formatCanName } from './pool';
-import { gameKeysPreset } from './presets/keys';
+import { blankKeysScheme } from './presets/keys';
 import { xboxControllerPreset } from './presets/xbox';
 import { resolve } from './resolve';
 
@@ -88,7 +88,7 @@ const withDevices = (over: Partial<SetupDevices>): SetupDevices => ({ ...AZERONS
 
 function keys(over: Partial<Scheme> = {}, map: Scheme['map'] = {}): Scheme {
   return {
-    ...gameKeysPreset(game),
+    ...blankKeysScheme(game),
     writeGameFile: true,
     ...over,
     behaviour: { ...keyedSticks, ...over.behaviour },

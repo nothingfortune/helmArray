@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Game, Scheme } from '@helmarray/core';
-import { BUILT_IN_DEVICES, gameKeysPreset, resolve } from '@helmarray/core';
+import { BUILT_IN_DEVICES, blankKeysScheme, resolve } from '@helmarray/core';
 import { planFor } from './scheme-plan';
 
 const game: Game = {
@@ -10,7 +10,7 @@ const game: Game = {
   actions: [{ id: 'boost', name: 'Boost', mode: 'ship', role: 'movement', required: true }],
   file: { format: 'elite-binds' },
 };
-const scheme: Scheme = gameKeysPreset(game);
+const scheme: Scheme = blankKeysScheme(game);
 
 describe('a scheme worked out into its plan', () => {
   it('resolves the scheme against its game and the built-in devices', async () => {

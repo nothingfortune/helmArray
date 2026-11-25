@@ -1,4 +1,4 @@
-import { gameKeysPreset, gameProblem, helldivers2 } from '@helmarray/core';
+import { blankKeysScheme, gameProblem, helldivers2 } from '@helmarray/core';
 import type { Game, Scheme } from '@helmarray/core';
 import { describe, expect, it } from 'vitest';
 import {
@@ -375,7 +375,7 @@ describe('loadedOf', () => {
 
   it('reserves the ids the game’s saved schemes name', () => {
     const scheme = {
-      ...gameKeysPreset(two),
+      ...blankKeysScheme(two),
       map: { foot: { 'L.index_1': { tap: 'grapple' } } },
     };
     expect(loadedOf({ kind: 'edit', gameId: 'rover' }, entries, [scheme])?.reserved).toEqual({
@@ -440,7 +440,7 @@ describe('ids are never given out twice', () => {
 describe('referencedIds', () => {
   it('lists every mode and action a scheme names', () => {
     const scheme = {
-      ...gameKeysPreset(two),
+      ...blankKeysScheme(two),
       map: {
         foot: { 'L.index_1': { tap: 'jump', long: 'gone' } },
         old_mode: { 'key.R': { tap: 'grapple' } },
@@ -454,7 +454,7 @@ describe('referencedIds', () => {
 
   it('reads a mode named __proto__ as a mode', () => {
     const scheme = {
-      ...gameKeysPreset(two),
+      ...blankKeysScheme(two),
       map: JSON.parse('{"__proto__": {"L.index_1": {"tap": "x"}}}') as Scheme['map'],
     };
     expect(referencedIds([scheme])).toEqual({ modes: ['__proto__'], actions: ['x'] });

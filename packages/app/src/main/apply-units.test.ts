@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Game, Hand, Plan, Scheme } from '@helmarray/core';
-import { BUILT_IN_DEVICES, gameKeysPreset, resolve, unitOf } from '@helmarray/core';
+import { BUILT_IN_DEVICES, blankKeysScheme, resolve, unitOf } from '@helmarray/core';
 import {
   Command,
   FakeUnit,
@@ -34,7 +34,7 @@ const game: Game = {
   file: { format: 'elite-binds' },
 };
 const scheme: Scheme = {
-  ...gameKeysPreset(game),
+  ...blankKeysScheme(game),
   writeGameFile: false,
   map: {
     ship: {

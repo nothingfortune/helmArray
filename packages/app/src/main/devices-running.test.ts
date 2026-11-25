@@ -8,7 +8,7 @@ import {
   BUILT_IN_DEVICES,
   CYBORG2_LEFT,
   CYBORG2_RIGHT,
-  gameKeysPreset,
+  blankKeysScheme,
   resolve,
   unitOf,
 } from '@helmarray/core';
@@ -37,7 +37,7 @@ const game: Game = {
   file: { format: 'elite-binds' },
 };
 const scheme: Scheme = {
-  ...gameKeysPreset(game),
+  ...blankKeysScheme(game),
   map: {
     ship: {
       'L.index_1': { tap: 'boost' },

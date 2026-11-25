@@ -35,7 +35,10 @@ export type { GameTarget };
 export interface GameScreenProps {
   target: GameTarget;
   onBack(): void;
-  /** A scheme was made from the game: open it in the editor. */
+  /**
+   * A scheme was made from the game: open it in the editor (made from a preset, so the drawer opens
+   * on it when it has nothing to fix, J1).
+   */
   onOpenEditor(schemeId: string): void;
 }
 
