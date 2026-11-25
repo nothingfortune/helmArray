@@ -59,7 +59,8 @@ export default {
     'packages/core/src/games/**/*.ts',
     'packages/core/src/game-data.ts', // a game's data checked before it is saved
     '!packages/core/src/**/*.test.ts',
-    // Games: Steam folders and the VDF readers and writers.
+    // Games: Steam folders, the VDF readers and writers, and the game file adapters (Everspace 2's
+    // Input.ini, Elite's .binds and StartPreset: find, harvest, write, and the key names).
     'packages/games/src/**/*.ts',
     '!packages/games/src/index.ts', // re-export barrel
     '!packages/games/src/**/*.test.ts',

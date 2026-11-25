@@ -184,6 +184,9 @@ importers:
       '@helmarray/core':
         specifier: workspace:*
         version: link:packages/core
+      '@helmarray/games':
+        specifier: workspace:*
+        version: link:packages/games
       '@stryker-mutator/core':
         specifier: 10.1.1
         version: 10.1.1(@types/node@24.19.2)
