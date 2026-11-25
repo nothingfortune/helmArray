@@ -66,3 +66,54 @@ which step and what the app showed, and attach the exchange log (Settings → Ex
         they do without helmArray, the Azeron app sees and reads them normally, and helmArray
         shows both chips as paused with the pill saying *Azeron app is open*. (helmArray only
         lists the Azeron units on the bus while the app is open; it opens and sends nothing.)
+
+## v1 · M4 and M4.5: pick a game, play, and setups
+
+Have Helldivers 2 installed, and closed. Back up both units first (see *Before you start*).
+
+### J1: pick a game, pick a default, play
+
+14. [ ] In the Library, click Helldivers 2, then *Xbox controller*. The Apply drawer opens by
+        itself. It lists each unit's changed buttons in the game's words ("Middle 1 · Reload")
+        and says the Azeron app is closed. Click *Apply*. That is 3 clicks.
+15. [ ] Both chips stay on, the pill says *In sync*, and each unit now runs one layout named
+        *Xbox controller*. Open the Azeron app afterwards (close helmArray's writes first: the
+        pill will say *Azeron app is open*) and check each unit holds only that layout.
+16. [ ] Close the Azeron app. Start Helldivers 2 and play a minute: the left stick moves you,
+        the triggers fire and aim, and both units act as one Xbox controller.
+
+### J2: put an action on a button
+
+17. [ ] Close the game. In the Editor, drag Reload onto another left-unit button. The pill says
+        *1 change not applied*. Click *Apply 1*, then *Apply* in the drawer. The drawer listed
+        that one button, and a row "In the game's controls, set Reload to …".
+18. [ ] The Library card shows "1 to set in the game". Set it in Helldivers 2's own controls
+        menu, then click *Done*. Restart helmArray first once: the reminder is still there.
+
+### Setups
+
+19. [ ] Open the Scheme picker and make a new scheme from *Game's own keys*. The drawer opens by
+        itself with nothing to fix. Apply it. In game, the left stick sends W, A, S, D and the
+        buttons send the game's own keys.
+20. [ ] Switch back to the *Xbox controller* scheme (Scheme picker, then Apply). The units run
+        it again and the game sees a controller.
+21. [ ] Make a scheme for the left Azeron and the mouse (Devices, *Left + mouse*). Apply it.
+        Only the left unit is written: the right unit still runs its previous layout, and the
+        Library card names both ("Right unit: Helldivers 2 · …").
+22. [ ] Make a keyboard-only scheme and apply it while the Azeron app is open. helmArray
+        doesn't ask you to close the Azeron app, and nothing is written to either unit.
+
+### A game helmArray doesn't know
+
+23. [ ] On a Steam game helmArray has no data for, click *Set up*. Add two actions by typing a
+        name, pressing Enter, then pressing the key. With your Xbox controller plugged in,
+        click a controller cell and press a button: it is taken. Unplug the controller and do
+        it again: the screen says no controller is connected and offers a list.
+24. [ ] Click the amber *New scheme from* choice, then Apply. The units are written.
+
+### Throughout
+
+25. [ ] The pedals keep working through steps 14 to 24 (`joy.cpl`, every axis). The exchange log
+        never shows `06A3`.
+26. [ ] At 1280 wide (shrink the window), the Editor shows both units without scrolling, and
+        every button label is readable.
