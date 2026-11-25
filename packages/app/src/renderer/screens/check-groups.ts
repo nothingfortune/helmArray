@@ -45,8 +45,11 @@ const ROLE_WORDS: Readonly<Record<Role, string>> = {
 export function groupChecks(
   rows: readonly FindingRow[],
   game: Game,
-  /** Whether the group's one fix settles all its findings (the fix gate); without it, trusted. */
-  works: (fix: Fix, rows: readonly FindingRow[]) => boolean = () => true,
+  /**
+   * Whether the group's one fix settles all its findings (the fix gate), by its key; without it,
+   * trusted.
+   */
+  works: (fix: Fix, rows: readonly FindingRow[], key: string) => boolean = () => true,
 ): CheckItem[] {
   const roleOf = (row: FindingRow): Role | null =>
     game.actions.find((a) => a.id === row.finding.action)?.role ?? null;
@@ -80,7 +83,7 @@ function groupOf(
   rows: FindingRow[],
   role: Role | null,
   game: Game,
-  works: (fix: Fix, rows: readonly FindingRow[]) => boolean,
+  works: (fix: Fix, rows: readonly FindingRow[], key: string) => boolean,
 ): CheckGroup {
   const rule = rows[0]?.finding.rule ?? '';
   const words = GROUPED[rule] ?? { rest: '', fix: '' };
@@ -101,11 +104,13 @@ function groupOf(
     canKeep: rows.every((r) => r.canKeep),
   };
   if (fixes.every((f): f is Fix => f !== undefined)) {
+    // It puts several on: it reveals their mode, and selects none of them.
     const fix: Fix = {
       label: words.fix,
       apply: (scheme: Scheme) => fixes.reduce((s, f) => f.apply(s), scheme),
+      ...(mode === undefined ? {} : { reveal: () => ({ mode }) }),
     };
-    if (works(fix, rows)) group.fix = fix;
+    if (works(fix, rows, group.key)) group.fix = fix;
   }
   return group;
 }

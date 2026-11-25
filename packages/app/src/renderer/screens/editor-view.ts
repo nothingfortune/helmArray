@@ -44,6 +44,7 @@ import { isAcceptable, isStick, keyLabelOf, pressesOf, shownAction } from './edi
 import { groupChecks } from './check-groups';
 import type { CheckItem } from './check-groups';
 import { offerFor, settlesAll } from './fixes';
+import type { Offer } from './fixes';
 import type { Fix } from './fixes';
 
 // ---- Signals, as words for a caption ----
@@ -308,7 +309,18 @@ export interface EditorViewInput {
   press?: Press | undefined;
   /** The device tab asked for; the first the setup has when it has not that one. */
   tab?: DeviceTabId | undefined;
+  /**
+   * The fix offers worked out so far (`offerSteps`), by finding row and group key. Given, the view
+   * takes what is there and works none out: the fix gate re-resolves a scheme per finding, too
+   * slow for a draw on a large game. Left out, every offer is worked out now.
+   */
+  offers?: OfferBook | undefined;
 }
+
+/** A finding's offer, or whether a group's one fix passes the gate. */
+export type OfferEntry = Offer | { group: boolean };
+/** The offers worked out, by finding row key or group key. */
+export type OfferBook = ReadonlyMap<string, OfferEntry>;
 
 // ---- The pieces ----
 
@@ -844,16 +856,14 @@ export function editorView(input: EditorViewInput): EditorView {
       canKeep: isAcceptable(finding),
     };
     if (finding.accepted !== undefined) row.kept = finding.accepted;
-    else {
-      const offer = offerFor(finding, scheme, game, plan);
-      if (offer !== null && 'fix' in offer) row.fix = offer.fix;
-      else if (offer !== null) row.why = offer.why;
-    }
     return row;
   });
   const bySeverity = (a: FindingRow, b: FindingRow) =>
     SEVERITY_ORDER[a.finding.severity] - SEVERITY_ORDER[b.finding.severity];
-  const open = rows.filter((r) => r.kept === undefined).sort(bySeverity);
+  const bare = rows.filter((r) => r.kept === undefined).sort(bySeverity);
+  const book: OfferBook =
+    input.offers ?? new Map(offerSteps({ findings: bare }, scheme, game, plan));
+  const open = withOffers(bare, book);
 
   const conflicting = new Set(
     plan.findings
@@ -905,17 +915,10 @@ export function editorView(input: EditorViewInput): EditorView {
     moves,
     onStick,
     findings: open,
-    // A group's one fix goes through the gate too: all of its findings gone, no new error.
-    checks: groupChecks(open, game, (fix, members) => {
-      const made = fix.apply(scheme);
-      return (
-        made !== scheme &&
-        settlesAll(
-          members.map((r) => r.finding),
-          plan,
-          resolve(made, game, BUILT_IN_DEVICES),
-        )
-      );
+    // A group's one fix is offered only once it has passed the gate too (`offerSteps`).
+    checks: groupChecks(open, game, (_fix, _members, key) => {
+      const entry = book.get(key);
+      return entry !== undefined && entry !== null && 'group' in entry && entry.group;
     }),
     kept: rows.filter((r) => r.kept !== undefined),
   };
@@ -951,4 +954,44 @@ export function splitSubject(
     end += joint.length + next.length;
   }
   return { subject: message.slice(0, end), rest: message.slice(end) };
+}
+
+/** The rows with what the book has for each: its fix, or why there is none. */
+function withOffers(rows: readonly FindingRow[], book: OfferBook): FindingRow[] {
+  return rows.map((row) => {
+    const entry = book.get(row.key);
+    if (entry === undefined || entry === null || 'group' in entry) return row;
+    return 'fix' in entry ? { ...row, fix: entry.fix } : { ...row, why: entry.why };
+  });
+}
+
+/**
+ * The fix offers of a view's findings, one step at a time, for the Editor to work out after its
+ * draw (each step re-resolves a scheme): first each finding's (THE FIX GATE, fixes.ts), then
+ * whether each group's one fix passes the gate too: all its findings gone, no new error.
+ */
+export function* offerSteps(
+  view: Pick<EditorView, 'findings'>,
+  scheme: Scheme,
+  game: Game,
+  plan: Plan,
+): Generator<[string, OfferEntry]> {
+  const book = new Map<string, OfferEntry>();
+  for (const row of view.findings) {
+    const offer = offerFor(row.finding, scheme, game, plan);
+    book.set(row.key, offer);
+    yield [row.key, offer];
+  }
+  for (const item of groupChecks(withOffers(view.findings, book), game)) {
+    if (item.kind !== 'group' || item.fix === undefined) continue;
+    const made = item.fix.apply(scheme);
+    const passes =
+      made !== scheme &&
+      settlesAll(
+        item.rows.map((r) => r.finding),
+        plan,
+        resolve(made, game, BUILT_IN_DEVICES),
+      );
+    yield [item.key, { group: passes }];
+  }
 }

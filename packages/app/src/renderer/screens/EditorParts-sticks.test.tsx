@@ -155,3 +155,22 @@ describe('a check whose fix can’t act', () => {
     ]).toEqual([true, false, true]);
   });
 });
+
+describe('a finding row, to click', () => {
+  it('draws its sentence as a button that shows where it is; a setup-wide one stays text', () => {
+    const scheme: Scheme = {
+      ...xboxControllerPreset(helldivers2),
+      devices: { azerons: 'both', keyboard: true, mouse: true, controller: false },
+      map: { default: {} },
+    };
+    const html = checks(scheme);
+    // Required actions on no button: each a button. The mix of devices: no place to show.
+    expect([
+      /<button type="button" class="ed-check-go"[^>]*>.*?Fire/.test(html),
+      /<button type="button" class="ed-check-go"[^>]*><span class="ed-check-text"><strong class="ed-check-subject"><\/strong>This scheme mixes/.test(
+        html,
+      ),
+      html.includes('This scheme mixes'),
+    ]).toEqual([true, false, true]);
+  });
+});

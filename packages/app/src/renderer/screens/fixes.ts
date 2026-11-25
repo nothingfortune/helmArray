@@ -33,6 +33,7 @@ import {
   xboxControllerPreset,
 } from '@helmarray/core';
 import type { Slot } from './editor-model';
+import type { Location } from './reveal';
 import { assign, clear, isStick, setLatch, setPadControl, shownAction } from './editor-model';
 
 export interface Fix {
@@ -40,10 +41,11 @@ export interface Fix {
   label: string;
   apply: (scheme: Scheme) => Scheme;
   /**
-   * The control the fix puts something on, worked out from the scheme it is applied to: the editor
-   * selects it, so the player sees where it went. Absent for a fix that only takes something off.
+   * Where the fix put something, worked out from the scheme it is applied to: the finding's mode,
+   * and the control and press it went on. The Editor reveals it (reveal.ts), so the player sees
+   * where it went and the next edit lands there. Absent for a fix that only takes something off.
    */
-  select?: (scheme: Scheme) => ControlId | undefined;
+  reveal?: (scheme: Scheme) => Location | undefined;
 }
 
 const nameOf = (game: Game, id: ActionId): string =>
@@ -261,7 +263,7 @@ function stickTries(scheme: Scheme, game: Game, control: ControlId, only?: 'keys
           : stick.mode === 'mouse'
             ? 'Use it as the mouse'
             : 'Use as controller stick';
-    out.push({ label, scheme: withStick(scheme, control, stick) });
+    out.push({ label, scheme: withStick(scheme, control, stick), select: control });
   }
   return out;
 }
@@ -451,7 +453,19 @@ export function offerFor(finding: Finding, scheme: Scheme, game: Game, plan: Pla
   const fix: Fix = {
     label: chosen.label,
     apply: (s) => on(s)?.scheme ?? s,
-    ...(chosen.select === undefined ? {} : { select: (s: Scheme) => on(s)?.select }),
+    ...(chosen.select === undefined
+      ? {}
+      : {
+          reveal: (s: Scheme): Location | undefined => {
+            const control = on(s)?.select;
+            if (control === undefined) return undefined;
+            return {
+              ...(finding.mode === undefined ? {} : { mode: finding.mode }),
+              control,
+              press: 'tap',
+            };
+          },
+        }),
   };
   return { fix };
 }

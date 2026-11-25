@@ -291,3 +291,92 @@ test('a required action with every controller button in use says so, and is fixe
   // On the first empty button that can send it, the freed Xbox control; that button is selected.
   await expect(page.locator('.ed-panel-title')).toHaveText('Action 16');
 });
+
+// Codex, on #109: a fix for a finding in another mode put the action on in that mode, but the
+// Editor stayed where it was. It now goes there: the finding's mode, the control, its press.
+test.describe('a fix in the other mode, on a two-mode game', () => {
+  async function twoModes(page: Page) {
+    await page.evaluate(async () => {
+      const helm = (
+        window as unknown as {
+          helm: {
+            saveGame(game: unknown): Promise<void>;
+            createScheme(gameId: string, preset: string): Promise<{ id: string }>;
+            setActive(gameId: string, schemeId: string): Promise<void>;
+          };
+        }
+      ).helm;
+      const act = (id: string, name: string, mode: string, required: boolean, pad?: string) => ({
+        id,
+        name,
+        mode,
+        role: 'movement',
+        required,
+        ...(pad === undefined ? {} : { native: { pad } }),
+      });
+      await helm.saveGame({
+        id: 'two_modes',
+        name: 'Two Modes',
+        modes: [
+          { id: 'ship', name: 'Ship' },
+          { id: 'foot', name: 'On foot' },
+        ],
+        actions: [
+          act('boost', 'Boost', 'ship', true, 'A'),
+          act('jump', 'Jump', 'foot', true, 'A'),
+          act('run', 'Run', 'foot', true),
+          act('wave', 'Wave', 'foot', false),
+        ],
+      });
+      const made = await helm.createScheme('two_modes', 'xbox');
+      await helm.setActive('two_modes', made.id);
+    });
+    await page.getByRole('button', { name: 'Look again' }).click();
+    await page.locator('.tile', { hasText: 'Two Modes' }).locator('.tile-button').click();
+    await expect(page.getByRole('heading', { name: 'Two Modes' })).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Ship' })).toHaveAttribute('aria-selected', 'true');
+  }
+
+  test('the fix goes to On foot, selects the button, and the next edit lands there', async ({
+    helm,
+  }) => {
+    const { page } = helm;
+    await twoModes(page);
+    await row(page, /^Run/).getByRole('button', { name: 'Put it on a button' }).click();
+    await expect(page.getByRole('tab', { name: 'On foot' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await expect(page.locator('.ed-panel-title')).toHaveText('Run');
+    const where = (await page.locator('.ed-panel .ed-lbl').first().textContent()) ?? '';
+    const position = where.split(' · ')[1]?.toLowerCase() ?? '';
+
+    // The next edit: Wave on that same button's tap, in On foot.
+    await page.locator('.ed-actions').getByRole('button', { name: /^Wave/ }).click();
+    await expect(page.locator('.ed-panel-title')).toHaveText('Wave');
+    await page.getByRole('tab', { name: 'Ship' }).click();
+    await expect(leftUnit(page).getByRole('button', { name: `Empty, ${position}` })).toBeVisible();
+  });
+
+  test('undo goes back to the mode of the edit it undoes', async ({ helm }) => {
+    const { page } = helm;
+    await twoModes(page);
+    await row(page, /^Run/).getByRole('button', { name: 'Put it on a button' }).click();
+    await page.getByRole('tab', { name: 'Ship' }).click();
+    await page.getByRole('button', { name: 'Undo' }).click();
+    await expect(page.getByRole('tab', { name: 'On foot' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+  });
+
+  test('a finding’s sentence, clicked, shows its mode', async ({ helm }) => {
+    const { page } = helm;
+    await twoModes(page);
+    await row(page, /^Run/).locator('.ed-check-go').click();
+    await expect(page.getByRole('tab', { name: 'On foot' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+  });
+});

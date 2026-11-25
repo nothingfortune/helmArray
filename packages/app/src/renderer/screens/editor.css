@@ -239,6 +239,23 @@
   background: var(--color-raised);
   border-color: var(--color-line-key);
 }
+/* A finding's sentence, as a button that shows where it is: plain text until pointed at. */
+.ed-check-go {
+  flex: 1;
+  min-width: 240px;
+  display: flex;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ed-check-go:hover .ed-check-text {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 .ed-check-why {
   color: var(--color-secondary);
 }

@@ -21,6 +21,7 @@ import {
 } from './editor-model';
 import type { EditorView, FindingRow, PanelView, UnitSide } from './editor-view';
 import type { CheckGroup } from './check-groups';
+import { findingLocation } from './reveal';
 import { MOUSE_WIDTH, keyboardRow, unitRow } from './editor-layout';
 import { KEYBOARD_WIDTH } from '../devices/layouts';
 
@@ -51,10 +52,12 @@ function CheckRow({
   row,
   onFix,
   onKeep,
+  onShow,
 }: {
   row: FindingRow;
   onFix(row: FindingRow): void;
   onKeep(row: FindingRow): void;
+  onShow(row: FindingRow): void;
 }) {
   return (
     <div className={`ed-check tone-${row.finding.severity}`}>
@@ -62,7 +65,14 @@ function CheckRow({
         className={`dot tone-${row.finding.severity === 'error' ? 'error' : 'warning'}`}
         aria-hidden="true"
       />
-      <CheckText row={row} />
+      {/* A finding with a place shows it when clicked: its mode, its control (reveal.ts). */}
+      {findingLocation(row.finding) === undefined ? (
+        <CheckText row={row} />
+      ) : (
+        <button type="button" className="ed-check-go" onClick={() => onShow(row)}>
+          <CheckText row={row} />
+        </button>
+      )}
       {row.fix && (
         <button type="button" className="btn ed-fix" onClick={() => onFix(row)}>
           {row.fix.label}
@@ -87,12 +97,14 @@ function CheckGroupRow({
   onKeep,
   onFixAll,
   onKeepAll,
+  onShow,
 }: {
   group: CheckGroup;
   onFix(row: FindingRow): void;
   onKeep(row: FindingRow): void;
   onFixAll(group: CheckGroup): void;
   onKeepAll(group: CheckGroup): void;
+  onShow(row: FindingRow): void;
 }) {
   const severity = group.rows.some((r) => r.finding.severity === 'error') ? 'error' : 'warning';
   return (
@@ -117,7 +129,7 @@ function CheckGroupRow({
       <details className="ed-check-each">
         <summary>Show each</summary>
         {group.rows.map((row) => (
-          <CheckRow key={row.key} row={row} onFix={onFix} onKeep={onKeep} />
+          <CheckRow key={row.key} row={row} onFix={onFix} onKeep={onKeep} onShow={onShow} />
         ))}
       </details>
     </div>
@@ -143,6 +155,7 @@ export function Checks({
   onFlag,
   onFixAll,
   onKeepAll,
+  onShow = () => undefined,
 }: {
   view: EditorView;
   onFix(row: FindingRow): void;
@@ -152,6 +165,8 @@ export function Checks({
   onFixAll(group: CheckGroup): void;
   /** A group's "Keep, I know": every finding in it kept. */
   onKeepAll(group: CheckGroup): void;
+  /** A finding's sentence clicked: show where it is (its mode, its control). */
+  onShow?(row: FindingRow): void;
 }) {
   return (
     <section className="ed-checks" aria-label="Checks">
@@ -163,7 +178,13 @@ export function Checks({
       )}
       {view.checks.map((item) =>
         item.kind === 'row' ? (
-          <CheckRow key={item.row.key} row={item.row} onFix={onFix} onKeep={onKeep} />
+          <CheckRow
+            key={item.row.key}
+            row={item.row}
+            onFix={onFix}
+            onKeep={onKeep}
+            onShow={onShow}
+          />
         ) : (
           <CheckGroupRow
             key={item.key}
@@ -172,6 +193,7 @@ export function Checks({
             onKeep={onKeep}
             onFixAll={onFixAll}
             onKeepAll={onKeepAll}
+            onShow={onShow}
           />
         ),
       )}

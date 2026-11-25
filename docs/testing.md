@@ -157,7 +157,7 @@ The pure logic that can do damage, listed in `stryker.config.mjs` (`mutate`):
   `scheme-plan`, `active-plans`, `sync-state`, `devices` and `devices-gate`, `hands`,
   `hand-finder`, `store`, `hid-transport`, `processes`, `exchange-log`, `e2e-seam` and `compose`.
 - `packages/app/src/renderer`: the pure models `editor-model`, `editor-view`, `libraryView`,
-  `libraryFlow`, `applyFlow`, the checks' `fixes` and `check-groups`, and `recent-games`, and the Game screen's `game-model`, `game-editor`, `capture`
+  `libraryFlow`, `applyFlow`, the checks' `fixes` and `check-groups`, `recent-games` and `reveal`, and the Game screen's `game-model`, `game-editor`, `capture`
   (press-to-set), `press-listener` and `gameTile`.
 
 Not React components, CSS, `index.ts` or the preload: the Playwright e2e suite covers those, and

@@ -37,6 +37,9 @@ import { assignable, editorView, gainedTab, opensApply } from './editor-view';
 import { sidePanelWidth } from './editor-layout';
 import type { DeviceTabId } from './editor-view';
 import type { Fix } from './fixes';
+import { editedLocation, findingLocation, reveal } from './reveal';
+import { useOffers } from './useOffers';
+import type { EditorPlace, Location } from './reveal';
 import type { DragSource } from '../devices/drag';
 import { runMake, runPick } from './libraryFlow';
 import { runCopy, runDelete } from './schemeFlow';
@@ -243,17 +246,46 @@ function EditorBody({
     [change],
   );
 
+  // Where the Editor is, and THE ONE way it goes somewhere after an action (reveal.ts): the mode,
+  // the tab, the control and its press, all at once. A ref, so a key handler set up once sees now.
+  const placeRef = useRef<EditorPlace>({
+    mode: game.modes[0]?.id ?? 'default',
+    selected: undefined,
+    press: 'tap',
+    tab: undefined,
+    inspector: true,
+  });
+  const revealAt = useCallback((location: Location | undefined, on: Scheme) => {
+    if (location === undefined) return;
+    const next = reveal(placeRef.current, location, on);
+    setMode(next.mode);
+    setSelected(next.selected);
+    setPress(next.press);
+    setTab(next.tab);
+    setInspector(next.inspector);
+  }, []);
+  /** Undo or redo, and back to where the edit it undid or redid was made. */
+  const travel = useCallback(
+    (step: typeof undo) => {
+      const before = historyRef.current.present;
+      change(step);
+      const after = historyRef.current.present;
+      revealAt(editedLocation(before, after), after);
+    },
+    [change, revealAt],
+  );
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLElement && isTextEntry(e.target)) return;
       const wanted = historyAction(e, !historyOff);
       if (wanted === null) return;
       e.preventDefault();
-      change(wanted === 'undo' ? undo : redo);
+      travel(wanted === 'undo' ? undo : redo);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [change, historyOff]);
+  }, [travel, historyOff]);
 
   // An apply wrote the keys it dealt into the saved scheme: take them (never saved from here).
   const firstKeys = useRef(keysKept);
@@ -285,12 +317,15 @@ function EditorBody({
     }
   }, [scheme, game]);
 
+  // The fix offers are worked out after the draw, a slice at a time (useOffers): the draw takes
+  // what is there so far.
+  const offers = useOffers(scheme, game, 'plan' in planned ? planned.plan : null);
   const view = useMemo(
     () =>
       'plan' in planned
-        ? editorView({ scheme, game, plan: planned.plan, mode, selected, press, tab })
+        ? editorView({ scheme, game, plan: planned.plan, mode, selected, press, tab, offers })
         : null,
-    [planned, scheme, game, mode, selected, press, tab],
+    [planned, scheme, game, mode, selected, press, tab, offers],
   );
 
   // J1: a scheme just made from a preset with nothing to fix goes straight to the drawer, once.
@@ -301,21 +336,26 @@ function EditorBody({
     if (opensApply(view)) onApply?.();
   }, [applyWhenReady, view, onApply]);
 
+  useEffect(() => {
+    placeRef.current = { mode, selected, press, tab, inspector };
+  }, [mode, selected, press, tab, inspector]);
+
   const select = (id: ControlId) => {
     setSelected(selected === id ? undefined : id);
     setPress('tap');
     if (selected !== id) setInspector(true);
   };
+  /** A click on an action (from the list, or moved from another button): on the selected press. */
   const place = (control: ControlId, actionId: string, which: Press) => {
     if (isStick(control) || !assignable(game, mode, actionId)) return;
     edit((s) => assign(s, { mode, control, press: which }, actionId, game));
+    revealAt({ mode, control, press: which }, scheme);
   };
   /** A drop: from the list it puts the action on; dragged off another control it moves it. */
   const dropOn = (control: ControlId, actionId: string, from?: DragSource) => {
     if (isStick(control) || !assignable(game, mode, actionId)) return;
     edit((s) => drop(s, mode, control, actionId, from, game));
-    setSelected(control);
-    setPress('tap');
+    revealAt({ mode, control, press: 'tap' }, scheme);
   };
   /** Opens a setup the picker made or switched to; a step that failed says why in one sentence. */
   const opened =
@@ -344,15 +384,12 @@ function EditorBody({
     setSelected(undefined);
     setPress('tap');
   };
-  /** A fix, applied; the control it put something on (if any) is selected, to show where. */
+  /** A fix, applied, and where it put something revealed: its mode, its control, its press. */
   const applyFix = (fix: Fix) => {
-    const where = fix.select?.(historyRef.current.present);
+    const present = historyRef.current.present;
+    const where = fix.reveal?.(present);
     edit(fix.apply);
-    if (where !== undefined) {
-      setSelected(where);
-      setPress('tap');
-      setInspector(true);
-    }
+    revealAt(where, historyRef.current.present);
   };
   const showTab = (id: DeviceTabId) => {
     setTab(id);
@@ -456,7 +493,7 @@ function EditorBody({
             aria-label="Undo"
             title="Undo (Ctrl+Z)"
             disabled={!canUndo(history)}
-            onClick={() => change(undo)}
+            onClick={() => travel(undo)}
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <path
@@ -472,7 +509,7 @@ function EditorBody({
             aria-label="Redo"
             title="Redo (Ctrl+Shift+Z)"
             disabled={!canRedo(history)}
-            onClick={() => change(redo)}
+            onClick={() => travel(redo)}
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <path
@@ -540,6 +577,7 @@ function EditorBody({
                 onKeepAll={(group) =>
                   edit((s) => group.rows.reduce((x, row) => acceptFinding(x, row.finding), s))
                 }
+                onShow={(row) => revealAt(findingLocation(row.finding), scheme)}
               />
             </section>
             {inspector && (

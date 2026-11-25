@@ -38,7 +38,7 @@ describe('missing-required: Put it on a button', () => {
     const { fix, after, before, now } = fixing(noFire(), 'missing-required', 'fire_primary');
     expect({
       label: fix?.label,
-      selects: fix?.select?.(noFire()),
+      selects: fix?.reveal?.(noFire())?.control,
       on: shownAction(after, 'default', 'L.index_2')?.id,
       before,
       now,
@@ -59,7 +59,7 @@ describe('missing-required: Put it on a button', () => {
       helldivers2,
     );
     const { fix, now } = fixing(scheme, 'missing-required', 'fire_primary');
-    expect([fix?.select?.(scheme), now]).toEqual(['R.index_1', []]);
+    expect([fix?.reveal?.(scheme)?.control, now]).toEqual(['R.index_1', []]);
   });
 
   it('puts an action on a button with key output, sending its own key', () => {
@@ -70,7 +70,7 @@ describe('missing-required: Put it on a button', () => {
     });
     const { fix, after, now } = fixing(scheme, 'missing-required', 'stratagem');
     const sent = planOf(after).bindings.find((b) => b.action === 'stratagem');
-    expect([fix?.select?.(scheme), sent?.signal, now]).toEqual([
+    expect([fix?.reveal?.(scheme)?.control, sent?.signal, now]).toEqual([
       'L.middle_3',
       { kind: 'key', code: 'LCtrl' },
       [],

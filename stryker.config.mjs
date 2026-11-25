@@ -89,6 +89,7 @@ export default {
     'packages/app/src/renderer/screens/fixes.ts', // the checks' fix buttons
     'packages/app/src/renderer/screens/check-groups.ts',
     'packages/app/src/renderer/screens/recent-games.ts',
+    'packages/app/src/renderer/screens/reveal.ts', // where the Editor goes after an action
     'packages/app/src/renderer/apply/applyFlow.ts',
     // The Game screen: its edits, its state, press-to-set and what it listens to while waiting.
     'packages/app/src/renderer/screens/game-model.ts',
