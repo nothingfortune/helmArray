@@ -9,6 +9,7 @@ import {
   leftUnit,
   seriousViolations,
   startBlankKeys,
+  startFrom,
   unseen,
   walkTabOrder,
 } from './screens';
@@ -58,6 +59,25 @@ test.describe('the action picker', () => {
     await expect(leftUnit(page).getByRole('button', { name: 'Stim, index 2' })).toBeVisible();
     await expect(page.locator('.ed-panel-title')).toHaveText('Stim');
     // The focus is back where the picker was opened from, now "Change".
+    await expect(trigger(page, /^Change tap$/)).toBeFocused();
+  });
+
+  test('Change on a press with an action opens it; the pick replaces that action', async ({
+    helm,
+  }) => {
+    const { page } = helm;
+    await startFrom(page, 'Xbox controller');
+    await leftUnit(page)
+      .getByRole('button', { name: /^Interact, / })
+      .click();
+    await expect(page.locator('.ed-panel-title')).toHaveText('Interact');
+    await trigger(page, /^Change tap$/).click();
+    await expect(search(page)).toBeFocused();
+    await page.keyboard.type('throw');
+    await expect(picker(page).getByRole('option')).toHaveText([/^Throw grenade/]);
+    await page.keyboard.press('Enter');
+    await expect(picker(page)).toHaveCount(0);
+    await expect(page.locator('.ed-panel-title')).toHaveText('Throw grenade');
     await expect(trigger(page, /^Change tap$/)).toBeFocused();
   });
 

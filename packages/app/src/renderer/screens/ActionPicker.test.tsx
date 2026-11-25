@@ -1,6 +1,7 @@
-// The action picker drawn to markup (react-dom/server), and what its controls ask for when used: the
-// stateless panel is called with its props and the element a person would use is found by its name
-// or role, its handler then called as the browser would. The window itself is the e2e suite's
+// The action picker drawn to markup (react-dom/server), and what its controls ask for when used,
+// with the side panel's presses it opens from and the list it stands over: a stateless part is
+// called with its props and the element a person would use is found by its name or role, its
+// handler then called as the browser would. The window itself is the e2e suite's
 // (packages/app/e2e/picker.spec.ts).
 import { isValidElement } from 'react';
 import type { ReactElement, ReactNode } from 'react';
@@ -9,7 +10,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Scheme } from '@helmarray/core';
 import { ActionPicker, PickerPanel } from './ActionPicker';
 import type { PickerPanelProps } from './ActionPicker';
-import { Panel } from './EditorParts';
+import { Panel, Unplaced } from './EditorParts';
 import { pickerSource, pickerView } from './action-picker';
 import type { PickerSource, RoleFilter } from './action-picker';
 import { editorView } from './editor-view';
@@ -19,7 +20,7 @@ type Props = Record<string, unknown> & { children?: ReactNode };
 type El = ReactElement<Props>;
 
 const none = () => undefined;
-const PARTS = new Set<unknown>([PickerPanel, Panel]);
+const PARTS = new Set<unknown>([PickerPanel, Panel, Unplaced]);
 
 /** Every element the node draws, the parts above opened up into what they draw. */
 function elements(node: ReactNode): El[] {
@@ -248,33 +249,81 @@ describe('the action picker, used', () => {
   });
 });
 
-describe('the side panel’s Add and Change, used', () => {
-  it('asks for the picker on its press', () => {
-    const v = editorView({
-      scheme: keysScheme(),
-      game,
-      plan: plan(keysScheme()),
-      mode: 'ship',
-      selected: 'L.index_1',
-    });
+describe('the side panel’s presses, used', () => {
+  /** The side panel on a control, with spies for what it asks for. */
+  function sidePanel(scheme: Scheme, selected: string) {
+    const v = editorView({ scheme, game, plan: plan(scheme), mode: 'ship', selected });
     if (v.panel === null) throw new Error('no panel');
-    const onChoose = vi.fn();
+    const asked = { onTarget: vi.fn(), onChoose: vi.fn(), onClear: vi.fn() };
     const node = (
       <Panel
         panel={v.panel}
         onClose={none}
         onMode={none}
-        onTarget={none}
-        onChoose={onChoose}
-        onClear={none}
         onTurbo={none}
         onLatch={none}
         onPad={none}
         onKeyLabel={none}
+        {...asked}
       />
     );
+    return { asked, node };
+  }
+  /** A press row's own button, by the word it starts with. */
+  const row = (node: ReactNode, word: string) =>
+    find(node, word, (e) => e.props['className'] === 'ed-slot-main' && textOf(e).startsWith(word));
+
+  it('Add and Change ask for the picker on their press', () => {
+    const { asked, node } = sidePanel(keysScheme(), 'L.index_1');
     fire(labelled(node, 'Change tap'), 'onClick');
     fire(labelled(node, 'Add long press'), 'onClick');
-    expect(onChoose.mock.calls).toEqual([['tap'], ['long']]);
+    expect(asked.onChoose.mock.calls).toEqual([['tap'], ['long']]);
+  });
+
+  it('a press row makes its press the one a click in the list fills', () => {
+    const { asked, node } = sidePanel(keysScheme(), 'L.index_1');
+    fire(row(node, 'Double'), 'onClick');
+    expect(asked.onTarget.mock.calls).toEqual([['double']]);
+  });
+
+  it('a press the control can’t send asks for nothing', () => {
+    // A controller button has a tap only.
+    const pad: Scheme = { ...keysScheme(), output: 'pad', padMap: { 'L.index_1': 'RB' } };
+    const { asked, node } = sidePanel(pad, 'L.index_1');
+    fire(row(node, 'Long'), 'onClick');
+    expect(asked.onTarget.mock.calls).toEqual([]);
+  });
+
+  it('Clear clears its press', () => {
+    const { asked, node } = sidePanel(keysScheme(), 'L.index_1');
+    fire(labelled(node, 'Clear tap'), 'onClick');
+    expect(asked.onClear.mock.calls).toEqual([['tap']]);
+  });
+});
+
+describe('the list under the side panel, used', () => {
+  const list = (prompt: string | null) => {
+    const v = editorView({
+      scheme: keysScheme(),
+      game,
+      plan: plan(keysScheme()),
+      mode: 'ship',
+      selected: 'L.index_2',
+    });
+    const onPlace = vi.fn();
+    const node = <Unplaced view={v} modeName={null} prompt={prompt} onPlace={onPlace} />;
+    return { onPlace, node };
+  };
+
+  it('a click puts the action on the selected press', () => {
+    const { onPlace, node } = list('Click an action to put it on Left · Index 2, tap.');
+    fire(button(node, 'Galaxy map'), 'onClick');
+    expect(onPlace.mock.calls).toEqual([['galaxy']]);
+  });
+
+  it('with no press to fill, a click does nothing', () => {
+    const { onPlace, node } = list(null);
+    fire(button(node, 'Galaxy map'), 'onClick');
+    expect(onPlace.mock.calls).toEqual([]);
   });
 });
