@@ -11,12 +11,15 @@
 //   - `read`: the Game screen's *Read from the game's file*, for a game that has one: the file's
 //     harvest, and what the game holds from helmArray, for the screen to merge and show.
 // A file that isn't there, can't be read or isn't one the adapter can read is said in a sentence.
+// Elite with no file of its own is read from the preset it ships (its install folder through
+// Steam), as the file Apply would make from it: read only, like any other.
 
 import type { Game, GameFileFormat } from '@helmarray/core';
 import { gameProblem, mergeHarvest } from '@helmarray/core';
 import type { GameFileDisk } from './game-file-disk';
 import type { GameFileKind } from './game-file';
-import { GAME_FILE_KINDS, decodeText } from './game-file';
+import type { InstallDirOf } from './game-file';
+import { GAME_FILE_KINDS, decodeText, madeFileOf } from './game-file';
 
 /** A game whose file format helmArray reads and writes, and how the Library tells it is that game. */
 export interface FileGame {
@@ -83,6 +86,8 @@ export interface HarvestDeps {
   disk: GameFileDisk;
   /** The folders to look in, first found wins: the user's `%LOCALAPPDATA%`. */
   localAppData: readonly string[];
+  /** The game's install folder: what a game with no file of its own is read from (Elite's preset). */
+  installDir?: InstallDirOf;
   kinds?: Readonly<Partial<Record<GameFileFormat, GameFileKind>>>;
   games?: readonly FileGame[];
   trace?(line: string): void;
@@ -116,6 +121,7 @@ const missingNote = (name: string): string =>
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 const clause = (text: string): string => text.replace(/[.\s]+$/, '');
+const upperFirst = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
 /** A sentence as the end of another: its first letter lowered. */
 const lowerFirst = (text: string): string => text.charAt(0).toLowerCase() + text.slice(1);
 
@@ -151,27 +157,51 @@ export function createGameHarvester(deps: HarvestDeps): GameHarvester {
       reason: 'missing',
       message: `helmArray can't find ${file}: change any control in the game's own menu once, then read it again.`,
     };
-    const path = kind.find(deps.localAppData, deps.disk.folders);
+    const own = kind.find(deps.localAppData, deps.disk.folders);
+    // With no file of its own, the one Apply would make it from (Elite's shipped preset): read
+    // only, as the head start, so the game is one helmArray knows before its first Apply.
+    const made =
+      own !== null || format === null
+        ? null
+        : await madeFileOf(
+            kind,
+            format,
+            {
+              installDir: deps.installDir,
+              localAppData: deps.localAppData,
+              folders: deps.disk.folders,
+            },
+            trace,
+            game.id,
+          );
+    const path = made?.from ?? own;
     if (path === null) return missing;
+    // What is read, in words: the game's file, or what its file would be made from.
+    const what = made === null ? file : made.fromWords;
+    const What = made === null ? file : upperFirst(made.fromWords);
     let bytes: Uint8Array | null;
     try {
       bytes = await deps.disk.read(path);
     } catch (error) {
-      return unreadable(`helmArray couldn't read ${file} (${clause(messageOf(error))}).`);
+      return unreadable(`helmArray couldn't read ${what} (${clause(messageOf(error))}).`);
     }
     if (bytes === null) return missing;
     let text: string;
     try {
       text = decodeText(bytes);
     } catch {
-      return unreadable(`${file} isn't text helmArray can read.`);
+      return unreadable(`${What} isn't text helmArray can read.`);
     }
     let harvested: Game;
     try {
-      harvested = kind.harvest(text, { id: game.id, name: game.name }).game;
+      // As the file Apply makes would have it.
+      harvested = kind.harvest(made === null ? text : made.build(text), {
+        id: game.id,
+        name: game.name,
+      }).game;
     } catch (error) {
       trace(`${game.id}: couldn't read ${path}: ${messageOf(error)}`);
-      return unreadable(`${file} isn't one helmArray can read.`);
+      return unreadable(`${What} isn't one helmArray can read.`);
     }
     // Nothing a game can be made of (an empty file, one of lines the adapter ignores) is no read.
     const problem =

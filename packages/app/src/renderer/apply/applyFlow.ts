@@ -318,13 +318,21 @@ export function gameSection(game: ApplyGame, title?: string): GameSection | null
   const counted = n === 1 ? '1 binding' : `${n} bindings`;
   return {
     title: title ?? (sheet ? "In the game's controls" : 'Game file'),
-    summary: sheet ? `${n} to set by hand` : file?.same === true ? 'No change' : counted,
+    summary: sheet
+      ? `${n} to set by hand`
+      : file?.same === true
+        ? 'No change'
+        : file?.made === true && n === 0
+          ? 'New file'
+          : counted,
     ...(file === undefined || file.name === null ? {} : { file: file.name }),
-    ...(file !== undefined
-      ? { note: fileNote(game) }
-      : game.note === undefined
+    // With the file, main's sentence when it has one (a file it makes: there is no old one to
+    // keep a copy of), else the file's own note.
+    ...(game.note !== undefined
+      ? { note: game.note }
+      : file === undefined
         ? {}
-        : { note: game.note }),
+        : { note: fileNote(game) }),
     groups: [...groups.values()].map((g) => ({
       label: groups.size > 1 ? g.label : null,
       lines: g.lines,

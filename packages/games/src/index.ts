@@ -20,10 +20,14 @@ export {
   signalOfUnreal,
   unrealKeyOf,
 } from './unreal-keys';
-export type { EliteFound } from './elite-binds';
+export type { EliteFound, EliteNewBinds } from './elite-binds';
 export {
+  ELITE_NEW_BINDS,
+  ELITE_NEW_PRESET,
   findEliteBinds,
+  findEliteNewBinds,
   harvestEliteBinds,
+  newEliteBinds,
   readStartPreset,
   writeEliteBinds,
   writeStartPreset,

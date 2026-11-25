@@ -699,6 +699,26 @@ describe("the game's file in the drawer", () => {
     ]);
   });
 
+  it("says in main's sentence that the file is made, in place of the copy kept", () => {
+    const note =
+      "Elite Dangerous has no controls file of its own yet, so helmArray makes one from the game's keyboard and mouse preset and sets the game to use it.";
+    expect(gameSection({ via: 'file', rows: [row()], file: FILE, note })).toMatchObject({
+      title: 'Game file',
+      summary: '1 binding',
+      file: 'Custom.4.1.binds',
+      note,
+    });
+  });
+
+  it('calls a file it makes, with no binding to change from the preset, a new file', () => {
+    const made = { ...FILE, made: true as const };
+    expect([
+      gameSection({ via: 'file', rows: [], file: made })?.summary,
+      gameSection({ via: 'file', rows: [row()], file: made })?.summary,
+      gameSection({ via: 'file', rows: [], file: FILE })?.summary,
+    ]).toEqual(['New file', '1 binding', '0 bindings']);
+  });
+
   it('keeps the note short for a game with one mode', () => {
     expect(gameSection({ via: 'file', rows: [row()], file: FILE })).toMatchObject({
       summary: '1 binding',

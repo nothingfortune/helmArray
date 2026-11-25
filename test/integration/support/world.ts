@@ -146,20 +146,33 @@ export interface SteamApp {
   appId: string;
   name: string;
   installDir: string;
+  /**
+   * Installed in a second Steam library on this world's real temp folder (`World.steamLibrary`),
+   * so its install folder is on the disk the games' files are read from; else in Steam's own
+   * folder, in memory only.
+   */
+  onDisk?: true;
 }
 
 const manifest = (app: SteamApp) =>
   `"AppState"\n{\n\t"appid"\t"${app.appId}"\n\t"name"\t"${app.name}"\n\t"installdir"\t"${app.installDir}"\n}\n`;
 
-/** Steam with Helldivers 2 installed, and any other games given, in an in-memory disk. */
-function fakeSteam(others: readonly SteamApp[] = []): SteamReaders {
+/**
+ * Steam with Helldivers 2 installed, and any other games given, in an in-memory disk. A game
+ * `onDisk` is in the library at `library`, which libraryfolders.vdf lists as Steam would.
+ */
+function fakeSteam(others: readonly SteamApp[], library: string): SteamReaders {
   const steam = 'c:/steam';
-  const files: Record<string, string> = {};
+  const second = library.replaceAll('\\', '/');
+  const files: Record<string, string> = {
+    [`${steam}/steamapps/libraryfolders.vdf`]: `"libraryfolders"\n{\n\t"0"\n\t{\n\t\t"path"\t\t"${steam}"\n\t}\n\t"1"\n\t{\n\t\t"path"\t\t"${library.replaceAll('\\', '\\\\')}"\n\t}\n}\n`,
+  };
   for (const app of [
     { appId: HELLDIVERS2_APP_ID, name: 'HELLDIVERS 2', installDir: 'Helldivers 2' },
     ...others,
   ])
-    files[`${steam}/steamapps/appmanifest_${app.appId}.acf`] = manifest(app);
+    files[`${app.onDisk === true ? second : steam}/steamapps/appmanifest_${app.appId}.acf`] =
+      manifest(app);
   return {
     readRegistrySteamPath: () => Promise.resolve(steam),
     readFile: (path) => {
@@ -257,6 +270,14 @@ export class World {
   get handsFile(): string {
     return join(this.dataDir, 'hands.json');
   }
+  /** A Steam library on this world's folder: where a game Steam lists `onDisk` is installed. */
+  get steamLibrary(): string {
+    return join(this.root, 'SteamLibrary');
+  }
+  /** The install folder of a game Steam lists `onDisk`, by its folder name. */
+  installDirOf(folder: string): string {
+    return join(this.steamLibrary, 'steamapps', 'common', folder);
+  }
   /** Where the games keep their files here: this world's `%LOCALAPPDATA%`. */
   get localAppData(): string {
     return join(this.root, 'local');
@@ -293,7 +314,7 @@ export class World {
       logDir: this.logDir,
       hid: this.hid,
       listProcesses: () => this.processes.list(),
-      steam: fakeSteam(this.steamApps),
+      steam: fakeSteam(this.steamApps, this.steamLibrary),
       builtInGames: BUILT_IN_GAMES,
       gameFiles: {
         localAppData: [this.localAppData],

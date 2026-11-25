@@ -223,7 +223,10 @@ helmArray. (Not Everspace 2 by *Xbox controller*: its sticks must send keys, fro
 that preset opens the editor on the two sticks to fix.) One whose file isn't there yet (Everspace 2 saves its `Input.ini` only once a control
 is changed in its menu) keeps its tile on *Set up*, and the Game screen says why in one sentence,
 in Apply's words: "helmArray can't find Everspace 2's controls file yet: changing any control in
-the game's own menu makes the game save one." Elite's tile says the same of its file. A game with
+the game's own menu makes the game save one." Elite's tile says the same of its file, unless the
+player has no file of their own and the game's install folder (found through Steam) holds its
+shipped KeyboardMouseOnly preset: the preset is then the head start, read only, as the file Apply
+would make from it (below). A game with
 a file format (or known by its id or Steam id) has *Read from the game's file*
 on the Game screen. A game read this way and deleted stays deleted: the settings keep its id
 (`dismissed`; deleting any game helmArray knows by that id or Steam id does the same), and the
@@ -243,7 +246,7 @@ interface Target<P> {
 | Target      | apply                                                                                  | verify                         | Refuses when                       |
 | ----------- | -------------------------------------------------------------------------------------- | ------------------------------ | ---------------------------------- |
 | Units       | write the one slot, switch to it, delete every other slot; only the units the setup uses (left only for *left Azeron + mouse*) | read every slot back           | Azeron app running; unknown unit   |
-| Game file   | back up, write the whole file: keyboard **and** controller bindings for the setup      | re-read, harvest, compare      | game running; file unreadable, or can't take the bindings (a file not found isn't a refusal: the bind sheet) |
+| Game file   | back up, write the whole file: keyboard **and** controller bindings for the setup (Elite with no file of its own: make it from the shipped preset, then point StartPreset at it) | re-read, harvest, compare      | game running; file unreadable, or can't take the bindings (a file not found isn't a refusal: the bind sheet) |
 | Bind sheet  | nothing to write; shown and printable                                                  | —                              | —                                  |
 | Helper (v2) | load the macro program                                                                 | —                              | game not opted in                  |
 
@@ -270,6 +273,21 @@ the harvest of what it holds must be the harvest of what was meant, or the copy 
 file written (or holding the bindings already) moves the game's baseline to them, so nothing is
 left to set by hand. Elite's file is only ever the player's own (`Custom.4.1.binds`, as
 `StartPreset.4.start` names it), never a preset the game ships.
+
+**Elite with no file of its own** (a player who has only used a preset the game ships: no line of
+`StartPreset.4.start` names a file of theirs, and the bindings folder holds no `Custom` file of any
+version). As the legacy app did, helmArray makes one: from the `KeyboardMouseOnly.binds` the game
+ships, under its install folder's `Products/elite-dangerous-odyssey-64/ControlSchemes/` (the install
+folder from Steam's app manifest, `<library>/steamapps/common/<installdir>`), as
+`Custom.4.1.binds` beside StartPreset, with only its root line changed to
+`<Root PresetName="Custom" MajorVersion="4" MinorVersion="1">`; then every line of StartPreset
+names `Custom` (which line is which category isn't known; the legacy app set them all alike). The
+drawer names `Custom.4.1.binds` and says in one sentence that it is made from the game's keyboard
+and mouse preset. Apply, the game closed: keeps a copy of StartPreset, writes the new file, then
+the bindings into it, reads it back, and points StartPreset at it last, read back too. A failure at
+any step puts StartPreset back as it was and removes the new file, so the game reads its preset
+as before; the baseline moves only when all of it held. Without the install folder or the
+preset in it, the bindings are set by hand, as for any file not found.
 
 The presets turn `writeGameFile` on for a game that has a file format, and *game's own keys*
 puts each key it places in the ledger, so the units still send the game's own keys.

@@ -6,7 +6,8 @@
 //   1. Finds the file (the adapter's `find`, over the folders the app hands in) and reads it. A
 //      file that isn't there is not refused: the units are written, and the game's bindings are
 //      set by hand (the bind sheet), with one sentence saying why. One that can't be read, or isn't
-//      UTF-8 text, is refused, in a sentence.
+//      UTF-8 text, is refused, in a sentence. (Elite with no file of its own but the preset it
+//      ships: the file is made, below.)
 //   2. Writes the plan's bindings into the text in memory. An action the file doesn't have (one
 //      added by hand on the Game screen) has no line to write: its bindings are set by hand, and
 //      only those (`byHand`). A file that can't take the rest (a key it can't name) is refused,
@@ -20,27 +21,67 @@
 //   5. Writes the file, reads it back, and harvests both what it holds and what was meant: they
 //      must be the same. A write that fails, or reads back otherwise, puts the copy back.
 // Steps 1 to 3 are also the preview (`look`), so the drawer says before Apply what Apply says.
+//
+// A file made (`GameFileKind.make`: Elite, when the player has no file of its own and its install
+// folder holds the preset it ships). Step 1 reads the shipped preset (never written) and the
+// pointer (Elite's `StartPreset.4.start`), and makes the new file's text in memory; the drawer
+// says so in one sentence. Then, the game closed: a copy of the pointer is kept (step 4); the new
+// file is written, then the bindings into it, and it is read back as in step 5; the pointer is
+// changed to name it last, and read back. A failure at any step puts the pointer back as it was
+// and removes the new file, so the game reads its preset as before. The text always counts as
+// changed: the game doesn't read the new file until the pointer names it.
 
 import { isDeepStrictEqual } from 'node:util';
 import type { ActionId, Game, GameBinding, GameFileFormat, Plan } from '@helmarray/core';
 import type { FolderReader, Harvest } from '@helmarray/games';
 import {
+  ELITE_NEW_PRESET,
   GameFileError,
   findEliteBinds,
+  findEliteNewBinds,
   findEverspace2Ini,
   harvestEliteBinds,
   harvestUnrealIni,
+  newEliteBinds,
   writeEliteBinds,
+  writeStartPreset,
   writeUnrealIni,
 } from '@helmarray/games';
 import type { ReadyCheck } from '../shared/api';
 import type { GameFileDisk } from './game-file-disk';
 import { programRunning } from './processes';
 
+/**
+ * A file helmArray makes for a game that has none of its own, from one the game ships, and the
+ * file that tells the game which to read (the pointer), changed last to name it.
+ */
+export interface MadeFile {
+  /** The file the game ships, read only: the new one is made from it. */
+  from: string;
+  /** What `from` is, in words: "the game's keyboard and mouse preset". */
+  fromWords: string;
+  /** The new file. */
+  path: string;
+  /** The pointer. */
+  pointer: string;
+  /** The new file's text, from the shipped one's; throws a `GameFileError` when it can't be made. */
+  build(text: string): string;
+  /** The pointer's text, naming the new file. */
+  point(text: string): string;
+}
+
 /** A game file format helmArray writes: how to find the file, read it, write it, and see the game run. */
 export interface GameFileKind {
   /** The file the game reads, or null when there is none. */
   find(localAppData: readonly string[], folders: FolderReader): string | null;
+  /**
+   * When `find` finds none: the file to make and what from, or null when none can be made. Given
+   * the game's install folder when it is known.
+   */
+  make?(
+    where: { installDir: string | null; localAppData: readonly string[] },
+    folders: FolderReader,
+  ): MadeFile | null;
   harvest(text: string, game: { id: string; name: string }): Harvest;
   /** The text with the bindings in it; throws a `GameFileError` naming what it can't write. */
   write(text: string, rows: readonly GameBinding[]): string;
@@ -67,9 +108,25 @@ export const GAME_FILE_KINDS: Readonly<Record<GameFileFormat, GameFileKind>> = {
     processNames: null,
   },
   'elite-binds': {
-    // Never a preset the game ships: with no install folder, only the player's own file is found.
+    // Only the player's own file is written: with no install folder, a preset the game ships is
+    // never found here.
     find: (localAppData, folders) =>
       findEliteBinds({ installDir: null, localAppData }, folders)?.binds ?? null,
+    // With none, one is made from the preset the game ships (elite-binds.ts says where each fact
+    // comes from), and StartPreset names it.
+    make: (where, folders) => {
+      const found = findEliteNewBinds(where, folders);
+      return found === null
+        ? null
+        : {
+            from: found.from,
+            fromWords: "the game's keyboard and mouse preset",
+            path: found.path,
+            pointer: found.startPreset,
+            build: newEliteBinds,
+            point: (text) => writeStartPreset(text, ELITE_NEW_PRESET),
+          };
+    },
     harvest: harvestEliteBinds,
     write: (text, rows) => writeEliteBinds(text, rows),
     processNames: null,
@@ -79,10 +136,15 @@ export const GAME_FILE_KINDS: Readonly<Record<GameFileFormat, GameFileKind>> = {
 /** How many copies of a game's file are kept. The canvas's Settings offers 5 first. */
 export const BACKUPS_KEPT = 5;
 
+/** The game's install folder for a format (Steam's, for the game helmArray knows it by), or null. */
+export type InstallDirOf = (format: GameFileFormat) => Promise<string | null>;
+
 export interface GameFileDeps {
   disk: GameFileDisk;
   /** The folders to look in, first found wins: the user's `%LOCALAPPDATA%`. */
   localAppData: readonly string[];
+  /** The game's install folder, looked up afresh each time: where a file to make is made from. */
+  installDir?: InstallDirOf;
   /** helmArray's backups folder; each game's copies go in a folder of its own inside. */
   backupsDir: string;
   /** A fresh list of the running programs' image names, every call; a list that fails throws. */
@@ -104,6 +166,33 @@ export interface GameFilesOptions {
   kinds?: Readonly<Partial<Record<GameFileFormat, GameFileKind>>>;
   /** The disk; the real one when not given. */
   disk?: GameFileDisk;
+  /** The games' install folders; Steam's, as the app reads it, when not given. */
+  installDir?: InstallDirOf;
+}
+
+/**
+ * The file to make for a game whose own file isn't found, or null: the kind can't make one, or
+ * the install folder or what it is made from isn't there. A look-up that fails is said in the log.
+ */
+export async function madeFileOf(
+  kind: GameFileKind,
+  format: GameFileFormat,
+  where: {
+    installDir?: InstallDirOf | undefined;
+    localAppData: readonly string[];
+    folders: FolderReader;
+  },
+  trace: (line: string) => void,
+  gameId: string,
+): Promise<MadeFile | null> {
+  if (kind.make === undefined) return null;
+  let installDir: string | null = null;
+  try {
+    installDir = (await where.installDir?.(format)) ?? null;
+  } catch (error) {
+    trace(`couldn't find ${gameId}'s install folder: ${messageOf(error)}`);
+  }
+  return kind.make({ installDir, localAppData: where.localAppData }, where.folders);
 }
 
 /** What the drawer is told of the game's file before Apply. */
@@ -111,8 +200,9 @@ export interface FileLook {
   /** `file`: helmArray writes it; `sheet`: it doesn't, and the bindings are set by hand. */
   via: 'file' | 'sheet';
   /**
-   * Why the bindings are set by hand when helmArray would write the file but can't find it, in one
-   * sentence; null otherwise.
+   * One sentence, null when there is none to say: with `sheet`, why the bindings are set by hand
+   * when helmArray would write the file but can't find it; with `file`, that the file is made
+   * (the game has none of its own) and what from.
    */
   note: string | null;
   /** The file's name, once found: `Input.ini`. */
@@ -149,10 +239,15 @@ export interface GameFileTarget {
 /** Why a game's bindings are set by hand when its file isn't there: the game makes it later. */
 const missingSentence = (game: Game): string =>
   `helmArray can't find ${game.name}'s controls file, so set these in the game's own menu (changing any control there makes the game save one).`;
+/** What the drawer says of a file helmArray makes. */
+const makeSentence = (game: Game, made: MadeFile): string =>
+  `${game.name} has no controls file of its own yet, so helmArray makes one from ${made.fromWords} and sets the game to use it.`;
 
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 const clause = (text: string): string => text.replace(/[.\s]+$/, '');
+const upperFirst = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
+const lowerFirst = (text: string): string => text.charAt(0).toLowerCase() + text.slice(1);
 /** The file's text, a byte order mark kept as its first character; throws if it isn't UTF-8. */
 export const decodeText = (bytes: Uint8Array): string =>
   new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
@@ -174,6 +269,16 @@ function backupName(at: number, name: string, n: number): string {
   return n === 0 ? `${when} ${name}` : `${when}-${String(n).padStart(2, '0')} ${name}`;
 }
 
+/** A file to make, as read and made in memory: the pointer as it is, and as it will be. */
+interface Making {
+  file: MadeFile;
+  /** The new file's text before the bindings: the shipped one's, made the game's own. */
+  base: string;
+  pointerName: string;
+  pointerBefore: Uint8Array;
+  pointerAfter: string;
+}
+
 type Prepared =
   | { status: 'sheet'; note: string | null }
   | { status: 'blocked'; processNames: readonly string[]; name: string | null; problem: string }
@@ -183,11 +288,14 @@ type Prepared =
       processNames: readonly string[];
       path: string;
       name: string;
+      /** The file as it was; for a file to make, the shipped one it is made from. */
       before: Uint8Array;
       after: string;
       same: boolean;
       byHand: ActionId[];
+      making: Making | null;
     };
+type Ready = Prepared & { status: 'ready' };
 
 export function createGameFileTarget(deps: GameFileDeps): GameFileTarget {
   const kinds = deps.kinds ?? GAME_FILE_KINDS;
@@ -204,13 +312,12 @@ export function createGameFileTarget(deps: GameFileDeps): GameFileTarget {
   const prepare = async (game: Game, plan: Plan): Promise<Prepared> => {
     const format = plan.gameFile?.format;
     const kind = format === undefined ? undefined : kinds[format];
-    if (kind === undefined) return { status: 'sheet', note: null };
+    if (format === undefined || kind === undefined) return { status: 'sheet', note: null };
     if (kind.processNames === null || kind.processNames.length === 0) {
       trace(`${game.id}: its file isn't written, since whether it runs can't be told`);
       return { status: 'sheet', note: null };
     }
     const processNames = kind.processNames;
-    const path = kind.find(deps.localAppData, deps.disk.folders);
     // Not a refusal: the units are written, and the game's half is set by hand.
     const missing: Prepared = { status: 'sheet', note: missingSentence(game) };
     const blocked = (name: string | null, problem: string): Prepared => ({
@@ -219,23 +326,73 @@ export function createGameFileTarget(deps: GameFileDeps): GameFileTarget {
       name,
       problem,
     });
+    const found = kind.find(deps.localAppData, deps.disk.folders);
+    const made =
+      found !== null
+        ? null
+        : await madeFileOf(
+            kind,
+            format,
+            {
+              installDir: deps.installDir,
+              localAppData: deps.localAppData,
+              folders: deps.disk.folders,
+            },
+            trace,
+            game.id,
+          );
+    const path = made?.path ?? found;
     if (path === null) return missing;
     const name = baseName(path);
+    const fileWords = made === null ? `${game.name}'s controls file` : made.fromWords;
     let before: Uint8Array | null;
     try {
-      before = await deps.disk.read(path);
+      before = await deps.disk.read(made?.from ?? path);
     } catch (error) {
-      return blocked(
-        name,
-        `helmArray couldn't read ${game.name}'s controls file (${clause(messageOf(error))}).`,
-      );
+      return blocked(name, `helmArray couldn't read ${fileWords} (${clause(messageOf(error))}).`);
     }
     if (before === null) return missing;
     let text: string;
     try {
       text = decode(before);
     } catch {
-      return blocked(name, `${game.name}'s controls file isn't text helmArray can read.`);
+      return blocked(name, `${upperFirst(fileWords)} isn't text helmArray can read.`);
+    }
+    let making: Making | null = null;
+    if (made !== null) {
+      const pointerName = baseName(made.pointer);
+      const pointerWords = `${pointerName}, the file that picks ${game.name}'s controls`;
+      let pointerBefore: Uint8Array | null;
+      try {
+        pointerBefore = await deps.disk.read(made.pointer);
+      } catch (error) {
+        return blocked(
+          name,
+          `helmArray couldn't read ${pointerWords} (${clause(messageOf(error))}).`,
+        );
+      }
+      if (pointerBefore === null) return missing;
+      let pointerText: string;
+      try {
+        pointerText = decode(pointerBefore);
+      } catch {
+        return blocked(name, `${pointerWords}, isn't text helmArray can read.`);
+      }
+      try {
+        text = made.build(text);
+      } catch (error) {
+        const problems = error instanceof GameFileError ? error.problems : [messageOf(error)];
+        // Stryker disable next-line StringLiteral: a file is refused only with a problem in it, so there is always a first
+        const first = clause(problems[0] ?? '');
+        return blocked(name, `${game.name}'s controls file can't be made: ${lowerFirst(first)}.`);
+      }
+      making = {
+        file: made,
+        base: text,
+        pointerName,
+        pointerBefore,
+        pointerAfter: made.point(pointerText),
+      };
     }
     let after: string;
     let byHand: ActionId[];
@@ -263,8 +420,10 @@ export function createGameFileTarget(deps: GameFileDeps): GameFileTarget {
       name,
       before,
       after,
-      same: after === text,
+      // A file to make is never the same: the game doesn't read it until the pointer names it.
+      same: making === null && after === text,
       byHand,
+      making,
     };
   };
 
@@ -333,7 +492,7 @@ export function createGameFileTarget(deps: GameFileDeps): GameFileTarget {
   };
 
   /** Step 5's check: the file read back holds what was meant, as the game will read it. */
-  const holds = async (game: Game, ready: Prepared & { status: 'ready' }): Promise<boolean> => {
+  const holds = async (game: Game, ready: Ready): Promise<boolean> => {
     const back = await deps.disk.read(ready.path);
     if (back === null) return false;
     let text: string;
@@ -363,12 +522,85 @@ export function createGameFileTarget(deps: GameFileDeps): GameFileTarget {
     }
     return {
       via: 'file',
-      note: null,
+      note: ready.making === null ? null : makeSentence(game, ready.making.file),
       name: ready.name,
       same: ready.same,
       byHand: ready.byHand,
       checks: [check],
     };
+  };
+
+  /**
+   * A file made: the pointer's copy kept, the new file written, then the bindings into it, read
+   * back; the pointer changed to name it last, and read back. A failure puts the pointer back and
+   * removes the new file.
+   */
+  const make = async (game: Game, ready: Ready, making: Making): Promise<FileOutcome> => {
+    const file = `${game.name}'s controls file`;
+    let copy: string;
+    try {
+      copy = await backUp(game, making.pointerName, making.pointerBefore);
+    } catch (error) {
+      trace(`${game.id}: no copy of ${making.file.pointer} could be kept: ${messageOf(error)}`);
+      return {
+        ok: false,
+        written: false,
+        message: `${file} wasn't made: helmArray couldn't keep a copy of ${making.pointerName} first (${clause(messageOf(error))}).`,
+      };
+    }
+    trace(`${game.id}: kept a copy of ${making.file.pointer} as ${copy}`);
+    let failure: string;
+    let pointed = false;
+    try {
+      await deps.disk.write(ready.path, encoder.encode(making.base));
+      await deps.disk.write(ready.path, encoder.encode(ready.after));
+      if (await holds(game, ready)) {
+        pointed = true;
+        try {
+          const pointer = encoder.encode(making.pointerAfter);
+          await deps.disk.write(making.file.pointer, pointer);
+          const back = await deps.disk.read(making.file.pointer);
+          if (back !== null && sameBytes(back, pointer)) {
+            trace(
+              `${game.id}: made ${ready.path} from ${making.file.from}, and pointed ${making.file.pointer} at it`,
+            );
+            return {
+              ok: true,
+              written: true,
+              message: `${game.name} now has the scheme's controls, in a controls file of its own made from ${making.file.fromWords}.`,
+            };
+          }
+          failure = `${making.pointerName} didn't read back as it was written`;
+        } catch (error) {
+          failure = `${making.pointerName} couldn't be written (${clause(messageOf(error))})`;
+        }
+      } else failure = `${file} didn't read back as it was written`;
+    } catch (error) {
+      failure = `${file} couldn't be written (${clause(messageOf(error))})`;
+    }
+    trace(`${game.id}: ${failure}`);
+    const back = pointed ? await restore(making.file.pointer, making.pointerBefore) : 'untouched';
+    let removed: boolean;
+    try {
+      await deps.disk.remove(ready.path);
+      removed = (await deps.disk.read(ready.path)) === null;
+    } catch (error) {
+      trace(`${game.id}: couldn't remove ${ready.path}: ${messageOf(error)}`);
+      removed = false;
+    }
+    if (back === 'lost')
+      return {
+        ok: false,
+        written: false,
+        message: `${failure}, and couldn't be put back: a copy of it is in helmArray's backups folder, as “${copy}”.`,
+      };
+    if (!removed)
+      return {
+        ok: false,
+        written: false,
+        message: `${failure}, and helmArray couldn't remove the ${ready.name} it began, though the game doesn't read it.`,
+      };
+    return { ok: false, written: false, message: `${failure}, so the game was left as it was.` };
   };
 
   const write = async (game: Game, plan: Plan): Promise<FileOutcome> => {
@@ -382,6 +614,7 @@ export function createGameFileTarget(deps: GameFileDeps): GameFileTarget {
     if (ready.status === 'blocked') return { ok: false, written: false, message: ready.problem };
     const check = await closed(game, ready.processNames);
     if (!check.ok) return { ok: false, written: false, message: check.text };
+    if (ready.making !== null) return make(game, ready, ready.making);
     if (ready.same) {
       return { ok: true, written: false, message: `${game.name} already has these controls.` };
     }
