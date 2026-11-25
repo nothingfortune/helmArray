@@ -8,6 +8,7 @@ import { chooseBackends, e2eConfig, e2eRequested, isInside, refuseRealHid } from
 const backends = (name: string): Backends => ({
   hid: { enumerate: () => Promise.resolve([]), open: () => Promise.reject(new Error(name)) },
   listProcesses: () => Promise.resolve([name]),
+  gameFiles: { localAppData: [] },
   steam: {
     readRegistrySteamPath: () => Promise.resolve(undefined),
     readFile: () => Promise.resolve(undefined),
@@ -71,11 +72,18 @@ describe.each([WINDOWS, LINUX])('e2eConfig on $name', (f) => {
     expect(e2eConfig(env, plain)).toBeNull();
   });
 
-  it('is on with 1 and an absolute folder, and puts the fake Steam inside it', () => {
+  it("is on with 1 and an absolute folder, and puts the fake Steam and the games' folders inside it", () => {
     expect(e2eConfig(on(f), plain)).toEqual({
       dataDir: f.fwd('Temp', 'helm-e2e'),
       steamDir: f.fwd('Temp', 'helm-e2e', 'steam'),
+      localAppData: f.fwd('Temp', 'helm-e2e', 'local'),
     });
+  });
+
+  it("never looks for a game's file in the real local app data folder", () => {
+    const env = { ...on(f), LOCALAPPDATA: f.p('Users', 'me', 'AppData', 'Local') };
+    const config = e2eConfig(env, plain);
+    expect(config !== null && isInside(config.localAppData, config.dataDir, f.platform)).toBe(true);
   });
 
   it('refuses to run without the folder', () => {
@@ -179,6 +187,7 @@ describe.each([WINDOWS, LINUX])('the folders a test run may not use, on $name', 
     expect(asked(dir)()).toEqual({
       dataDir: f.fwd('Users', 'me', 'AppData', 'Local', 'Temp', 'helm-e2e-1'),
       steamDir: f.fwd('Users', 'me', 'AppData', 'Local', 'Temp', 'helm-e2e-1', 'steam'),
+      localAppData: f.fwd('Users', 'me', 'AppData', 'Local', 'Temp', 'helm-e2e-1', 'local'),
     });
   });
 
@@ -344,7 +353,7 @@ describe('refuseRealHid', () => {
 });
 
 describe('chooseBackends', () => {
-  const config = { dataDir: 'C:/t', steamDir: 'C:/t/steam' };
+  const config = { dataDir: 'C:/t', steamDir: 'C:/t/steam', localAppData: 'C:/t/local' };
 
   it('hands back the fakes under a test run', async () => {
     const real = vi.fn(() => backends('real'));

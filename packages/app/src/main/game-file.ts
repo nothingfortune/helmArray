@@ -89,6 +89,19 @@ export interface GameFileDeps {
   trace?(line: string): void;
 }
 
+/**
+ * Where the app finds games' files and how it tells a game running, as index.ts (or a test) hands
+ * them to the services. Without it no game's file is written.
+ */
+export interface GameFilesOptions {
+  /** The folders to look in: the user's `%LOCALAPPDATA%`. */
+  localAppData: readonly string[];
+  /** The formats; `GAME_FILE_KINDS` when not given. */
+  kinds?: Readonly<Partial<Record<GameFileFormat, GameFileKind>>>;
+  /** The disk; the real one when not given. */
+  disk?: GameFileDisk;
+}
+
 /** What the drawer is told of the game's file before Apply. */
 export interface FileLook {
   /** `file`: helmArray writes it; `sheet`: it doesn't, and the bindings are set by hand. */

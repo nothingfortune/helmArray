@@ -11,11 +11,17 @@ import {
   decodeStoredRecord,
   parseHostReport,
 } from '@helmarray/azeron';
+import type { GameFileFormat } from '@helmarray/core';
 import type { Backends, E2eConfig } from './e2e-seam';
-import { E2E_UNIT_IDS, isInside } from './e2e-seam';
+import { E2E_GAME_PROGRAMS, E2E_UNIT_IDS, canonical, isInside } from './e2e-seam';
+import type { GameFileKind } from './game-file';
+import { GAME_FILE_KINDS } from './game-file';
+import type { GameFileDisk } from './game-file-disk';
+import { nodeGameFileDisk } from './game-file-disk';
 import type { HidBackend, HidDevice, HidDeviceInfo } from './hid-transport';
 import { UNIT_INTERFACE, UNIT_PRODUCT_ID, UNIT_USAGE_PAGE, UNIT_VENDOR_ID } from './hid-transport';
 import type { SteamReaders } from './steam-library';
+import { realpathSync } from 'node:fs';
 import { readFile, readdir, realpath } from 'node:fs/promises';
 
 const LEFT_PATH = String.raw`\\?\hid#vid_16d0&pid_12f7&mi_04#e2e-left`;
@@ -133,6 +139,43 @@ function confinedSteam(steamDir: string): SteamReaders {
   };
 }
 
+/**
+ * The real disk, for the test run's folder only: a path that is, or leads, outside it (after `..`
+ * and any link are followed) is refused, so no game file of the player's is ever read or written.
+ */
+export function confinedGameFiles(dataDir: string): GameFileDisk {
+  const host = {
+    platform: process.platform,
+    realpath: (path: string) => realpathSync.native(path),
+  };
+  const home = canonical(dataDir, host);
+  const inside = (path: string): boolean => isInside(canonical(path, host), home, process.platform);
+  const refuse = (path: string) => new Error(`A test run never touches ${path}.`);
+  const disk = nodeGameFileDisk;
+  return {
+    folders: {
+      list: (dir) => (inside(dir) ? disk.folders.list(dir) : []),
+      read: (path) => (inside(path) ? disk.folders.read(path) : null),
+      join: disk.folders.join,
+    },
+    read: (path) => (inside(path) ? disk.read(path) : Promise.reject(refuse(path))),
+    write: (path, bytes) => (inside(path) ? disk.write(path, bytes) : Promise.reject(refuse(path))),
+    list: (dir) => (inside(dir) ? disk.list(dir) : Promise.reject(refuse(dir))),
+    remove: (path) => (inside(path) ? disk.remove(path) : Promise.reject(refuse(path))),
+    makeDir: (dir) => (inside(dir) ? disk.makeDir(dir) : Promise.reject(refuse(dir))),
+  };
+}
+
+/** The formats, each game taken to run as its test program (`E2E_GAME_PROGRAMS`). */
+const e2eKind = (format: GameFileFormat): GameFileKind => ({
+  ...GAME_FILE_KINDS[format],
+  processNames: [E2E_GAME_PROGRAMS[format]],
+});
+const E2E_KINDS: Record<GameFileFormat, GameFileKind> = {
+  'unreal-ini': e2eKind('unreal-ini'),
+  'elite-binds': e2eKind('elite-binds'),
+};
+
 export function fakeBackends(config: E2eConfig): Backends {
   const left = new FakeUnit({ deviceId: E2E_UNIT_IDS.left, slots: { 0: { name: 'Default' } } });
   const right = new FakeUnit({
@@ -179,6 +222,11 @@ export function fakeBackends(config: E2eConfig): Backends {
     hid,
     listProcesses: () => Promise.resolve([...processes]),
     steam: confinedSteam(config.steamDir),
+    gameFiles: {
+      localAppData: [config.localAppData],
+      kinds: E2E_KINDS,
+      disk: confinedGameFiles(config.dataDir),
+    },
     control,
   };
 }
