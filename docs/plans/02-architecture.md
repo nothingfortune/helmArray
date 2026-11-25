@@ -218,7 +218,9 @@ a read). The games helmArray has a file format for are known by their Steam app 
 yet is listed as a game helmArray knows (its Steam tile, *Game's own keys* offered) and is saved
 the first time it is used: a scheme made from it, or an edit on the Game screen. So setting one up
 from its tile is a click on the tile, one on the preset, and Apply, as for a game that ships with
-helmArray. One whose file isn't there yet (Everspace 2 saves its `Input.ini` only once a control
+helmArray. (Not Everspace 2 by *Xbox controller*: its sticks must send keys, from the legacy
+`game.yaml`'s `require_keyboard_stick`, so the head start sets *the sticks must send keys* and
+that preset opens the editor on the two sticks to fix.) One whose file isn't there yet (Everspace 2 saves its `Input.ini` only once a control
 is changed in its menu) keeps its tile on *Set up*, and the Game screen says why in one sentence,
 in Apply's words: "helmArray can't find Everspace 2's controls file yet: changing any control in
 the game's own menu makes the game save one." Elite's tile says the same of its file. A game with

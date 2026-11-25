@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import type { Page } from '@playwright/test';
 import { expect, test } from './helm';
 import type { Seed } from './helm';
-import { applyInDrawer, countInput, drawer, seriousViolations } from './screens';
+import { applyInDrawer, countInput, drawer, editorApply, seriousViolations } from './screens';
 
 const REFERENCE = new URL(
   '../../../reference/game-files/everspace2-Input.before.ini',
@@ -39,7 +39,7 @@ const tile = (page: Page) => page.getByRole('button', { name: /^Everspace 2\. / 
 test.describe("Everspace 2's file as the head start", () => {
   test.use({ helmSeed: everspace2 });
 
-  test('Xbox controller from its tile opens the editor on the sticks: Everspace 2 needs them to send keys', async ({
+  test('Xbox controller from its tile opens the editor on the sticks: Everspace 2 needs them to send keys, two fixes, then Apply', async ({
     helm,
   }) => {
     const { page } = helm;
@@ -55,6 +55,24 @@ test.describe("Everspace 2's file as the head start", () => {
     ).toBeVisible();
     await expect(drawer(page)).toHaveCount(0);
     expect(await counted()).toEqual({ clicks: 2, drags: 0 });
+    // Each stick's fix gives it the game's keys for its directions; the stutter rule is met.
+    for (const hand of ['left', 'right']) {
+      await page
+        .locator('.ed-check', { hasText: `The ${hand} stick` })
+        .getByRole('button', { name: 'Give it the movement keys' })
+        .click();
+    }
+    await expect(page.locator('.ed-check', { hasText: /stick must send keys/ })).toHaveCount(0);
+    // What stays is a warning, not an error: keys from the sticks beside Xbox buttons.
+    await expect(
+      page.locator('.ed-check', {
+        hasText: 'This stick sends keys while the buttons are an Xbox controller.',
+      }),
+    ).toHaveCount(2);
+    await editorApply(page).click();
+    await applyInDrawer(page).click();
+    await expect(drawer(page).getByLabel('Result')).toContainText('Both units now run the layout.');
+    expect(await counted()).toEqual({ clicks: 6, drags: 0 });
     // Saved by making the scheme, a moment later as every edit is, with the rule kept in it.
     await expect
       .poll(async () => {
