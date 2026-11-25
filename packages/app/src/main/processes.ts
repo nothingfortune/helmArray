@@ -2,17 +2,22 @@
 // one sentence. Pure: the list of running programs comes in as a function (process-list.ts is
 // the real one), so tests give it fake lists and fake timers.
 
-const AZERON_APP = 'azeron software';
+/** An image name as compared: trimmed, in lower case, without the `.exe`. */
+const imageOf = (name: string): string =>
+  name
+    .trim()
+    .toLowerCase()
+    .replace(/\.exe$/, '');
+
+/** Whether any of `wanted` is among the running programs, in any case, with or without `.exe`. */
+export function programRunning(names: readonly string[], wanted: readonly string[]): boolean {
+  const images = new Set(wanted.map(imageOf));
+  return names.some((name) => images.has(imageOf(name)));
+}
 
 /** `Azeron Software.exe`, in any case, with or without the `.exe`. */
 export function azeronAppRunning(names: readonly string[]): boolean {
-  return names.some(
-    (name) =>
-      name
-        .trim()
-        .toLowerCase()
-        .replace(/\.exe$/, '') === AZERON_APP,
-  );
+  return programRunning(names, ['Azeron Software.exe']);
 }
 
 export interface WriteBlock {

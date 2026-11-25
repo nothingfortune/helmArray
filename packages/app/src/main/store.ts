@@ -10,7 +10,8 @@
 //   settings.json       the active game, and the active scheme of each game
 //   units.json          what each unit was last written with: which scheme, of which game, when
 //   sheets.json         the bindings each game holds as far as helmArray knows (its baseline),
-//                       where they differ from what it ships; moved only by *Done*
+//                       where they differ from what it ships; moved only by *Done* and by
+//                       Apply writing the game's file
 //   applied/<id>.json   the plan last applied for scheme <id>; `<game>.held.json`, what a game
 //                       holds after the scheme applied to it last was deleted
 //
@@ -997,8 +998,8 @@ export class DataStore {
   }
 
   /**
-   * The game now holds these bindings: *Done* on what was left to set by hand, or (M5) its file
-   * written. The only thing that moves a game's baseline.
+   * The game now holds these bindings: *Done* on what was left to set by hand, or its file
+   * written by Apply. The only thing that moves a game's baseline.
    */
   settleBaseline(gameId: string, bindings: readonly GameBinding[]): Promise<void> {
     return this.changeBaselines((baselines) => settleBaseline(baselines, gameId, bindings));

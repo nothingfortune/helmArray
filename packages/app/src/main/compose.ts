@@ -1,8 +1,8 @@
 // The services behind the windows, put together: the data store, the hands, the exchange log, the
-// Steam library, the devices service and its gate, the coordinator, Apply. index.ts calls this
-// with the real edges (node-hid, the process list, Steam's files, Electron's folders); the main
-// process integration tests call it with fakes at those same edges, so what they run is the
-// wiring the app runs, not a copy of it.
+// Steam library, the devices service and its gate, the coordinator, Apply and the game-file target.
+// index.ts calls this with the real edges (node-hid, the process list, Steam's files, Electron's
+// folders, the games' folders); the main process integration tests call it with fakes at those
+// same edges, so what they run is the wiring the app runs, not a copy of it.
 //
 // Pure of Electron: nothing here imports it. What needs Electron stays in index.ts (the windows,
 // the tray, the `helm-cover://` protocol, the IPC registration, opening a folder in Explorer).
@@ -21,6 +21,9 @@ import type { DeviceDeps } from './devices';
 import { createDevicesGate } from './devices-gate';
 import type { DevicesGate } from './devices-gate';
 import { createExchangeLog, diskLogFiles } from './exchange-log';
+import { createGameFileTarget } from './game-file';
+import type { GameFilesOptions } from './game-file';
+import { nodeGameFileDisk } from './game-file-disk';
 import type { ExchangeLog } from './exchange-log';
 import { jsonFileStorage, openHandStore } from './hands';
 import type { HandStore } from './hands';
@@ -44,6 +47,8 @@ export interface ComposeTuning {
   devices?: Pick<DeviceDeps, 'schedule' | 'pollMs' | 'runningMs' | 'now'>;
   /** The coordinator's clock and its re-check interval (0 turns the re-check off). */
   coordinator?: Pick<CoordinatorDeps, 'now' | 'recheckMs'>;
+  /** The clock the game-file target names its backups by. */
+  gameFiles?: { now(): number };
 }
 
 export interface ComposeOptions {
@@ -59,6 +64,8 @@ export interface ComposeOptions {
   steam: SteamReaders;
   /** The games that ship with the app. */
   builtInGames: readonly Game[];
+  /** Where games keep their files. Without it, every game's bindings are set by hand. */
+  gameFiles?: GameFilesOptions;
   /** Told every new state, to send to the windows. */
   broadcast(state: AppState): void;
   /** How often the running programs are looked at, to see the Azeron app open or close. */
@@ -172,6 +179,20 @@ export async function composeServices(options: ComposeOptions): Promise<Services
     ...tuning?.coordinator,
   });
   helm.onState(options.broadcast);
+  // A game's file, written after the units. Its backups are kept in the data folder.
+  const files = options.gameFiles;
+  const gameFile =
+    files === undefined
+      ? undefined
+      : createGameFileTarget({
+          disk: files.disk ?? nodeGameFileDisk,
+          localAppData: files.localAppData,
+          backupsDir: join(options.dataDir, 'backups'),
+          listProcesses: options.listProcesses,
+          now: tuning?.gameFiles?.now ?? Date.now,
+          ...(files.kinds === undefined ? {} : { kinds: files.kinds }),
+          trace: (line) => log.write('(game file)', line),
+        });
   const apply = createApplyService({
     plans,
     devices,
@@ -182,9 +203,12 @@ export async function composeServices(options: ComposeOptions): Promise<Services
     unitsHeld: () => data.unitsHeld(),
     saveScheme: (scheme) => data.saveScheme(scheme),
     setActive: (gameId, schemeId) => data.setActive(gameId, schemeId),
-    // The game holds its baseline: what it ships, moved only by Done (never by an apply alone,
-    // since the person may not have set the game's controls yet).
+    // The game holds its baseline: what it ships, moved by Done, or by its file written (never by
+    // an apply alone, since the person may not have set the game's controls yet).
     gameHolds: async (gameId) => heldPlan(await data.heldBindings(gameId)),
+    ...(gameFile === undefined ? {} : { gameFile }),
+    // Writing the game's file is the other thing that moves what it holds.
+    settleBaseline: (gameId, bindings) => data.settleBaseline(gameId, bindings),
     settled: () => helm.plansChanged(),
     trace: (line) => log.write('(apply)', line),
   });

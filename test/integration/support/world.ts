@@ -11,7 +11,7 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Game, Hand, Plan, Scheme } from '@helmarray/core';
+import type { Game, GameFileFormat, Hand, Plan, Scheme } from '@helmarray/core';
 import {
   BUILT_IN_DEVICES,
   CYBORG2_LEFT,
@@ -27,6 +27,10 @@ import type { IpcBridge } from '../../../packages/app/src/preload/api';
 import { CHANNELS } from '../../../packages/app/src/shared/api';
 import type { AppState, HelmApi } from '../../../packages/app/src/shared/api';
 import { BUILT_IN_GAMES } from '../../../packages/app/src/main/built-in-games';
+import { GAME_FILE_KINDS } from '../../../packages/app/src/main/game-file';
+import type { GameFileKind } from '../../../packages/app/src/main/game-file';
+import { nodeGameFileDisk } from '../../../packages/app/src/main/game-file-disk';
+import type { GameFileDisk } from '../../../packages/app/src/main/game-file-disk';
 import { composeServices } from '../../../packages/app/src/main/compose';
 import type { RunningServices, Services } from '../../../packages/app/src/main/compose';
 import { POLL_MS, RUNNING_MS } from '../../../packages/app/src/main/devices';
@@ -47,6 +51,20 @@ export const RIGHT_ID = 29993;
 const DEVICE = { left: CYBORG2_LEFT, right: CYBORG2_RIGHT } as const;
 export const HELLDIVERS2 = 'helldivers2';
 const HELLDIVERS2_APP_ID = '553850';
+
+/** What these tests take each game whose file helmArray writes to run as (the app knows none). */
+export const GAME_PROGRAMS: Readonly<Record<GameFileFormat, string>> = {
+  'unreal-ini': 'Everspace2-test.exe',
+  'elite-binds': 'Elite-test.exe',
+};
+const testKind = (format: GameFileFormat): GameFileKind => ({
+  ...GAME_FILE_KINDS[format],
+  processNames: [GAME_PROGRAMS[format]],
+});
+const TEST_GAME_KINDS: Record<GameFileFormat, GameFileKind> = {
+  'unreal-ini': testKind('unreal-ini'),
+  'elite-binds': testKind('elite-binds'),
+};
 
 /** Where `createKeysScheme` puts each action. */
 export const KEYS_PLACEMENTS: readonly [control: string, action: string][] = [
@@ -102,6 +120,8 @@ export class Scheduler {
 /** The running programs. */
 export class FakeProcesses {
   azeronOpen = false;
+  /** Other programs running: a game. */
+  others: string[] = [];
   /** The list can't be had (`tasklist` failed): the look throws. */
   failing = false;
   /** How many times the list was asked for. */
@@ -114,6 +134,7 @@ export class FakeProcesses {
       'explorer.exe',
       'steam.exe',
       ...(this.azeronOpen ? ['Azeron Software.exe'] : []),
+      ...this.others,
     ]);
   }
 }
@@ -171,6 +192,11 @@ export class World {
   readonly xboxPad: Bystander;
   /** Every state the app told the windows, in order. */
   readonly states: AppState[] = [];
+  /**
+   * The disk under the game-file target: the real one on this world's folder, which a test may
+   * swap for one that fails.
+   */
+  gameDisk: GameFileDisk = nodeGameFileDisk;
 
   private services: Services | null = null;
   private running: RunningServices | null = null;
@@ -211,6 +237,10 @@ export class World {
   get handsFile(): string {
     return join(this.dataDir, 'hands.json');
   }
+  /** Where the games keep their files here: this world's `%LOCALAPPDATA%`. */
+  get localAppData(): string {
+    return join(this.root, 'local');
+  }
 
   /** `window.helm`: what a page calls. */
   get helm(): HelmApi {
@@ -245,6 +275,19 @@ export class World {
       listProcesses: () => this.processes.list(),
       steam: fakeSteam(),
       builtInGames: BUILT_IN_GAMES,
+      gameFiles: {
+        localAppData: [this.localAppData],
+        kinds: TEST_GAME_KINDS,
+        // Through `gameDisk` as it is at each call, so a test can swap it with the app running.
+        disk: {
+          folders: nodeGameFileDisk.folders,
+          read: (path) => this.gameDisk.read(path),
+          write: (path, bytes) => this.gameDisk.write(path, bytes),
+          list: (dir) => this.gameDisk.list(dir),
+          remove: (path) => this.gameDisk.remove(path),
+          makeDir: (dir) => this.gameDisk.makeDir(dir),
+        },
+      },
       broadcast: (state) => {
         this.states.push(structuredClone(state));
         for (const listener of stateListeners) listener({}, structuredClone(state));
@@ -258,6 +301,7 @@ export class World {
           runningMs: RUNNING_MS,
         },
         coordinator: { now: this.clock.now, recheckMs: 0 },
+        gameFiles: { now: this.clock.now },
       },
     });
 

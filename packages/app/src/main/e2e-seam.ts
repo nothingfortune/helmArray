@@ -3,7 +3,8 @@
 //
 // It is switched by two environment variables and nothing else:
 //   HELM_E2E=1      the run is a test run
-//   HELM_E2E_DIR    an absolute folder to keep the app's data in (a temp folder)
+//   HELM_E2E_DIR    an absolute folder to keep the app's data in (a temp folder); the fake Steam
+//                   and the folder games keep their files in (in place of %LOCALAPPDATA%) are in it
 //
 // The rules, in order of importance:
 //   1. Real HID is impossible under HELM_E2E, not merely unused. `chooseBackends` never calls
@@ -16,7 +17,9 @@
 //      link that leads to any of them, or the home folder itself.
 
 import { posix, win32 } from 'node:path';
+import type { GameFileFormat } from '@helmarray/core';
 import type { SteamReaders } from './steam-library';
+import type { GameFilesOptions } from './game-file';
 import type { HidBackend } from './hid-transport';
 
 export const E2E_ENV = 'HELM_E2E';
@@ -29,6 +32,8 @@ export interface E2eConfig {
   dataDir: string;
   /** The fake Steam folder the Steam read is pointed at. */
   steamDir: string;
+  /** The folder a game's file is looked for in, in place of the real `%LOCALAPPDATA%`. */
+  localAppData: string;
 }
 
 // Every comparison of two paths here goes through `canonical`: resolved (so `.`, `..`, doubled and
@@ -174,7 +179,7 @@ export function e2eConfig(env: Env, host: SeamHost): E2eConfig | null {
     }
   }
   const dataDir = rules.forApp(real).replace(/\/+$/, '');
-  return { dataDir, steamDir: `${dataDir}/steam` };
+  return { dataDir, steamDir: `${dataDir}/steam`, localAppData: `${dataDir}/local` };
 }
 
 /** Throws under a test run. Called by the real HID backend before it loads anything. */
@@ -190,6 +195,8 @@ export interface Backends {
   /** Image names of the running programs. */
   listProcesses(): Promise<string[]>;
   steam: SteamReaders;
+  /** Where games keep their files: the real `%LOCALAPPDATA%`, or the test run's folder. */
+  gameFiles: GameFilesOptions;
   /** What a test drives and looks at from outside (only the fakes have one). */
   control?: unknown;
 }
@@ -208,6 +215,15 @@ export async function chooseBackends(
 ): Promise<Backends> {
   return config === null ? sources.real() : sources.fake(config);
 }
+
+/**
+ * What a test run takes each game whose file helmArray writes to be running as: the real games'
+ * programs are not known (game-file.ts), and a test run looks only at its fake list anyway.
+ */
+export const E2E_GAME_PROGRAMS: Readonly<Record<GameFileFormat, string>> = {
+  'unreal-ini': 'Everspace2-e2e.exe',
+  'elite-binds': 'Elite-e2e.exe',
+};
 
 /** The ids the two fake units report. A test seeds `hands.json` with these. */
 export const E2E_UNIT_IDS = { left: 49229, right: 29993 } as const;

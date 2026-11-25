@@ -111,7 +111,13 @@ async function startServices(): Promise<() => Promise<void>> {
   const logDir = app.getPath('logs');
   // Everything outside the app: real ones, or under a test run the fakes and never the real.
   const outside = await chooseBackends(e2e, {
-    real: () => ({ hid: nodeHidBackend(), listProcesses, steam: steamReaders }),
+    real: () => ({
+      hid: nodeHidBackend(),
+      listProcesses,
+      steam: steamReaders,
+      // The games' files are found under the user's own local app data folder.
+      gameFiles: { localAppData: process.env['LOCALAPPDATA'] ? [process.env['LOCALAPPDATA']] : [] },
+    }),
     fake: async (config) => (await import('./e2e-fakes')).fakeBackends(config),
   });
   if (outside.control !== undefined) {
@@ -124,6 +130,7 @@ async function startServices(): Promise<() => Promise<void>> {
     hid: outside.hid,
     listProcesses: outside.listProcesses,
     steam: outside.steam,
+    gameFiles: outside.gameFiles,
     builtInGames: BUILT_IN_GAMES,
     broadcast,
     processPollMs: PROCESS_POLL_MS,

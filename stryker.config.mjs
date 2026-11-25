@@ -79,6 +79,7 @@ export default {
     'packages/app/src/main/store.ts',
     'packages/app/src/main/hid-transport.ts',
     'packages/app/src/main/processes.ts',
+    'packages/app/src/main/game-file.ts', // the game's file: refused, backed up, written, verified, put back
     'packages/app/src/main/exchange-log.ts',
     'packages/app/src/main/e2e-seam.ts',
     'packages/app/src/main/compose.ts',

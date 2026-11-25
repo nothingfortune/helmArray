@@ -1,6 +1,6 @@
 import { clone } from '../clone';
 import { CYBORG2_LEFT, CYBORG2_RIGHT } from '../devices/cyborg2';
-import type { ActionId, ControlId, Game, ModeId, Press, Scheme, Signal } from '../model';
+import type { Action, ActionId, ControlId, Game, ModeId, Press, Scheme, Signal } from '../model';
 import { AZERONS_ONLY } from '../model';
 import { own } from '../own';
 import { signalId } from '../signal';
@@ -21,7 +21,8 @@ export function blankKeysScheme(game: Game): Scheme {
     devices: { ...AZERONS_ONLY },
     output: 'keys',
     padMap: {},
-    writeGameFile: false,
+    // A game whose file helmArray writes gets its bindings there, not on a bind sheet.
+    writeGameFile: game.file !== undefined,
     map,
     behaviour: {},
     ledger: {},
@@ -89,6 +90,12 @@ const BUTTONS: ReadonlySet<ControlId> = new Set(
  */
 
 /** The *game's own keys* preset: the game's actions on the Azerons, on its own keys (above). */
+/** An action the preset may place, and the key or mouse button the game ships it on. */
+interface Candidate {
+  action: Action;
+  signal: Signal;
+}
+
 export function gameKeysPreset(game: Game): Scheme {
   const base = blankKeysScheme(game);
   const left = stickForOutput('left', undefined, 'keys', game);
@@ -108,15 +115,18 @@ export function gameKeysPreset(game: Game): Scheme {
     game.modes.map((m) => [m.id, new Map()]),
   );
   const keys = new Map<ActionId, string>();
+  /** The key each button sends, as the game ships it: the ledger, when the file is written. */
+  const placed = new Map<ControlId, Signal>();
   const fits = (control: ControlId, mode: ModeId, key: string): boolean =>
     BUTTONS.has(control) &&
     modes.get(mode)?.has(control) === false &&
     (sends.get(control) ?? key) === key &&
     (sentBy.get(key) ?? control) === control;
-  const put = (control: ControlId, mode: ModeId, action: ActionId, key: string) => {
-    modes.get(mode)?.set(control, { tap: action });
+  const put = (control: ControlId, { action, signal }: Candidate, key: string) => {
+    modes.get(action.mode)?.set(control, { tap: action.id });
     sends.set(control, key);
     sentBy.set(key, control);
+    placed.set(control, signal);
   };
   /** An action of the mode is already on a button sending this key. */
   const keyUsedIn = (mode: ModeId, key: string): boolean =>
@@ -126,26 +136,31 @@ export function gameKeysPreset(game: Game): Scheme {
 
   const sendable = (signal: Signal | undefined): signal is Signal =>
     signal !== undefined && (signal.kind === 'key' || signal.kind === 'mouse');
-  const candidates = game.actions.filter((a) => {
-    const key = a.native?.key;
-    if (!modes.has(a.mode) || !sendable(key) || onStick.has(signalId(key))) return false;
-    keys.set(a.id, signalId(key));
-    return true;
+  const candidates = game.actions.flatMap((action): Candidate[] => {
+    const signal = action.native?.key;
+    if (!modes.has(action.mode) || !sendable(signal) || onStick.has(signalId(signal))) return [];
+    keys.set(action.id, signalId(signal));
+    return [{ action, signal }];
   });
 
   // Rule 3, in the game's order.
-  const rest: typeof candidates = [];
-  for (const action of candidates) {
+  const rest: Candidate[] = [];
+  for (const candidate of candidates) {
+    const { action } = candidate;
     const key = keys.get(action.id) ?? '';
     const home = Object.entries(own(xbox, action.mode) ?? {}).find(
       ([, presses]) => presses.tap === action.id,
     )?.[0];
     if (home !== undefined && fits(home, action.mode, key) && !keyUsedIn(action.mode, key))
-      put(home, action.mode, action.id, key);
-    else rest.push(action);
+      put(home, candidate, key);
+    else rest.push(candidate);
   }
   // Rule 4, with rule 5 first: required first, then the game's order.
-  for (const action of [...rest.filter((a) => a.required), ...rest.filter((a) => !a.required)]) {
+  for (const candidate of [
+    ...rest.filter((c) => c.action.required),
+    ...rest.filter((c) => !c.action.required),
+  ]) {
+    const { action } = candidate;
     const key = keys.get(action.id) ?? '';
     if (keyUsedIn(action.mode, key)) continue;
     const already = sentBy.get(key);
@@ -155,17 +170,24 @@ export function gameKeysPreset(game: Game): Scheme {
         : fits(already, action.mode, key)
           ? already
           : undefined;
-    if (target !== undefined) put(target, action.mode, action.id, key);
+    if (target !== undefined) put(target, candidate, key);
   }
 
   // fromEntries defines own properties, so a mode named `__proto__` is kept as itself.
   const map = Object.fromEntries(
     [...modes].map(([mode, byControl]) => [mode, Object.fromEntries(byControl)]),
   );
+  // With the game's file written, a button carrying nothing in the ledger is dealt a key from the
+  // pool. Each key placed here is the game's own, so it goes in the ledger: the units send what
+  // the game ships either way, and the file keeps it.
+  const ledger: Scheme['ledger'] = base.writeGameFile
+    ? Object.fromEntries([...placed].map(([control, signal]) => [control, { tap: signal }]))
+    : {};
   return {
     ...base,
     map,
     behaviour: { 'L.stick': { stick: left }, 'R.stick': { stick: right } },
+    ledger,
   };
 }
 

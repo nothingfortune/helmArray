@@ -1,15 +1,18 @@
 // Apply, as the windows ask for it: `preview(schemeId)` says what is ready and what would change,
-// `apply(schemeId)` does it. Only the Units target writes so far (apply-units.ts), and only the
-// units the setup uses. The game's half is previewed (`game`: the bindings that change, set by
-// hand from a bind sheet until M5 writes game files, after the units, stopping at the first
-// failure).
+// `apply(schemeId)` does it. Two targets write: the units the setup uses (apply-units.ts), then the
+// game's file, for a game whose file helmArray writes (game-file.ts), stopping at the first
+// failure. The game's half is previewed (`game`: the bindings that change); where helmArray doesn't
+// write the game's file, they are set by hand from a bind sheet.
 //
 // What this adds to the target:
 //   - The scheme is resolved here, from the store as it is now (edits not yet written included).
 //   - Readiness is worked out in main, again, by `apply`: a window's disabled button is not a
 //     guard. Nothing is written unless the Azeron app is closed (asked afresh), the units the
 //     setup uses are connected and known by hand, and the scheme has no error that wasn't
-//     accepted. A setup with no Azeron needs neither.
+//     accepted. A setup with no Azeron needs neither. Where the game's file is written, the game
+//     must be closed and its file found and able to take the bindings, before any unit is written.
+//   - The game's file written (or found holding the bindings already) moves the game's baseline
+//     to them (`settleBaseline`): nothing is left to set by hand. A file not written leaves it.
 //   - One apply at a time. A second is refused, in a sentence, and never queued behind the first.
 //   - While it runs the devices service is held (`Devices.exclusive`): it neither polls nor opens
 //     nor reads a unit, so nothing else talks to a unit mid-write; afterwards it reads both units
@@ -22,7 +25,7 @@
 // Nothing here throws at a caller: every refusal and failure comes back as a sentence.
 // Pure: the store, the units and the running programs are handed in.
 
-import type { ApplyWho, Game, Hand, Plan, Scheme, UnitsHeld } from '@helmarray/core';
+import type { ApplyWho, Game, GameBinding, Hand, Plan, Scheme, UnitsHeld } from '@helmarray/core';
 import { handsOf, pendingRows } from '@helmarray/core';
 import type {
   ApplyGame,
@@ -37,6 +40,7 @@ import { NO_UNIT_SENTENCE, applyUnits, previewUnits, verifyProfile } from './app
 import type { HeldUnits, UnitsDeps, UnitsOptions } from './apply-units';
 import { heldUnits } from './app-state';
 import type { DevicesSnapshot, HoldTools } from './devices';
+import type { FileOutcome, GameFileTarget } from './game-file';
 import type { UnitOps } from './gated-session';
 import type { HandStore } from './hands';
 import { handsFor } from './hands';
@@ -91,6 +95,13 @@ export interface ApplyServiceDeps {
    * it no layout Apply removes is taken for the scheme's own earlier copy, so every one is said.
    */
   unitsHeld?(): Promise<UnitsHeld>;
+  /**
+   * The game's file, for a game whose file helmArray writes. Without it, every game's bindings are
+   * set by hand.
+   */
+  gameFile?: GameFileTarget;
+  /** The game now holds these bindings: its file was written. Moves its baseline. */
+  settleBaseline?(gameId: string, bindings: readonly GameBinding[]): Promise<void>;
   /** The clock, for when an apply was. Defaults to `Date.now`. */
   now?(): number;
   /** An apply ended, however it ended: the state is to be worked out again. */
@@ -272,15 +283,43 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
     ];
   };
 
-  /** The game's bindings that change: the plan's against what the game holds now. */
-  const gameHalf = async (plan: Plan, game: Game): Promise<ApplyGame> => {
+  /** What the game's file target says of the plan: null when the plan doesn't write a file. */
+  const fileLook = async (plan: Plan, game: Game) =>
+    plan.gameFile !== undefined && deps.gameFile !== undefined
+      ? await deps.gameFile.look(game, plan)
+      : null;
+
+  /**
+   * The game's bindings that change, the plan's against what the game holds now, and how they
+   * reach it, with the file's own checks (the game closed, the file able to take them).
+   */
+  const gameHalf = async (
+    plan: Plan,
+    game: Game,
+  ): Promise<{ game: ApplyGame; checks: ReadyCheck[] }> => {
     let holds: Pick<Plan, 'gameBindings'> | null = null;
     try {
       holds = (await deps.gameHolds?.(game.id)) ?? null;
     } catch (error) {
       trace(`couldn't read what ${game.id} holds: ${messageOf(error)}`);
     }
-    return { via: plan.gameFile ? 'file' : 'sheet', rows: changedRows(plan, game, holds) };
+    const rows = changedRows(plan, game, holds);
+    const look = await fileLook(plan, game);
+    if (look === null || look.via === 'sheet') return { game: { via: 'sheet', rows }, checks: [] };
+    return {
+      game: {
+        via: 'file',
+        rows: look.same ? [] : rows,
+        file: { name: look.name, same: look.same },
+      },
+      checks: look.checks,
+    };
+  };
+
+  /** The file's checks go after the Azeron app's, as the drawer lists them: first what to close. */
+  const withFileChecks = (checks: ReadyCheck[], file: readonly ReadyCheck[]): ReadyCheck[] => {
+    const at = checks.findIndex((c) => c.kind === 'azeron-app') + 1;
+    return [...checks.slice(0, at), ...file, ...checks.slice(at)];
   };
 
   const preview = async (schemeId: string): Promise<ApplyPreview> => {
@@ -302,12 +341,13 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
       return { ...base, ready: false, checks: [{ ok: false, text: sentence(resolved.reason) }] };
     }
     const used = handsOf(resolved.plan);
+    const half = await gameHalf(resolved.plan, resolved.game);
     const names = {
       schemeName: resolved.scheme.name,
       gameId: resolved.game.id,
       gameName: resolved.game.name,
       fingerprint: planFingerprint(resolved.plan),
-      game: await gameHalf(resolved.plan, resolved.game),
+      game: half.game,
       left: emptyUnit('left', null, used.includes('left')),
       right: emptyUnit('right', null, used.includes('right')),
     };
@@ -322,7 +362,7 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
     }
     // A setup with no Azeron has nothing to ask of the units or of the Azeron app.
     if (used.length === 0) {
-      const checks = findingChecks(resolved.plan);
+      const checks = withFileChecks(findingChecks(resolved.plan), half.checks);
       return { ...base, ...names, ready: checks.every((c) => c.ok), checks };
     }
     const open = await azeronOpen();
@@ -334,7 +374,7 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
         trace(`reading the units for the preview failed: ${messageOf(error)}`);
       }
     }
-    const checks = readiness(open, resolved.plan);
+    const checks = withFileChecks(readiness(open, resolved.plan), half.checks);
     if (open !== false) {
       return {
         ...base,
@@ -372,6 +412,29 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
   };
 
   const refused = (message: string): ApplyResult => ({ ok: false, message, units: [] });
+
+  /**
+   * Writes the game's file. Once it holds the bindings (written, or already), the game's baseline
+   * moves to them; a baseline that can't be moved is the problem said.
+   */
+  const writeFile = async (
+    target: GameFileTarget,
+    game: Game,
+    plan: Plan,
+  ): Promise<{ outcome: FileOutcome; problem: string | null }> => {
+    const outcome = await target.write(game, plan);
+    if (!outcome.ok) return { outcome, problem: null };
+    try {
+      await deps.settleBaseline?.(game.id, plan.gameBindings);
+    } catch (error) {
+      trace(`couldn't move what ${game.id} holds: ${messageOf(error)}`);
+      return {
+        outcome,
+        problem: `${outcome.message} helmArray couldn't note it (${messageOf(error)}), so the Library may still list them to set by hand.`,
+      };
+    }
+    return { outcome, problem: null };
+  };
 
   /**
    * The keys the plan dealt go into the scheme, so they are never dealt again. Only when the
@@ -436,20 +499,38 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
         return { ok: false, changed: true, message: CHANGED_SENTENCE, units: [] };
       }
       // What is left to set by hand in the game is worked out afresh from what is applied and
-      // what the game holds (sheets.json), never kept from here. M5: once helmArray writes the
-      // game's file, the writer moves the game's baseline (`DataStore.settleBaseline`) after it.
+      // what the game holds (sheets.json), never kept from here; the game's file written moves
+      // what it holds.
+      const look = await fileLook(plan, game);
+      // The target, when it writes this game's file.
+      const target = look?.via === 'file' ? deps.gameFile : undefined;
+      // The game closed and its file able to take the bindings, before anything is written.
+      const fileBlocked = look?.via === 'file' ? look.checks.find((c) => !c.ok) : undefined;
 
       // A setup with no Azeron writes no unit: it is remembered, and the game's half is the
-      // player's, from the drawer.
+      // game's file, or the player's, from the drawer.
       if (handsOf(plan).length === 0) {
-        const blocked = findingChecks(plan).find((c) => !c.ok);
+        const blocked = findingChecks(plan).find((c) => !c.ok) ?? fileBlocked;
         if (blocked) return refused(blocked.text);
+        if (target !== undefined) {
+          const file = await writeFile(target, game, plan);
+          const gameFile = { ok: file.outcome.ok, message: file.outcome.message };
+          if (!file.outcome.ok)
+            return { ok: false, message: file.outcome.message, units: [], gameFile };
+          const problem = (await remember(schemeId, game.id, plan, fingerprint)) ?? file.problem;
+          return {
+            ok: problem === null,
+            message: problem ?? file.outcome.message,
+            units: [],
+            gameFile,
+          };
+        }
         const problem = await remember(schemeId, game.id, plan, fingerprint);
         return { ok: problem === null, message: problem ?? NO_UNIT_SENTENCE, units: [] };
       }
 
       const open = await azeronOpen();
-      const blocking = readiness(open, plan).find((c) => !c.ok);
+      const blocking = readiness(open, plan).find((c) => !c.ok) ?? fileBlocked;
       if (blocking) return refused(blocking.text);
 
       const snapshot = deps.devices.snapshot();
@@ -507,8 +588,18 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
         message: u.message,
         slot: u.slot,
       }));
-      if (outcome.problem !== null) return { ok: false, message: outcome.problem, units };
-      return { ok: outcome.result.ok, message: outcome.result.message, units };
+      // Then the game's file, once every unit holds the layout: the first failure stops Apply.
+      let gameFile: ApplyResult['gameFile'];
+      let fileProblem: string | null = null;
+      if (outcome.result.ok && target !== undefined) {
+        const file = await writeFile(target, game, plan);
+        gameFile = { ok: file.outcome.ok, message: file.outcome.message };
+        fileProblem = file.outcome.ok ? file.problem : file.outcome.message;
+      }
+      const withFile = gameFile === undefined ? {} : { gameFile };
+      const problem = outcome.problem ?? fileProblem;
+      if (problem !== null) return { ok: false, message: problem, units, ...withFile };
+      return { ok: outcome.result.ok, message: outcome.result.message, units, ...withFile };
     } catch (error) {
       trace(`apply failed unexpectedly: ${messageOf(error)}`);
       return refused(`helmArray couldn't apply: ${sentence(messageOf(error))}`);

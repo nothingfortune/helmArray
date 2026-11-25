@@ -52,11 +52,26 @@ export interface Helm {
   opened(): Promise<string[]>;
 }
 
+/**
+ * Puts what a test needs in the run folder before the app starts (a game, a game's file). An
+ * object, since Playwright takes a function given as an option for a fixture of its own.
+ */
+export interface Seed {
+  files(dataDir: string): Promise<void>;
+}
+
 async function launch(
   extraArgs: readonly string[],
+  seed: Seed | null,
 ): Promise<{ helm: Helm; close(): Promise<void> }> {
   const dataDir = await mkdtemp(join(tmpdir(), 'helm-e2e-'));
-  await steamFolder(join(dataDir, 'steam'));
+  try {
+    await steamFolder(join(dataDir, 'steam'));
+    await seed?.files(dataDir);
+  } catch (error) {
+    await rm(dataDir, { recursive: true, force: true }).catch(() => undefined);
+    throw error;
+  }
   // Which unit is which hand is already known: first run is not what these tests are about.
   await writeFile(
     join(dataDir, 'hands.json'),
@@ -170,11 +185,17 @@ function killTree(pid: number): void {
   }
 }
 
-export const test = base.extend<{ helm: Helm; helmArgs: readonly string[] }>({
+export const test = base.extend<{
+  helm: Helm;
+  helmArgs: readonly string[];
+  helmSeed: Seed | null;
+}>({
   /** More command-line arguments for the app, such as `--play`: `test.use({ helmArgs: [...] })`. */
   helmArgs: [[], { option: true }],
-  helm: async ({ helmArgs }, use, testInfo) => {
-    const { helm, close } = await launch(helmArgs);
+  /** What to put in the run folder before the app starts: `test.use({ helmSeed: ... })`. */
+  helmSeed: [null, { option: true }],
+  helm: async ({ helmArgs, helmSeed }, use, testInfo) => {
+    const { helm, close } = await launch(helmArgs, helmSeed);
     try {
       await use(helm);
     } finally {

@@ -25,3 +25,31 @@ describe('the game keys preset with mode ids that are also Object properties', (
     expect(Object.keys(scheme.map)).toEqual(['__proto__', 'a', 'toString']);
   });
 });
+
+describe('the game keys preset, placing the actions with no Xbox home', () => {
+  it('places a required action before one that is not, whatever the game lists first', () => {
+    const game: Game = {
+      id: 'odd',
+      name: 'Odd',
+      modes: [{ id: 'default', name: 'Default' }],
+      actions: [
+        {
+          id: 'wave',
+          name: 'Wave',
+          mode: 'default',
+          required: false,
+          native: { key: { kind: 'key', code: 'K' } },
+        },
+        {
+          id: 'fire',
+          name: 'Fire',
+          mode: 'default',
+          required: true,
+          native: { key: { kind: 'key', code: 'L' } },
+        },
+      ],
+    };
+    const map = gameKeysPreset(game).map['default'] ?? {};
+    expect([map['R.index_1']?.tap, map['R.index_2']?.tap]).toEqual(['fire', 'wave']);
+  });
+});

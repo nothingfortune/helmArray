@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -6,7 +6,7 @@ import { UnitSession, unitRecords } from '@helmarray/azeron';
 import type { Game, Plan, Scheme } from '@helmarray/core';
 import { BUILT_IN_DEVICES, CYBORG2_LEFT, blankKeysScheme, resolve, unitOf } from '@helmarray/core';
 import type { E2eControl } from './e2e-fakes';
-import { fakeBackends } from './e2e-fakes';
+import { confinedGameFiles, fakeBackends } from './e2e-fakes';
 import { E2E_UNIT_IDS } from './e2e-seam';
 import type { Backends } from './e2e-seam';
 import { findUnits, openUnit } from './hid-transport';
@@ -20,7 +20,11 @@ let control: E2eControl;
 
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'helm-e2e-fakes-'));
-  backends = fakeBackends({ dataDir: root, steamDir: join(root, 'steam') });
+  backends = fakeBackends({
+    dataDir: root,
+    steamDir: join(root, 'steam'),
+    localAppData: join(root, 'local'),
+  });
   control = backends.control as E2eControl;
 });
 
@@ -200,5 +204,66 @@ describe('the fake Steam', () => {
 
   it('says a missing folder is missing', async () => {
     expect(await backends.steam.listDir(join(root, 'steam', 'nope'))).toBeUndefined();
+  });
+});
+
+describe("the games' files under a test run", () => {
+  it('looks for them only in the run folder, and takes each game to run as its test program', () => {
+    const { gameFiles } = backends;
+    expect({
+      where: gameFiles.localAppData,
+      programs: Object.values(gameFiles.kinds ?? {}).map((kind) => kind?.processNames),
+    }).toEqual({
+      where: [join(root, 'local')],
+      programs: [['Everspace2-e2e.exe'], ['Elite-e2e.exe']],
+    });
+  });
+
+  it('reads and writes a file inside the run folder', async () => {
+    const disk = confinedGameFiles(root);
+    await disk.makeDir(join(root, 'local', 'ES2'));
+    await disk.write(join(root, 'local', 'ES2', 'Input.ini'), new TextEncoder().encode('x'));
+    expect({
+      bytes: await disk.read(join(root, 'local', 'ES2', 'Input.ini')),
+      list: disk.folders.list(join(root, 'local', 'ES2')),
+      text: disk.folders.read(join(root, 'local', 'ES2', 'Input.ini')),
+      names: await disk.list(join(root, 'local', 'ES2')),
+    }).toEqual({
+      bytes: new TextEncoder().encode('x'),
+      list: ['Input.ini'],
+      text: 'x',
+      names: ['Input.ini'],
+    });
+  });
+
+  it('touches nothing outside it, by a path or through a link that leads out', async () => {
+    const outside = await mkdtemp(join(tmpdir(), 'helm-e2e-outside-'));
+    try {
+      await writeFile(join(outside, 'Input.ini'), 'theirs');
+      await symlink(outside, join(root, 'link'), linkKind);
+      const disk = confinedGameFiles(root);
+      const faults: string[] = [];
+      for (const path of [join(outside, 'Input.ini'), join(root, 'link', 'Input.ini')]) {
+        if (disk.folders.read(path) !== null) faults.push(`read ${path}`);
+        if (disk.folders.list(join(path, '..')).length > 0) faults.push(`listed ${path}`);
+        for (const attempt of [
+          () => disk.read(path),
+          () => disk.write(path, new TextEncoder().encode('mine')),
+          () => disk.list(join(path, '..')),
+          () => disk.remove(path),
+          () => disk.makeDir(join(path, '..', 'new')),
+        ])
+          await attempt().then(
+            () => faults.push(`reached ${path}`),
+            () => undefined,
+          );
+      }
+      expect({ faults, theirs: await readFile(join(outside, 'Input.ini'), 'utf8') }).toEqual({
+        faults: [],
+        theirs: 'theirs',
+      });
+    } finally {
+      await rm(outside, { recursive: true, force: true });
+    }
   });
 });

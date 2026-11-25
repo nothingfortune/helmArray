@@ -59,7 +59,8 @@ export function xboxControllerPreset(
     name: 'Xbox controller',
     devices: { ...AZERONS_ONLY },
     output: 'pad',
-    writeGameFile: false,
+    // A game whose file helmArray writes gets its controller bindings there, not on a bind sheet.
+    writeGameFile: game.file !== undefined,
     padMap: { ...padMap },
     map,
     behaviour: {

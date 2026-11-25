@@ -76,12 +76,20 @@ describe('the reminder of what to set in the game', () => {
     expect([afterDone, await rowsOf(s)]).toEqual([[], [['g', [['Jump', key('J'), key('K')]]]]]);
   });
 
-  it('lists the game applied last first, and none whose file helmArray writes', async () => {
+  it('lists the game applied last first, and none whose file was written', async () => {
     const s = store([game('a', 'A'), game('b', 'B'), game('c', 'C')]);
     s.apply('a', plan([jumpOn(key('J'))]), 1);
     s.apply('b', plan([jumpOn(key('K'))]), 3);
     s.apply('c', plan([jumpOn(key('L'))], true), 5);
+    // Writing the file moves what the game holds, as Done does.
+    await s.settleBaseline('c', [jumpOn(key('L'))]);
     expect((await reminders(s)).map((r) => r.gameId)).toEqual(['b', 'a']);
+  });
+
+  it("lists a game whose file wasn't written, though its plan says the file is: it holds what it did", async () => {
+    const s = store([game('c', 'C')]);
+    s.apply('c', plan([jumpOn(key('L'))], true), 5);
+    expect(await rowsOf(s)).toEqual([['c', [['Jump', key('Space'), key('L')]]]]);
   });
 
   it('does nothing on Done for a game nothing was applied to', async () => {

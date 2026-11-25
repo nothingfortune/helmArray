@@ -239,8 +239,10 @@ describe('a plan from the resolver', () => {
     'puts each action where a plan with keys from the pool says: $name',
     (format) => {
       const { game } = format.harvest(format.file);
+      // The preset keeps the game's own keys in its ledger; with that emptied, every button is
+      // dealt a key from the pool.
       const plan = resolve(
-        { ...gameKeysPreset(game), writeGameFile: true },
+        { ...gameKeysPreset(game), writeGameFile: true, ledger: {} },
         game,
         BUILT_IN_DEVICES,
       );
