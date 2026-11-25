@@ -1,7 +1,7 @@
 // What is still to be set by hand in each game's own controls, for the Library's card: worked out
 // afresh every time from the plan applied to the game last and the bindings the game holds (its
-// baseline, sheets.json), never kept apply by apply. *Done* is the one thing that moves a baseline.
-// Pure: the store is handed in.
+// baseline, sheets.json), never kept apply by apply. *Done* moves a baseline, and so does writing
+// the game's file (Apply, through `DataStore.settleBaseline`). Pure: the store is handed in.
 
 import type { GameBinding, KeptSheet, Plan } from '@helmarray/core';
 import { heldPlan } from '@helmarray/core';
@@ -26,14 +26,15 @@ async function latest(source: Pick<ReminderSource, 'lastApplied' | 'getApplied'>
 }
 
 /**
- * Each game with something still to set by hand, the one applied last first. A game whose file
- * helmArray writes has nothing to set by hand (from M5 the writer moves its baseline instead).
+ * Each game with something still to set by hand, the one applied last first. A game whose file was
+ * written holds what was applied, so it has nothing to set; one whose file wasn't (not found, the
+ * game running, a write that failed) has, whatever its plan says of the file.
  */
 export async function reminders(source: ReminderSource): Promise<KeptSheet[]> {
   const found: (KeptSheet & { at: number })[] = [];
   for (const { game } of await source.listGames()) {
     const applied = await latest(source, game.id);
-    if (applied === null || applied.plan.gameFile !== undefined) continue;
+    if (applied === null) continue;
     const rows = changedRows(applied.plan, game, heldPlan(await source.heldBindings(game.id)));
     if (rows.length > 0) found.push({ gameId: game.id, gameName: game.name, rows, at: applied.at });
   }

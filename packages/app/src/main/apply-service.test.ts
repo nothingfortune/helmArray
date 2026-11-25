@@ -14,7 +14,8 @@ import { createApplyService } from './apply-service';
 import type { ApplyServiceDeps } from './apply-service';
 import type { ClosableTransport } from './devices';
 import { Devices, POLL_MS } from './devices';
-import { verifyUnits } from './apply-units';
+import { NO_UNIT_SENTENCE, verifyUnits } from './apply-units';
+import type { FileLook, FileOutcome, GameFileTarget } from './game-file';
 import { pendingChanges } from './sync-state';
 import { heldUnits } from './app-state';
 import { handsFor } from './hands';
@@ -87,6 +88,8 @@ async function rig(
     left?: ConstructorParameters<typeof FakeUnit>[0];
     /** Games besides Skiff, by id, for what a unit's record names. */
     games?: Game[];
+    gameFile?: GameFileTarget;
+    settleBaseline?: ApplyServiceDeps['settleBaseline'];
   } = {},
 ) {
   const units = new Map<string, FakeUnit>([
@@ -164,6 +167,8 @@ async function rig(
     ...(over.trace ? { trace: over.trace } : {}),
     ...(over.gameHolds ? { gameHolds: over.gameHolds } : {}),
     ...(over.unitsHeld ? { unitsHeld: over.unitsHeld } : {}),
+    ...(over.gameFile ? { gameFile: over.gameFile } : {}),
+    ...(over.settleBaseline ? { settleBaseline: over.settleBaseline } : {}),
   });
   const reports = () => [...units.values()].reduce((n, u) => n + u.received.length, 0);
   return {
@@ -1211,5 +1216,279 @@ describe('the layouts Apply removes, told apart by what wrote them, not by name'
     const preview = await r.service.preview(scheme.id);
     const result = await r.service.apply(scheme.id, preview.fingerprint);
     expect(result.units[0]?.message).toBe('The left unit runs the layout.');
+  });
+});
+
+describe("Apply with the game's file written", () => {
+  let r: Awaited<ReturnType<typeof rig>> | undefined;
+  beforeEach(() => void vi.useFakeTimers());
+  afterEach(async () => {
+    await r?.devices.stop();
+    r = undefined;
+    vi.useRealTimers();
+  });
+
+  // Skiff has a file helmArray writes; this scheme writes it.
+  const writing: Scheme = {
+    ...scheme,
+    writeGameFile: true,
+    map: { ship: { 'L.index_1': { tap: 'boost' }, 'L.middle_1': { tap: 'fire' } } },
+  };
+  const writingPlan = resolve(writing, game, BUILT_IN_DEVICES);
+  const keyboardOnly: Scheme = {
+    ...writing,
+    devices: { azerons: 'none', keyboard: true, mouse: true, controller: false },
+    accepted: [],
+    map: { ship: { 'key.B': { tap: 'boost' }, 'mouse.left': { tap: 'fire' } } },
+  };
+
+  const CLOSED = { ok: true, kind: 'game', text: 'Skiff is closed.' } as const;
+  const READY: FileLook = { via: 'file', name: 'Custom.4.1.binds', same: false, checks: [CLOSED] };
+  const WROTE: FileOutcome = { ok: true, written: true, message: 'Skiff now has the controls.' };
+
+  /** A game-file target that says what it is told, and counts what it is asked. */
+  function fileTarget(look: FileLook = READY, outcome: FileOutcome = WROTE) {
+    return {
+      look: vi.fn<GameFileTarget['look']>(() => Promise.resolve(look)),
+      write: vi.fn<GameFileTarget['write']>(() => Promise.resolve(outcome)),
+    };
+  }
+  const settler = () =>
+    vi.fn<NonNullable<ApplyServiceDeps['settleBaseline']>>(() => Promise.resolve());
+
+  it("shows the game's file as its own target, and its game closed after the Azeron app", async () => {
+    r = await rig({ scheme: writing, gameFile: fileTarget() });
+    const preview = await r.service.preview(writing.id);
+    expect({
+      ready: preview.ready,
+      via: preview.game.via,
+      file: preview.game.file,
+      rows: preview.game.rows.map((row) => row.action),
+      checks: preview.checks.map((c) => c.text).slice(0, 2),
+    }).toEqual({
+      ready: true,
+      via: 'file',
+      file: { name: 'Custom.4.1.binds', same: false },
+      rows: ['boost', 'fire'],
+      checks: ['The Azeron app is closed.', 'Skiff is closed.'],
+    });
+  });
+
+  it('is not ready while the game runs, or while its file cannot take the scheme', async () => {
+    const running = { ok: false, kind: 'game', text: 'Close Skiff to apply.' } as const;
+    const cant = { ok: false, kind: 'game-file', text: "Skiff's file can't take it." } as const;
+    r = await rig({
+      scheme: writing,
+      gameFile: fileTarget({ ...READY, checks: [running, cant] }),
+    });
+    const preview = await r.service.preview(writing.id);
+    expect({
+      ready: preview.ready,
+      failing: preview.checks.filter((c) => !c.ok).map((c) => c.text),
+    }).toEqual({ ready: false, failing: ['Close Skiff to apply.', "Skiff's file can't take it."] });
+  });
+
+  it('lists no binding when the file holds them already', async () => {
+    r = await rig({ scheme: writing, gameFile: fileTarget({ ...READY, same: true }) });
+    const preview = await r.service.preview(writing.id);
+    expect([preview.game.rows, preview.game.file]).toEqual([
+      [],
+      { name: 'Custom.4.1.binds', same: true },
+    ]);
+  });
+
+  it('keeps the bindings on the bind sheet when the target says it does not write this file', async () => {
+    r = await rig({
+      scheme: writing,
+      gameFile: fileTarget({ via: 'sheet', name: null, same: false, checks: [] }),
+    });
+    const preview = await r.service.preview(writing.id);
+    expect({
+      via: preview.game.via,
+      file: preview.game.file,
+      rows: preview.game.rows.length,
+      checks: preview.checks.map((c) => c.kind),
+    }).toEqual({
+      via: 'sheet',
+      file: undefined,
+      rows: 2,
+      checks: ['azeron-app', 'unit', 'unit', 'scheme'],
+    });
+  });
+
+  it("doesn't ask the target about a scheme that doesn't write the file", async () => {
+    const target = fileTarget();
+    r = await rig({ scheme, gameFile: target });
+    expect([(await r.service.preview(scheme.id)).game.via, target.look.mock.calls.length]).toEqual([
+      'sheet',
+      0,
+    ]);
+  });
+
+  it("writes the units, then the game's file, and moves the game's baseline to what it now holds", async () => {
+    const target = fileTarget();
+    const settleBaseline = settler();
+    r = await rig({ scheme: writing, gameFile: target, settleBaseline });
+    const result = await r.service.apply(writing.id, fp(writing));
+    expect({
+      ok: result.ok,
+      message: result.message,
+      gameFile: result.gameFile,
+      leftWrote: writesTo(r.left).length > 0,
+      written: target.write.mock.calls.length,
+      settled: settleBaseline.mock.calls,
+      remembered: r.saveApplied.mock.calls.length,
+    }).toEqual({
+      ok: true,
+      message: 'Both units now run the layout.',
+      gameFile: { ok: true, message: 'Skiff now has the controls.' },
+      leftWrote: true,
+      written: 1,
+      settled: [[game.id, writingPlan.gameBindings]],
+      remembered: 1,
+    });
+  });
+
+  it('refuses while the game runs, before a unit is written', async () => {
+    const target = fileTarget({
+      ...READY,
+      checks: [{ ok: false, kind: 'game', text: 'Close Skiff to apply.' }],
+    });
+    const settleBaseline = settler();
+    r = await rig({ scheme: writing, gameFile: target, settleBaseline });
+    const before = r.reports();
+    const result = await r.service.apply(writing.id, fp(writing));
+    expect({
+      result,
+      reports: r.reports() - before,
+      written: target.write.mock.calls.length,
+      settled: settleBaseline.mock.calls.length,
+      remembered: r.saveApplied.mock.calls.length,
+    }).toEqual({
+      result: { ok: false, message: 'Close Skiff to apply.', units: [] },
+      reports: 0,
+      written: 0,
+      settled: 0,
+      remembered: 0,
+    });
+  });
+
+  it("says the file failed, after the units, and doesn't move the game's baseline", async () => {
+    const failed = {
+      ok: false,
+      written: false,
+      message: "Skiff's file couldn't be written, so it was put back as it was.",
+    };
+    const settleBaseline = settler();
+    r = await rig({ scheme: writing, gameFile: fileTarget(READY, failed), settleBaseline });
+    const result = await r.service.apply(writing.id, fp(writing));
+    expect({
+      ok: result.ok,
+      message: result.message,
+      gameFile: result.gameFile,
+      units: result.units.map((u) => u.status),
+      settled: settleBaseline.mock.calls.length,
+      // The units do hold the layout: that is remembered, so the pill says they are in sync.
+      remembered: r.saveApplied.mock.calls.length,
+    }).toEqual({
+      ok: false,
+      message: "Skiff's file couldn't be written, so it was put back as it was.",
+      gameFile: {
+        ok: false,
+        message: "Skiff's file couldn't be written, so it was put back as it was.",
+      },
+      units: ['applied', 'applied'],
+      settled: 0,
+      remembered: 1,
+    });
+  });
+
+  it("doesn't write the file when a unit fails", async () => {
+    const target = fileTarget();
+    // The Azeron app opens once Apply has looked: the units are refused.
+    let looks = 0;
+    r = await rig({
+      scheme: writing,
+      gameFile: target,
+      azeron: () => Promise.resolve(++looks > 1),
+    });
+    const result = await r.service.apply(writing.id, fp(writing));
+    expect([result.ok, target.write.mock.calls.length, result.gameFile]).toEqual([
+      false,
+      0,
+      undefined,
+    ]);
+  });
+
+  it('moves the baseline when the file already held the bindings, so nothing is left to set', async () => {
+    const settleBaseline = settler();
+    r = await rig({
+      scheme: writing,
+      gameFile: fileTarget(
+        { ...READY, same: true },
+        { ok: true, written: false, message: 'Already.' },
+      ),
+      settleBaseline,
+    });
+    await r.service.apply(writing.id, fp(writing));
+    expect(settleBaseline.mock.calls.length).toBe(1);
+  });
+
+  it("says so when the game's baseline can't be moved after the file is written", async () => {
+    r = await rig({
+      scheme: writing,
+      gameFile: fileTarget(),
+      settleBaseline: () => Promise.reject(new Error('disk full')),
+    });
+    const result = await r.service.apply(writing.id, fp(writing));
+    expect([result.ok, result.message]).toEqual([
+      false,
+      "Skiff now has the controls, but helmArray couldn't note it (disk full), so it may still list them to set by hand.",
+    ]);
+  });
+
+  it('writes the file for a setup with no Azeron, then remembers it', async () => {
+    const target = fileTarget();
+    const settleBaseline = settler();
+    r = await rig({ scheme: keyboardOnly, gameFile: target, settleBaseline });
+    const before = r.reports();
+    const result = await r.service.apply(keyboardOnly.id, fp(keyboardOnly));
+    expect({
+      result,
+      reports: r.reports() - before,
+      settled: settleBaseline.mock.calls.length,
+      remembered: r.saveApplied.mock.calls.length,
+    }).toEqual({
+      result: {
+        ok: true,
+        message: 'Skiff now has the controls.',
+        units: [],
+        gameFile: { ok: true, message: 'Skiff now has the controls.' },
+      },
+      reports: 0,
+      settled: 1,
+      remembered: 1,
+    });
+  });
+
+  it('remembers nothing for a setup with no Azeron whose file failed', async () => {
+    const failed = { ok: false, written: false, message: 'It failed.' };
+    r = await rig({ scheme: keyboardOnly, gameFile: fileTarget(READY, failed) });
+    const result = await r.service.apply(keyboardOnly.id, fp(keyboardOnly));
+    expect([result, r.saveApplied.mock.calls.length]).toEqual([
+      {
+        ok: false,
+        message: 'It failed.',
+        units: [],
+        gameFile: { ok: false, message: 'It failed.' },
+      },
+      0,
+    ]);
+  });
+
+  it('still says a setup with no Azeron wrote no unit when it writes no file', async () => {
+    r = await rig({ scheme: { ...keyboardOnly, writeGameFile: false }, gameFile: fileTarget() });
+    const s = { ...keyboardOnly, writeGameFile: false };
+    expect((await r.service.apply(s.id, fp(s))).message).toBe(NO_UNIT_SENTENCE);
   });
 });

@@ -260,6 +260,11 @@ export interface ApplyGame {
   via: 'file' | 'sheet';
   /** Every binding that changes, in set, then mode, then the game's action order. */
   rows: ApplyGameRow[];
+  /**
+   * The file, when helmArray writes it: its name once found (`Input.ini`), and whether it holds
+   * these bindings already (nothing is written, and no row is listed).
+   */
+  file?: { name: string | null; same: boolean };
 }
 
 /** What the Apply drawer shows before anything is written. */
@@ -309,6 +314,8 @@ export interface ApplyResult {
   changed?: boolean;
   /** Left, then right: the units the setup uses; empty when nothing was attempted. */
   units: ApplyUnitResult[];
+  /** The game's file, when Apply went on to write it: how that ended, in one sentence. */
+  gameFile?: { ok: boolean; message: string };
 }
 
 export interface HelmApi {
