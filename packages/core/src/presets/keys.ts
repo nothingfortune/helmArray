@@ -21,7 +21,8 @@ export function blankKeysScheme(game: Game): Scheme {
     devices: { ...AZERONS_ONLY },
     output: 'keys',
     padMap: {},
-    writeGameFile: false,
+    // A game whose file helmArray writes gets its bindings there, not on a bind sheet.
+    writeGameFile: game.file !== undefined,
     map,
     behaviour: {},
     ledger: {},
@@ -108,6 +109,8 @@ export function gameKeysPreset(game: Game): Scheme {
     game.modes.map((m) => [m.id, new Map()]),
   );
   const keys = new Map<ActionId, string>();
+  /** Each key by its id, as the game ships it. */
+  const signalOf = new Map<string, Signal>();
   const fits = (control: ControlId, mode: ModeId, key: string): boolean =>
     BUTTONS.has(control) &&
     modes.get(mode)?.has(control) === false &&
@@ -130,6 +133,7 @@ export function gameKeysPreset(game: Game): Scheme {
     const key = a.native?.key;
     if (!modes.has(a.mode) || !sendable(key) || onStick.has(signalId(key))) return false;
     keys.set(a.id, signalId(key));
+    signalOf.set(signalId(key), key);
     return true;
   });
 
@@ -162,10 +166,23 @@ export function gameKeysPreset(game: Game): Scheme {
   const map = Object.fromEntries(
     [...modes].map(([mode, byControl]) => [mode, Object.fromEntries(byControl)]),
   );
+  // With the game's file written, a button carrying nothing in the ledger is dealt a key from the
+  // pool. Each key placed here is the game's own, so it goes in the ledger: the units send what
+  // the game ships either way, and the file keeps it.
+  const ledger: Scheme['ledger'] = base.writeGameFile
+    ? Object.fromEntries(
+        [...sends].flatMap(([control, key]) => {
+          const signal = signalOf.get(key);
+          // Stryker disable next-line ConditionalExpression: every key a button sends was put in signalOf with its signal, so one is always found
+          return signal === undefined ? [] : [[control, { tap: signal }]];
+        }),
+      )
+    : {};
   return {
     ...base,
     map,
     behaviour: { 'L.stick': { stick: left }, 'R.stick': { stick: right } },
+    ledger,
   };
 }
 
