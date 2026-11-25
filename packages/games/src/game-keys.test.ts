@@ -4,8 +4,23 @@
 import type { KeyCode, Signal } from '@helmarray/core';
 import { KEY_CODES, MOUSE_BUTTONS, PAD_CONTROLS } from '@helmarray/core';
 import { describe, expect, it } from 'vitest';
-import { eliteKeyOf, signalOfElite } from './elite-keys';
-import { signalOfUnreal, unrealKeyOf } from './unreal-keys';
+import NAMES from './__fixtures__/key-names.json';
+import {
+  ELITE_KEYS,
+  ELITE_MOUSE,
+  ELITE_PAD,
+  ELITE_SCROLL,
+  eliteKeyOf,
+  signalOfElite,
+} from './elite-keys';
+import {
+  UNREAL_KEYS,
+  UNREAL_MOUSE,
+  UNREAL_PAD,
+  UNREAL_SCROLL,
+  signalOfUnreal,
+  unrealKeyOf,
+} from './unreal-keys';
 
 const DIRS = ['up', 'down', 'left', 'right'] as const;
 const every: Signal[] = [
@@ -20,6 +35,25 @@ const words = (s: Signal): string =>
     : s.kind === 'pad'
       ? s.control
       : `${s.kind} ${'button' in s ? s.button : 'dir' in s ? s.dir : ''}`;
+
+// The names themselves, against a reviewed copy: a round trip can't see a name misspelt, because
+// the reading table is made from the writing one. Each name's source is in the table's file.
+describe('the name tables', () => {
+  it('are the reviewed names for Unreal', () => {
+    expect({
+      keys: UNREAL_KEYS,
+      pad: UNREAL_PAD,
+      mouse: UNREAL_MOUSE,
+      scroll: UNREAL_SCROLL,
+    }).toEqual(NAMES.unreal);
+  });
+
+  it('are the reviewed names for Elite', () => {
+    expect({ keys: ELITE_KEYS, pad: ELITE_PAD, mouse: ELITE_MOUSE, scroll: ELITE_SCROLL }).toEqual(
+      NAMES.elite,
+    );
+  });
+});
 
 describe('Unreal names', () => {
   it('reads back every signal it can name as that signal', () => {

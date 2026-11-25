@@ -70,10 +70,10 @@ describe('Elite: hostile names', () => {
     control('constructor', '<Primary Device="Keyboard" Key="Key_B" />'),
     control('toString', '<Primary Device="Keyboard" Key="Key_C" />'),
   );
-  const harvest = harvestEliteBinds(file, GAME);
+  const harvest = () => harvestEliteBinds(file, GAME);
 
   it('harvests them as actions with ids helmArray can use', () => {
-    expect(harvest.game.actions.map((a) => [a.id, a.native?.key])).toEqual([
+    expect(harvest().game.actions.map((a) => [a.id, a.native?.key])).toEqual([
       ['proto__', key('A')],
       ['constructor_2', key('B')],
       ['toString_2', key('C')],
@@ -81,7 +81,7 @@ describe('Elite: hostile names', () => {
   });
 
   it('gives a game helmArray can save', () => {
-    expect(gameProblem(harvest.game)).toBeNull();
+    expect(gameProblem(harvest().game)).toBeNull();
   });
 
   it('writes them by those ids', () => {
@@ -138,8 +138,8 @@ describe('Elite: what the reference files do not show', () => {
         '<Primary Device="Keyboard" Key="Key_F">\r\n\t\t\t<Mystery Value="1" />\r\n\t\t</Primary>',
       ),
     );
-    const harvest = harvestEliteBinds(file, GAME);
-    expect([harvest.game.actions[0]?.native, harvest.kept]).toEqual([
+    const harvested = harvestEliteBinds(file, GAME);
+    expect([harvested.game.actions[0]?.native, harvested.kept]).toEqual([
       undefined,
       [{ action: 'Fire', set: 'keyboard', text: 'Key_F' }],
     ]);
@@ -170,6 +170,20 @@ describe('Elite: what the reference files do not show', () => {
       ['\t<One>', '\t\t<Primary Device="{NoDevice}" Key="" />', '\t</One>'].join('\r\n'),
     );
     expect(harvestEliteBinds(file, GAME).game.actions).toEqual([]);
+  });
+
+  it("indents a modifier one step deeper than its slot, by the file's own step", () => {
+    const file = binds(control('Fire', '<Primary Device="Keyboard" Key="Key_F" />'))
+      .replaceAll('\t\t<', '    <')
+      .replaceAll('\t<', '  <');
+    expect(
+      writeEliteBinds(file, [row('Fire', 'keyboard', { kind: 'key', code: 'G', mods: ['alt'] })]),
+    ).toBe(
+      file.replace(
+        '    <Primary Device="Keyboard" Key="Key_F" />',
+        '    <Primary Device="Keyboard" Key="Key_G">\r\n      <Modifier Device="Keyboard" Key="Key_LeftAlt" />\r\n    </Primary>',
+      ),
+    );
   });
 
   it('writes into a file with LF endings in LF', () => {
@@ -279,10 +293,10 @@ describe('Everspace 2: hostile names', () => {
     line('constructor', 'Keyboard', 'B'),
     line('hasOwnProperty', 'Keyboard', 'C'),
   );
-  const harvest = harvestUnrealIni(file, GAME);
+  const harvest = () => harvestUnrealIni(file, GAME);
 
   it("harvests them as actions with ids helmArray can use, named in the game's words", () => {
-    expect(harvest.game.actions.map((a) => [a.id, a.name, a.native?.key])).toEqual([
+    expect(harvest().game.actions.map((a) => [a.id, a.name, a.native?.key])).toEqual([
       ['proto__', '__proto__, said plainly', key('A')],
       ['constructor_2', 'constructor, said plainly', key('B')],
       ['hasOwnProperty_2', 'hasOwnProperty, said plainly', key('C')],
@@ -290,7 +304,7 @@ describe('Everspace 2: hostile names', () => {
   });
 
   it('gives a game helmArray can save', () => {
-    expect(gameProblem(harvest.game)).toBeNull();
+    expect(gameProblem(harvest().game)).toBeNull();
   });
 
   it('writes them by those ids', () => {

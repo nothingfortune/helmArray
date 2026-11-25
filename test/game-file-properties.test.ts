@@ -148,11 +148,10 @@ const RUNS = 60;
 const SLOW = 60_000;
 
 describe.each(FORMATS)('$name: write, then harvest', (format) => {
-  const before = format.harvest(format.file);
-
   it(
     `gives the changed bindings and keeps every other, over ${RUNS} random change lists`,
     () => {
+      const before = format.harvest(format.file);
       const next = random(0x5eed);
       const faults: string[] = [];
       let written = 0;
@@ -191,6 +190,7 @@ describe.each(FORMATS)('$name: write, then harvest', (format) => {
   it(
     `changes nothing outside the actions it is asked about, over ${RUNS} random change lists`,
     () => {
+      const before = format.harvest(format.file);
       const next = random(0xfeed);
       const faults: string[] = [];
       const was = format.units(format.file);
@@ -218,23 +218,19 @@ describe.each(FORMATS)('$name: write, then harvest', (format) => {
 });
 
 describe('a plan from the resolver', () => {
-  const cases = FORMATS.flatMap((format) => {
-    const { game } = format.harvest(format.file);
-    return [
-      { name: `${format.name}, the game's own keys`, format, game, scheme: gameKeysPreset(game) },
-      {
-        name: `${format.name}, the Xbox controller`,
-        format,
-        game,
-        scheme: xboxControllerPreset(game),
-      },
-    ];
-  });
+  const PRESETS = [
+    { preset: "the game's own keys", make: gameKeysPreset },
+    { preset: 'the Xbox controller', make: (game: Game) => xboxControllerPreset(game) },
+  ];
+  const cases = FORMATS.flatMap((format) =>
+    PRESETS.map((p) => ({ ...p, format, name: format.name })),
+  );
 
   it.each(cases)(
-    "writes back the file it came from when the setup keeps the game's bindings: $name",
-    ({ format, game, scheme }) => {
-      const plan = resolve({ ...scheme, writeGameFile: false }, game, BUILT_IN_DEVICES);
+    "writes back the file it came from when the setup keeps the game's bindings: $name, $preset",
+    ({ format, make }) => {
+      const { game } = format.harvest(format.file);
+      const plan = resolve({ ...make(game), writeGameFile: false }, game, BUILT_IN_DEVICES);
       expect(format.write(format.file, plan.gameBindings)).toBe(format.file);
     },
   );

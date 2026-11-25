@@ -318,14 +318,15 @@ function padDeviceOf(file: string): string | null {
 
 /** A slot as the file writes it: one line, or with its modifiers, one per line inside it. */
 function slotText(slot: EliteSlot, control: Control, key: EliteKey, end: string): string {
-  const unit = slot.indent.startsWith(control.indent)
+  // One level deeper than the slot, by the step from the control to the slot.
+  const step = slot.indent.startsWith(control.indent)
     ? slot.indent.slice(control.indent.length)
-    : '\t';
+    : '';
   const head = `${slot.indent}<${slot.name} Device="${key.device}" Key="${key.key}"`;
   if (key.modifiers.length === 0) return `${head} />`;
   const inner = key.modifiers.map(
     (m: EliteInput) =>
-      `${slot.indent}${unit || '\t'}<Modifier Device="${m.device}" Key="${m.key}" />`,
+      `${slot.indent}${step || '\t'}<Modifier Device="${m.device}" Key="${m.key}" />`,
   );
   return [`${head}>`, ...inner, `${slot.indent}</${slot.name}>`].join(end);
 }

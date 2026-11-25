@@ -1369,9 +1369,64 @@
   },
   "kept": [
     {
+      "action": "CameraPitch.neg",
+      "set": "keyboard",
+      "text": "MouseY (axis)"
+    },
+    {
+      "action": "CameraPitch",
+      "set": "keyboard",
+      "text": "MouseY (axis)"
+    },
+    {
+      "action": "CameraRoll.neg",
+      "set": "controller",
+      "text": "Gamepad_RightX with Gamepad_RightThumbstick held (axis)"
+    },
+    {
+      "action": "CameraRoll",
+      "set": "controller",
+      "text": "Gamepad_RightX with Gamepad_RightThumbstick held (axis)"
+    },
+    {
+      "action": "CameraYaw.neg",
+      "set": "keyboard",
+      "text": "MouseX (axis)"
+    },
+    {
+      "action": "CameraYaw",
+      "set": "keyboard",
+      "text": "MouseX (axis)"
+    },
+    {
+      "action": "CameraZoom",
+      "set": "keyboard",
+      "text": "MouseWheelAxis (axis)"
+    },
+    {
+      "action": "CameraZoom.neg",
+      "set": "keyboard",
+      "text": "MouseWheelAxis (axis)"
+    },
+    {
+      "action": "MapZoom",
+      "set": "keyboard",
+      "text": "MouseWheelAxis (axis)"
+    },
+    {
+      "action": "MapZoom.neg",
+      "set": "keyboard",
+      "text": "MouseWheelAxis (axis)"
+    },
+    {
       "action": "NavigateRight.neg",
       "set": "keyboard",
       "text": "Left"
+    },
+    {
+      "action": "NavigateRight.neg",
+      "set": "controller",
+      "text": "Gamepad_LeftX (axis)"
     },
     {
       "action": "NavigateRight",
@@ -1379,9 +1434,19 @@
       "text": "Right"
     },
     {
+      "action": "NavigateRight",
+      "set": "controller",
+      "text": "Gamepad_LeftX (axis)"
+    },
+    {
       "action": "NavigateUp.neg",
       "set": "keyboard",
       "text": "Down"
+    },
+    {
+      "action": "NavigateUp.neg",
+      "set": "controller",
+      "text": "Gamepad_LeftY (axis)"
     },
     {
       "action": "NavigateUp",
@@ -1389,9 +1454,54 @@
       "text": "Up"
     },
     {
+      "action": "NavigateUp",
+      "set": "controller",
+      "text": "Gamepad_LeftY (axis)"
+    },
+    {
       "action": "OK",
       "set": "keyboard",
       "text": "Enter"
+    },
+    {
+      "action": "PhotoModeAdjust.neg",
+      "set": "keyboard",
+      "text": "MouseWheelAxis (axis)"
+    },
+    {
+      "action": "PhotoModeAdjust",
+      "set": "keyboard",
+      "text": "MouseWheelAxis (axis)"
+    },
+    {
+      "action": "Roll.neg",
+      "set": "controller",
+      "text": "Gamepad_RightX with Gamepad_RightThumbstick held (axis)"
+    },
+    {
+      "action": "Roll",
+      "set": "controller",
+      "text": "Gamepad_RightX with Gamepad_RightThumbstick held (axis)"
+    },
+    {
+      "action": "Scroll",
+      "set": "keyboard",
+      "text": "MouseWheelAxis (axis)"
+    },
+    {
+      "action": "Scroll",
+      "set": "controller",
+      "text": "Gamepad_RightY (axis)"
+    },
+    {
+      "action": "Scroll.neg",
+      "set": "keyboard",
+      "text": "MouseWheelAxis (axis)"
+    },
+    {
+      "action": "Scroll.neg",
+      "set": "controller",
+      "text": "Gamepad_RightY (axis)"
     }
   ]
 }

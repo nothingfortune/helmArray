@@ -15,7 +15,10 @@
 // - A controller stick reaches a row through its axis row: `Gamepad_LeftY` on `MoveForward`'s axis
 //   row is "Thrust forward" on LS_UP and "Thrust backward" on LS_DOWN. Harvest reads it so. A write
 //   that keeps both halves there leaves the axis row alone; one that moves either takes the stick
-//   off the axis row and binds each half on its own line, so nothing stays on the stick unseen.
+//   off the axis row and binds each half on its own line. Where a half also has a controller
+//   binding of its own (the menus: Navigate up on the D-pad and the left stick), the stick isn't
+//   helmArray's: the axis row stays as it is, and harvest lists it as kept. So do the mouse's axes
+//   and an axis held with a button (`Roll` on the right stick with RS held).
 // - Every other line, the header and the blank lines at the end are kept byte for byte.
 //
 // Where the game keeps the file (legacy repo, games/SpaceSims/everspace/game.yaml):
@@ -228,24 +231,43 @@ function halfOf(stick: Stick, row: Row): PadControl {
   return Math.sign(row.scale) * stick.sign >= 0 ? stick.ends[0] : stick.ends[1];
 }
 
+/** The rows an axis row drives: the rows of its action and axis that aren't axes. */
+const halvesOf = (rows: readonly Row[], axis: Row): Row[] =>
+  rows.filter(
+    (row) =>
+      !row.isAxis &&
+      row.action === axis.action &&
+      row.axisName === axis.axisName &&
+      row.category === axis.category,
+  );
+
+/** The axis rows that drive a row. */
+const axesOf = (rows: readonly Row[], half: Row): Row[] =>
+  rows.filter((axis) => axis.isAxis && halvesOf([half], axis).length > 0);
+
+/**
+ * The sticks helmArray manages, by the rows they drive: an axis row whose controller line holds one
+ * plain stick axis, where no row it drives has a controller binding of its own. Where one does
+ * (the menus: Navigate up on the D-pad, and on the left stick through its axis row), the stick is
+ * left as the game has it and listed as kept: moving Navigate up moves its own binding only.
+ */
 const sticksOf = (rows: readonly Row[]): Map<Row, Stick> => {
   const out = new Map<Row, Stick>();
   for (const axis of rows) {
     const stick = stickOf(axis);
-    if (stick === null) continue;
-    for (const row of rows)
-      if (
-        !row.isAxis &&
-        row.action === axis.action &&
-        row.axisName === axis.axisName &&
-        row.category === axis.category
-      )
-        out.set(row, stick);
+    const halves = halvesOf(rows, axis);
+    const own = halves.some((half) =>
+      (half.lines.get('Gamepad')?.slots ?? []).some((slot) => slot.key !== 'None'),
+    );
+    if (stick !== null && !own) for (const half of halves) out.set(half, stick);
   }
   return out;
 };
 
 // --- reading --------------------------------------------------------------------------------
+
+const describeKey = (key: UnrealKey): string =>
+  key.mod === 'None' ? key.key : `${key.key} with ${key.mod} held`;
 
 /** The group each binding set lives in, and the kinds of signal it takes. */
 const GROUPS: Readonly<Record<BindingSet, { group: string; takes: (s: Signal) => boolean }>> = {
@@ -341,13 +363,17 @@ export function harvestUnrealIni(file: string, game: { id: string; name: string 
         const key = line?.slots[i];
         if (slot.state === 'read') read++;
         if (key !== undefined && (slot.state === 'kept' || (read > 1 && slot.state === 'read')))
-          kept.push({
-            action: id,
-            set,
-            text: key.mod === 'None' ? key.key : `${key.key} with ${key.mod} held`,
-          });
+          kept.push({ action: id, set, text: describeKey(key) });
       });
     }
+    // What the row's axis rows hold that helmArray doesn't manage: a mouse axis, a stick it leaves.
+    for (const axis of axesOf(rows, row))
+      for (const set of ['keyboard', 'controller'] as const) {
+        if (set === 'controller' && sticks.get(row)?.row === axis) continue;
+        for (const key of axis.lines.get(GROUPS[set].group)?.slots ?? [])
+          if (key.key !== 'None')
+            kept.push({ action: id, set, text: `${describeKey(key)} (axis)` });
+      }
     const key = readOf(slotsOf(row, 'keyboard'))[0];
     const pad = padOf(row, sticks)[0];
     const role = roleOf(row);

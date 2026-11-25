@@ -35,21 +35,23 @@ function diff(before: string, after: string): [number, string, string][] {
   return a.flatMap((line, i) => (line === b[i] ? [] : [[i + 1, line, b[i] ?? '']]));
 }
 
-const harvest = harvestUnrealIni(FILE, ES2);
-const action = (id: string) => harvest.game.actions.find((a) => a.id === id);
+// Harvested inside each test, never once for the file: Stryker counts what runs outside a test
+// as static, and a static mutant is one no single test can be credited with killing.
+const harvest = () => harvestUnrealIni(FILE, ES2);
+const action = (id: string) => harvest().game.actions.find((a) => a.id === id);
 
 describe('Everspace 2: harvest', () => {
   it('matches the reviewed snapshot', () => {
     const snapshot = JSON.parse(readFileSync(SNAPSHOT, 'utf8')) as unknown;
-    expect(harvest).toEqual(snapshot);
+    expect(harvest()).toEqual(snapshot);
   });
 
   it('is a game helmArray can save', () => {
-    expect(gameProblem(harvest.game)).toBeNull();
+    expect(gameProblem(harvest().game)).toBeNull();
   });
 
   it('has the three modes: flight, the menus and photo mode', () => {
-    expect(harvest.game.modes).toEqual([
+    expect(harvest().game.modes).toEqual([
       { id: 'flight', name: 'Flight' },
       { id: 'menus', name: 'Menus' },
       { id: 'photo', name: 'Photo mode' },
@@ -57,7 +59,7 @@ describe('Everspace 2: harvest', () => {
   });
 
   it('reads every row that is not an axis as an action: 111', () => {
-    expect(harvest.game.actions).toHaveLength(111);
+    expect(harvest().game.actions).toHaveLength(111);
   });
 
   it('has the movement on W, S, A and D, as the file has them', () => {
@@ -100,23 +102,40 @@ describe('Everspace 2: harvest', () => {
   });
 
   it('marks thrust, strafe and the primary weapon required, and nothing else', () => {
-    expect(harvest.game.actions.filter((a) => a.required).map((a) => a.id)).toEqual([
-      'FirePrimary',
-      'MoveForward.neg',
-      'MoveForward',
-      'MoveRight.neg',
-      'MoveRight',
-    ]);
+    expect(
+      harvest()
+        .game.actions.filter((a) => a.required)
+        .map((a) => a.id),
+    ).toEqual(['FirePrimary', 'MoveForward.neg', 'MoveForward', 'MoveRight.neg', 'MoveRight']);
   });
 
-  it('sets aside the second keys the game data cannot hold, and nothing else', () => {
-    expect(harvest.kept.map((k) => `${k.action} ${k.set} ${k.text}`)).toEqual([
+  it('sets aside the second keys the game data cannot hold', () => {
+    const seconds = harvest().kept.filter((k) => !k.text.endsWith('(axis)'));
+    expect(seconds.map((k) => `${k.action} ${k.set} ${k.text}`)).toEqual([
       'NavigateRight.neg keyboard Left',
       'NavigateRight keyboard Right',
       'NavigateUp.neg keyboard Down',
       'NavigateUp keyboard Up',
       'OK keyboard Enter',
     ]);
+  });
+
+  it('sets aside the axes it leaves as they are: the mouse, a chord, a stick beside a button', () => {
+    const axes = harvest().kept.filter((k) => k.text.endsWith('(axis)'));
+    expect(
+      ['CameraYaw', 'Roll', 'NavigateUp', 'Scroll'].map((id) =>
+        axes.filter((k) => k.action === id).map((k) => `${k.set} ${k.text}`),
+      ),
+    ).toEqual([
+      ['keyboard MouseX (axis)'],
+      ['controller Gamepad_RightX with Gamepad_RightThumbstick held (axis)'],
+      ['controller Gamepad_LeftY (axis)'],
+      ['keyboard MouseWheelAxis (axis)', 'controller Gamepad_RightY (axis)'],
+    ]);
+  });
+
+  it('does not set aside a stick it manages', () => {
+    expect(harvest().kept.filter((k) => k.action === 'MoveForward')).toEqual([]);
   });
 });
 
@@ -126,7 +145,7 @@ describe('Everspace 2: write', () => {
   });
 
   it('gives the file back byte for byte when every row is what it has', () => {
-    const rows = harvest.game.actions.flatMap((a) => [
+    const rows = harvest().game.actions.flatMap((a) => [
       row(a.id, 'keyboard', a.native?.key ?? null, a.mode),
       row(a.id, 'controller', a.native?.pad === undefined ? null : pad(a.native.pad), a.mode),
     ]);
@@ -211,6 +230,16 @@ describe('Everspace 2: write', () => {
       (id) => after.game.actions.find((a) => a.id === id)?.native?.pad,
     );
     expect(pads).toEqual(['DPAD_UP', 'LS_DOWN']);
+  });
+
+  it('moves a button beside a stick it leaves alone: the stick stays on its axis row', () => {
+    const after = writeUnrealIni(FILE, [row('NavigateUp', 'controller', pad('Y'), 'menus')]);
+    expect(
+      diff(FILE, after).map(([, before, now]) => [
+        /bIsAxis=\w+/.exec(now)?.[0],
+        now === before.replace('Key1=Gamepad_DPad_Up,', 'Key1=Gamepad_FaceButton_Top,'),
+      ]),
+    ).toEqual([['bIsAxis=False', true]]);
   });
 
   it('never touches a Joystick line', () => {

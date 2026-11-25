@@ -39,24 +39,26 @@ function diff(before: string, after: string): [number, string, string][] {
     : a.flatMap((line, i) => (line === b[i] ? [] : [[i + 1, line, b[i] ?? '']]));
 }
 
-const custom = harvestEliteBinds(CUSTOM, ELITE);
-const kmo = harvestEliteBinds(KMO, ELITE);
-const action = (id: string, harvest = custom) => harvest.game.actions.find((a) => a.id === id);
+// Harvested inside each test, never once for the file: Stryker counts what runs outside a test
+// as static, and a static mutant is one no single test can be credited with killing.
+const custom = () => harvestEliteBinds(CUSTOM, ELITE);
+const kmo = () => harvestEliteBinds(KMO, ELITE);
+const action = (id: string, harvest = custom) => harvest().game.actions.find((a) => a.id === id);
 
 describe('Elite: harvest', () => {
   it('matches the reviewed snapshots', () => {
-    expect([custom, kmo]).toEqual([
+    expect([custom(), kmo()]).toEqual([
       snapshot('elite-custom.harvest.json'),
       snapshot('elite-keyboard-mouse-only.harvest.json'),
     ]);
   });
 
   it('gives games helmArray can save', () => {
-    expect([gameProblem(custom.game), gameProblem(kmo.game)]).toEqual([null, null]);
+    expect([gameProblem(custom().game), gameProblem(kmo().game)]).toEqual([null, null]);
   });
 
   it("has the ship, the SRV and on foot first, then the rest of the game's modes", () => {
-    expect(custom.game.modes.map((m) => m.id)).toEqual([
+    expect(custom().game.modes.map((m) => m.id)).toEqual([
       'ship',
       'landing',
       'srv',
@@ -75,7 +77,7 @@ describe('Elite: harvest', () => {
   });
 
   it('reads every control with a Primary and a Secondary as an action', () => {
-    expect([custom.game.actions.length, kmo.game.actions.length]).toEqual([334, 311]);
+    expect([custom().game.actions.length, kmo().game.actions.length]).toEqual([334, 311]);
   });
 
   it('puts each control in its mode', () => {
@@ -154,7 +156,7 @@ describe('Elite: harvest', () => {
   });
 
   it('sets aside the chords helmArray cannot name', () => {
-    const chords = custom.kept.filter((k) => k.text.includes(' with '));
+    const chords = custom().kept.filter((k) => k.text.includes(' with '));
     expect(chords.slice(0, 3).map((k) => `${k.action} ${k.set} ${k.text}`)).toEqual([
       'DownThrustButton keyboard Key_LeftShift with Key_RightBracket held',
       'HeadlightsBuggyButton controller GamePad_DPadLeft with GamePad_FaceDown held',
@@ -176,7 +178,7 @@ describe('Elite: write', () => {
   });
 
   it('gives the file back byte for byte when every row is what it has', () => {
-    const rows = custom.game.actions.flatMap((a) => [
+    const rows = custom().game.actions.flatMap((a) => [
       row(a.id, 'keyboard', a.native?.key ?? null, a.mode),
       row(a.id, 'controller', a.native?.pad === undefined ? null : pad(a.native.pad), a.mode),
     ]);
