@@ -13,6 +13,7 @@ import {
   applyInDrawer,
   countInput,
   drawer,
+  editorApply,
   eliteSeed,
   schemePicker,
   seriousViolations,
@@ -359,6 +360,57 @@ test.describe('Everspace 2 typed in by hand, then read from its file', () => {
     await expect(
       page.getByRole('textbox', { name: 'Boost [HOLD], name', exact: true }),
     ).toHaveCount(0);
+  });
+});
+
+test.describe('Everspace 2 typed in by hand, a setup made, then read from its file', () => {
+  test.use({ helmSeed: typedByHand });
+
+  test("the read says the setup will now write the controls file, and its Apply then shows the game's file as its own target", async ({
+    helm,
+  }) => {
+    const { page } = helm;
+    // A setup of its own keys, made before the file was read: the game had no format then.
+    const made = await page.evaluate(async () => {
+      const api = (
+        window as unknown as {
+          helm: {
+            createScheme(gameId: string, preset: string): Promise<Record<string, unknown>>;
+            setActive(gameId: string, schemeId: string): Promise<void>;
+          };
+        }
+      ).helm;
+      const scheme = await api.createScheme('everspace_2', 'keys');
+      await api.setActive('everspace_2', scheme['id'] as string);
+      return { id: scheme['id'] as string, writes: scheme['writeGameFile'] as boolean };
+    });
+    expect(made.writes).toBe(false);
+
+    await page.getByRole('button', { name: 'Edit actions: Everspace 2' }).click();
+    await page.getByRole('button', { name: "Read from the game's file" }).click();
+    const found = page.getByRole('region', { name: "From the game's file" });
+    await expect(found).toContainText("Apply can write the game's controls file from now on.");
+    await expect(found).toContainText(
+      'Your setup for Everspace 2 will now write its controls file.',
+    );
+    await found.getByRole('button', { name: 'Save these changes' }).click();
+    await expect(found).toHaveCount(0);
+    await expect
+      .poll(async () => {
+        const scheme = JSON.parse(
+          await readFile(join(helm.dataDir, 'schemes', `${made.id}.json`), 'utf8'),
+        ) as { writeGameFile?: boolean };
+        return scheme.writeGameFile;
+      })
+      .toBe(true);
+
+    // Its Apply now writes the game's file, as its own target.
+    await page.getByRole('button', { name: 'Library' }).click();
+    await page.getByRole('button', { name: /^Everspace 2\. / }).click();
+    await expect(page.getByRole('heading', { name: 'Everspace 2' })).toBeVisible();
+    await editorApply(page).click();
+    await expect(drawer(page).getByLabel('Game file')).toContainText('Input.ini');
+    await expect(drawer(page).getByLabel("In the game's controls")).toHaveCount(0);
   });
 });
 

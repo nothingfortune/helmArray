@@ -275,7 +275,7 @@ interface Target<P> {
 | Target      | apply                                                                                  | verify                         | Refuses when                       |
 | ----------- | -------------------------------------------------------------------------------------- | ------------------------------ | ---------------------------------- |
 | Units       | write the one slot, switch to it, delete every other slot; only the units the setup uses (left only for *left Azeron + mouse*) | read every slot back           | Azeron app running; unknown unit   |
-| Game file   | back up, write the whole file: keyboard **and** controller bindings for the setup (Elite with no file of its own: make it from the shipped preset, then point StartPreset at it) | re-read, harvest, compare      | game running; file unreadable, or can't take the bindings (a file not found isn't a refusal: the bind sheet) |
+| Game file   | back up, write the whole file: keyboard **and** controller bindings for the setup (Elite with no file of its own: make it from the shipped preset, then point StartPreset at it) | re-read, harvest, compare      | game running; file unreadable, or can't take the bindings (a file not found isn't a refusal, nor a controller binding a file with no controller can't hold: the bind sheet) |
 | Bind sheet  | nothing to write; shown and printable                                                  | —                              | —                                  |
 | Helper (v2) | load the macro program                                                                 | —                              | game not opted in                  |
 
@@ -294,7 +294,14 @@ written, is the same: Apply sends back the game's half as bind sheet rows (every
 changes) with that sentence, and is done, with no *Try again*. Any other failure to write the file
 after the units is a failure, said in a sentence. An action the file doesn't have (one added by hand on the Game screen)
 has no line to write: its rows are bind sheet rows, listed apart in the drawer, the rest is
-written, and the baseline moves for the rest only. The game must be closed, told from the running
+written, and the baseline moves for the rest only. So is a controller binding Elite's file can't
+hold: a file with no controller in it (the one made from the keyboard and mouse preset, or a
+player's own never bound to a controller) names no device id for one, and helmArray never makes one
+up. The units are written, the keyboard bindings go into the file, and the controller rows are
+listed apart with one sentence ("Elite Dangerous's controls file has no controller in it yet, so
+set these controller buttons in the game's own menu."); the baseline moves for what was written,
+so the Library's reminder keeps the controller rows until *Done*. Any other binding the file can't
+name (a key such as F13) still refuses, before a unit is written. The game must be closed, told from the running
 programs; a game whose programs helmArray doesn't know can't be told running, so its file is
 never written and its bindings stay on the bind sheet. A write keeps a copy of the file first in
 the data folder (`backups/<game>/`, named by when, the newest five), then reads the file back:
@@ -319,7 +326,17 @@ as before; the baseline moves only when all of it held. Without the install fold
 preset in it, the bindings are set by hand, as for any file not found.
 
 The presets turn `writeGameFile` on for a game that has a file format, and *game's own keys*
-puts each key it places in the ledger, so the units still send the game's own keys.
+puts each key it places in the ledger, so the units still send the game's own keys. A scheme made
+before its game had a format (before the game's file was first read) is turned on by the read that
+gives the game one, in the same store write as the read (`saveFileRead`, under its rules: every
+scheme file checked first, one that can't be rewritten refusing the whole read, a part-way failure
+put back). It goes by what each scheme has, so one left off by an earlier read is turned on by the
+next. The keys a key-output scheme deals then go into its ledger first (core's `writingFile`), so
+its buttons send what they sent: with the file written, a button with no key in the ledger would
+be dealt one from the pool. The Game screen's list says so in one line ("Your 2 setups for
+Everspace 2 will now write its controls file."), and such a read, like one that moves ids, is saved
+through main at once and isn't undone on the screen. The applied plan and the baseline don't move
+until Apply writes the file, so the Library's reminder keeps what is left to set until then.
 
 ## The app (Electron main)
 

@@ -8,7 +8,16 @@ import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { expect, test } from './helm';
 import type { Seed } from './helm';
-import { ELITE_APP_ID, applyInDrawer, countInput, drawer, eliteBinds } from './screens';
+import {
+  ELITE_APP_ID,
+  applyInDrawer,
+  countInput,
+  drawer,
+  editorApply,
+  eliteBinds,
+  leftUnit,
+  startElite,
+} from './screens';
 
 const SHIPPED = new URL(
   '../../../reference/game-files/elite-KeyboardMouseOnly.binds',
@@ -20,6 +29,9 @@ const NOTE =
   "Elite Dangerous has no controls file of its own yet, so helmArray makes one from the game's keyboard and mouse preset and sets the game to use it.";
 const DONE =
   "Elite Dangerous now has the scheme's controls, in a controls file of its own made from the game's keyboard and mouse preset.";
+/** Why a controller button is set by hand: the preset the file is made from has no controller. */
+const NO_PAD =
+  "Elite Dangerous's controls file has no controller in it yet, so set this controller button in the game's own menu.";
 
 const schemesOf = (dataDir: string) =>
   join(
@@ -97,5 +109,44 @@ test.describe('Elite with no file of its own', () => {
       copies: [true],
       shipped: true,
     });
+  });
+
+  test('Xbox controller with a controller button dragged on: the units and the file are written, and the button is set by hand, saying why', async ({
+    helm,
+  }) => {
+    const { page, dataDir } = helm;
+    await startElite(page, 'Xbox controller');
+    // The preset the file is made from has no controller in it: the action goes on a button that
+    // sends one of the controller's own.
+    await page
+      .locator('.ed-actions')
+      .getByRole('button', { name: /^Primary fire/ })
+      .dragTo(
+        leftUnit(page)
+          .getByRole('button', { name: /^Empty, / })
+          .first(),
+      );
+    await editorApply(page).click();
+
+    const pads = drawer(page).getByLabel("Controller, in the game's controls");
+    await expect(pads).toContainText(NO_PAD);
+    await expect(pads).toContainText(/Set Primary fire to Xbox /);
+    await expect(drawer(page).getByLabel('Game file')).toContainText('Custom.4.1.binds');
+    await expect(drawer(page).getByLabel('Game file')).not.toContainText('Primary fire');
+    await expect(applyInDrawer(page)).toBeEnabled();
+    await applyInDrawer(page).click();
+
+    const result = drawer(page).getByLabel('Result');
+    await expect(result).toContainText('Both units now run the layout.');
+    await expect(result).toContainText(DONE);
+    await expect(
+      drawer(page).getByLabel("Now, the controller in Elite Dangerous's controls"),
+    ).toContainText(NO_PAD);
+    expect((await helm.units()).every((u) => u.writesReceived > 0)).toBe(true);
+    const made = await readFile(join(eliteBinds(dataDir), 'Custom.4.1.binds'), 'utf8');
+    expect([made.includes('GamePad_'), made.split('\r\n')[1]]).toEqual([
+      false,
+      '<Root PresetName="Custom" MajorVersion="4" MinorVersion="1">',
+    ]);
   });
 });
