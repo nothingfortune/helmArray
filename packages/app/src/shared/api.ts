@@ -318,6 +318,12 @@ export interface ApplyGame {
    * aren't written and are set by hand in the game's own menu.
    */
   byHand?: ApplyGameRow[];
+  /**
+   * With the file: the controller rows it can't hold, having no controller in it yet (Elite's names
+   * the controller's device id, and helmArray never makes one up). Set by hand in the game's own
+   * menu; the rest of the file is written.
+   */
+  padByHand?: ApplyGameRow[];
 }
 
 /** What the Apply drawer shows before anything is written. */

@@ -10,6 +10,7 @@ import type {
 import {
   START,
   byHandSection,
+  padByHandSection,
   canApply,
   drawerView,
   gameSection,
@@ -804,6 +805,78 @@ describe("the game's file in the drawer", () => {
     ]).toEqual([
       "Skiff's controls file doesn't have these actions, so set them in the game's own menu.",
       "The game's controls file doesn't have this action, so set it in the game's own menu.",
+      null,
+    ]);
+  });
+
+  it("lists apart, to set by hand, the controller buttons a file with no controller can't hold, before Apply and after", () => {
+    const fire = row({ action: 'fire', actionName: 'Fire', to: { kind: 'pad', control: 'RB' } });
+    const game = { via: 'file' as const, rows: [row()], file: FILE, padByHand: [fire] };
+    const before = drawerView(ready({ game }));
+    const after = drawerView(
+      reduce(reduce(ready({ game }), { type: 'apply' }), { type: 'applied', result: OK }),
+    );
+    const failed = drawerView(
+      reduce(reduce(ready({ game }), { type: 'apply' }), { type: 'applied', result: FAILED }),
+    );
+    expect({
+      file: before.game?.groups[0]?.lines,
+      byHand: before.byHand,
+      padByHand: before.padByHand,
+      after: { sheet: after.sheet, padByHand: after.padByHand?.title },
+      failed: failed.padByHand,
+    }).toEqual({
+      file: ['Reload · Xbox Y'],
+      byHand: null,
+      padByHand: {
+        title: "Controller, in the game's controls",
+        summary: '1 to set by hand',
+        note: "Skiff's controls file has no controller in it yet, so set this controller button in the game's own menu.",
+        groups: [{ label: null, lines: ['Set Fire to Xbox RB'] }],
+      },
+      after: { sheet: null, padByHand: "Now, the controller in Skiff's controls" },
+      failed: null,
+    });
+  });
+
+  it('shows both lists apart, each with its own sentence, when the file lacks an action and has no controller', () => {
+    const wave = row({ set: 'keyboard', action: 'wave', actionName: 'Wave' });
+    const fire = row({ action: 'fire', actionName: 'Fire', to: { kind: 'pad', control: 'RB' } });
+    const game = { via: 'file' as const, rows: [], file: FILE, byHand: [wave], padByHand: [fire] };
+    const after = drawerView(
+      reduce(reduce(ready({ game }), { type: 'apply' }), { type: 'applied', result: OK }),
+    );
+    expect([after.sheet?.title, after.padByHand?.title, after.byHand]).toEqual([
+      "Now, in Skiff's controls",
+      "Now, the controller in Skiff's controls",
+      null,
+    ]);
+  });
+
+  it('shows no controller list when Apply sends the whole game back to the bind sheet', () => {
+    const fire = row({ action: 'fire', actionName: 'Fire', to: { kind: 'pad', control: 'RB' } });
+    const game = { via: 'file' as const, rows: [row()], file: FILE, padByHand: [fire] };
+    const result = { ...OK, game: { via: 'sheet' as const, rows: [row(), fire], note: 'Gone.' } };
+    const view = drawerView(
+      reduce(reduce(ready({ game }), { type: 'apply' }), { type: 'applied', result }),
+    );
+    expect([view.sheet?.summary, view.padByHand]).toEqual(['2 to set by hand', null]);
+  });
+
+  it("says 'these controller buttons' for more than one, and nothing for none", () => {
+    const fire = row({ action: 'fire', actionName: 'Fire' });
+    const boost = row({ action: 'boost', actionName: 'Boost' });
+    expect([
+      padByHandSection(
+        preview({ game: { via: 'file', rows: [], file: FILE, padByHand: [fire, boost] } }),
+      )?.note,
+      padByHandSection(
+        preview({ gameName: '', game: { via: 'file', rows: [], file: FILE, padByHand: [fire] } }),
+      )?.note,
+      padByHandSection(preview({ game: { via: 'file', rows: [], file: FILE } })),
+    ]).toEqual([
+      "Skiff's controls file has no controller in it yet, so set these controller buttons in the game's own menu.",
+      "The game's controls file has no controller in it yet, so set this controller button in the game's own menu.",
       null,
     ]);
   });

@@ -366,6 +366,18 @@ function slotText(slot: EliteSlot, control: Control, key: EliteKey, end: string)
 
 const EMPTY: EliteKey = { device: NO_DEVICE, key: '', modifiers: [] };
 
+/** The device the file's controller bindings are on (the first it has), or null with none. */
+const padDeviceOf = (controls: readonly Control[]): string | null =>
+  controls.flatMap((control) => control.slots).find((slot) => isPadKey(slot.key))?.device ?? null;
+
+/**
+ * Whether the file can take a controller binding: it has one already, so the controller's device id
+ * is known. A file with none (the game's keyboard and mouse preset, or a player's file never bound to
+ * a controller) can't: helmArray never makes the id up, and `writeEliteBinds` refuses such a row.
+ */
+export const eliteHoldsPad = (file: string): boolean =>
+  padDeviceOf(controlsOf(linesOf(file))) !== null;
+
 /**
  * The file with the setup's bindings in it: for each action and binding set the rows name, the
  * set's slots hold exactly the rows' signals (a null row: nothing); an action or set with no rows
@@ -386,10 +398,7 @@ export function writeEliteBinds(
     return control === undefined ? undefined : modeOf(control.tag);
   });
   // The device the file's controller bindings are on: a new one goes there too.
-  const padDevice =
-    controls.flatMap((control) => control.slots).find((slot) => isPadKey(slot.key))?.device ??
-    options.padDevice ??
-    null;
+  const padDevice = padDeviceOf(controls) ?? options.padDevice ?? null;
   const problems: string[] = [];
   /** Per first line of a slot: the slot, and what it becomes. */
   const changes = new Map<number, { slot: EliteSlot; control: Control; key: EliteKey }>();

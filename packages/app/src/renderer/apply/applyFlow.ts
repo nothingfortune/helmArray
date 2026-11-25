@@ -156,6 +156,11 @@ export interface DrawerView {
    */
   byHand: GameSection | null;
   /**
+   * The controller bindings a file with no controller in it can't hold, to set by hand: before
+   * Apply, and after one that wrote the file. Null when there are none.
+   */
+  padByHand: GameSection | null;
+  /**
    * After an Apply that went through: the bindings still to be set by hand in the game's own
    * controls (the bind sheet, until helmArray writes the game's file); null when there are none.
    */
@@ -380,12 +385,36 @@ export function byHandSection(preview: ApplyPreview, title?: string): GameSectio
   );
 }
 
+/**
+ * The controller rows a game's file can't hold, having no controller in it yet, to set in the
+ * game's own menu; null when there are none.
+ */
+export function padByHandSection(preview: ApplyPreview, title?: string): GameSection | null {
+  const rows = preview.game.padByHand ?? [];
+  if (rows.length === 0) return null;
+  const file =
+    preview.gameName === '' ? "The game's controls file" : `${preview.gameName}'s controls file`;
+  const what = rows.length === 1 ? 'this controller button' : 'these controller buttons';
+  return gameSection(
+    {
+      via: 'sheet',
+      rows,
+      note: `${file} has no controller in it yet, so set ${what} in the game's own menu.`,
+    },
+    title ?? "Controller, in the game's controls",
+  );
+}
+
 export function drawerView(state: DrawerState): DrawerView {
-  const closed: Pick<DrawerView, 'sections' | 'checks' | 'game' | 'byHand' | 'sheet'> = {
+  const closed: Pick<
+    DrawerView,
+    'sections' | 'checks' | 'game' | 'byHand' | 'padByHand' | 'sheet'
+  > = {
     sections: [],
     checks: [],
     game: null,
     byHand: null,
+    padByHand: null,
     sheet: null,
   };
   const idle = { progress: null, result: null, loading: null, unavailable: null, notice: null };
@@ -425,6 +454,7 @@ export function drawerView(state: DrawerState): DrawerView {
     .map((u) => unitSection(u, preview.azeronOpen));
   const game = gameSection(preview.game);
   const byHand = byHandSection(preview);
+  const padByHand = padByHandSection(preview);
   if (state.phase === 'ready') {
     return {
       ...head,
@@ -434,6 +464,7 @@ export function drawerView(state: DrawerState): DrawerView {
       sections,
       game,
       byHand,
+      padByHand,
       sheet: null,
       cancel: { label: 'Cancel', disabled: false },
       apply: { label: 'Apply', disabled: !canApply(state) },
@@ -449,6 +480,7 @@ export function drawerView(state: DrawerState): DrawerView {
       sections,
       game,
       byHand,
+      padByHand,
       sheet: null,
       cancel: { label: 'Cancel', disabled: true },
       apply: { label: 'Applying…', disabled: true },
@@ -460,6 +492,8 @@ export function drawerView(state: DrawerState): DrawerView {
     preview.gameName === ''
       ? "Now, in the game's controls"
       : `Now, in ${preview.gameName}'s controls`;
+  // The file written: what it couldn't hold is still the person's to set.
+  const fileWritten = result.ok && result.game === undefined && preview.game.via === 'file';
   return {
     ...head,
     ...idle,
@@ -476,6 +510,14 @@ export function drawerView(state: DrawerState): DrawerView {
     sections: [],
     game: null,
     byHand: null,
+    padByHand: fileWritten
+      ? padByHandSection(
+          preview,
+          preview.gameName === ''
+            ? "Now, the controller in the game's controls"
+            : `Now, the controller in ${preview.gameName}'s controls`,
+        )
+      : null,
     // Rows only the person can now set: the units are done, the game is theirs. Apply's own word on
     // the game's half, when it has one (the file gone before it was written), over the preview's.
     sheet: !result.ok

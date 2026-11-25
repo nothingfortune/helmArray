@@ -172,6 +172,7 @@ export function ApplyDrawer({ schemeId, open, onClose, onApplied, state }: Apply
               </section>
             )}
             {view.sheet !== null && <Game section={view.sheet} />}
+            {view.result !== null && view.padByHand !== null && <Game section={view.padByHand} />}
 
             {view.checks.length > 0 && (
               <section aria-label="What is ready">
@@ -203,6 +204,7 @@ export function ApplyDrawer({ schemeId, open, onClose, onApplied, state }: Apply
 
             {view.game !== null && <Game section={view.game} />}
             {view.byHand !== null && <Game section={view.byHand} />}
+            {view.result === null && view.padByHand !== null && <Game section={view.padByHand} />}
 
             {view.progress !== null && (
               <div className="apply-progress">

@@ -10,9 +10,11 @@
 //      ships: the file is made, below.)
 //   2. Writes the plan's bindings into the text in memory. An action the file doesn't have (one
 //      added by hand on the Game screen) has no line to write: its bindings are set by hand, and
-//      only those (`byHand`). A file that can't take the rest (a key it can't name) is refused,
-//      with the adapter's reasons. Text that comes out the same is not written at all: the game
-//      already holds the bindings.
+//      only those (`byHand`). So are the controller bindings of a file with no controller in it
+//      (`padByHand`: Elite's names the controller's device id, and helmArray never makes one up).
+//      A file that can't take the rest (a key it can't name) is refused, with the adapter's
+//      reasons. Text that comes out the same is not written at all: the game already holds the
+//      bindings.
 //   3. Refuses while the game runs: it rewrites its file when it quits. A game whose programs
 //      helmArray doesn't know can't be told running, so its file is never written: its bindings
 //      are set by hand (the bind sheet).
@@ -32,11 +34,20 @@
 // changed: the game doesn't read the new file until the pointer names it.
 
 import { isDeepStrictEqual } from 'node:util';
-import type { ActionId, Game, GameBinding, GameFileFormat, Plan } from '@helmarray/core';
+import type {
+  ActionId,
+  BindingSet,
+  Game,
+  GameBinding,
+  GameFileFormat,
+  ModeId,
+  Plan,
+} from '@helmarray/core';
 import type { FolderReader, Harvest } from '@helmarray/games';
 import {
   ELITE_NEW_PRESET,
   GameFileError,
+  eliteHoldsPad,
   findEliteBinds,
   findEliteNewBinds,
   findEverspace2Ini,
@@ -86,6 +97,11 @@ export interface GameFileKind {
   /** The text with the bindings in it; throws a `GameFileError` naming what it can't write. */
   write(text: string, rows: readonly GameBinding[]): string;
   /**
+   * Whether the file can take a controller binding. False: it has no controller in it, so its
+   * controller bindings are set by hand. Always, when not given.
+   */
+  holdsPad?(text: string): boolean;
+  /**
    * The game's programs, as the list of running programs names them. Null: not known, so whether
    * the game runs can't be told and its file is never written.
    */
@@ -129,9 +145,23 @@ export const GAME_FILE_KINDS: Readonly<Record<GameFileFormat, GameFileKind>> = {
     },
     harvest: harvestEliteBinds,
     write: (text, rows) => writeEliteBinds(text, rows),
+    // Its controller bindings name the controller's device id, known only from one already there.
+    holdsPad: eliteHoldsPad,
     processNames: null,
   },
 };
+
+/** A binding's key: its set, mode and action. */
+export const keyOf = (b: BindingKey): string => `${b.set}|${b.mode}|${b.action}`;
+
+/** Each controller set of an action that puts it on a controller button, once, in the plan's order. */
+function padKeys(rows: readonly GameBinding[]): BindingKey[] {
+  const out = new Map<string, BindingKey>();
+  for (const r of rows)
+    if (r.set === 'controller' && r.signal?.kind === 'pad')
+      out.set(keyOf(r), { set: r.set, mode: r.mode, action: r.action });
+  return [...out.values()];
+}
 
 /** How many copies of a game's file are kept. The canvas's Settings offers 5 first. */
 export const BACKUPS_KEPT = 5;
@@ -193,6 +223,13 @@ export async function madeFileOf(
   return kind.make({ installDir, localAppData: where.localAppData }, where.folders);
 }
 
+/** One of a game's bindings, by the action and the set: what a plan has rows for. */
+export interface BindingKey {
+  set: BindingSet;
+  mode: ModeId;
+  action: ActionId;
+}
+
 /** What the drawer is told of the game's file before Apply. */
 export interface FileLook {
   /** `file`: helmArray writes it; `sheet`: it doesn't, and the bindings are set by hand. */
@@ -212,6 +249,11 @@ export interface FileLook {
    * written, and are set by hand. Empty unless the file is written.
    */
   byHand: ActionId[];
+  /**
+   * The controller bindings the file can't hold, having no controller in it: set by hand, in the
+   * game's own menu. Only when the file is written, and there are some.
+   */
+  padByHand?: BindingKey[];
   /** The game closed, and the file found, read and able to take the bindings: one check each. */
   checks: ReadyCheck[];
 }
@@ -291,6 +333,7 @@ type Prepared =
       after: string;
       same: boolean;
       byHand: ActionId[];
+      padByHand: BindingKey[];
       making: Making | null;
     };
 type Ready = Prepared & { status: 'ready' };
@@ -394,14 +437,20 @@ export function createGameFileTarget(deps: GameFileDeps): GameFileTarget {
     }
     let after: string;
     let byHand: ActionId[];
+    let padByHand: BindingKey[] = [];
     try {
       const has = new Set(
         kind.harvest(text, { id: game.id, name: game.name }).game.actions.map((a) => a.id),
       );
       byHand = [...new Set(plan.gameBindings.map((r) => r.action))].filter((id) => !has.has(id));
+      const inFile = plan.gameBindings.filter((r) => has.has(r.action));
+      // With no controller in the file, each controller binding to a controller button is set by
+      // hand, the whole of its action's set: a set with no rows keeps what it has.
+      if (kind.holdsPad?.(text) === false) padByHand = padKeys(inFile);
+      const away = new Set(padByHand.map(keyOf));
       after = kind.write(
         text,
-        plan.gameBindings.filter((r) => has.has(r.action)),
+        inFile.filter((r) => !away.has(keyOf(r))),
       );
     } catch (error) {
       const problems = error instanceof GameFileError ? error.problems : [messageOf(error)];
@@ -421,6 +470,7 @@ export function createGameFileTarget(deps: GameFileDeps): GameFileTarget {
       // A file to make is never the same: the game doesn't read it until the pointer names it.
       same: making === null && after === text,
       byHand,
+      padByHand,
       making,
     };
   };
@@ -524,6 +574,7 @@ export function createGameFileTarget(deps: GameFileDeps): GameFileTarget {
       name: ready.name,
       same: ready.same,
       byHand: ready.byHand,
+      ...(ready.padByHand.length === 0 ? {} : { padByHand: ready.padByHand }),
       checks: [check],
     };
   };

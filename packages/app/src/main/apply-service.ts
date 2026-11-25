@@ -12,7 +12,9 @@
 //     accepted. A setup with no Azeron needs neither. Where the game's file is written, the game
 //     must be closed and its file found and able to take the bindings, before any unit is written.
 //   - The game's file written (or found holding the bindings already) moves the game's baseline
-//     to them (`settleBaseline`): nothing is left to set by hand. A file not written leaves it.
+//     to them (`settleBaseline`): nothing is left to set by hand, but what the file couldn't take
+//     (an action it doesn't have, a controller binding in a file with no controller in it). A file
+//     not written leaves it.
 //     A file gone between the drawer and the write is no failure: as for one missing from the
 //     start, the game's bindings are all set by hand (`ApplyResult.game`), and the apply is done.
 //   - One apply at a time. A second is refused, in a sentence, and never queued behind the first.
@@ -42,7 +44,8 @@ import { NO_UNIT_SENTENCE, applyUnits, previewUnits, verifyProfile } from './app
 import type { HeldUnits, UnitsDeps, UnitsOptions } from './apply-units';
 import { heldUnits } from './app-state';
 import type { DevicesSnapshot, HoldTools } from './devices';
-import type { FileOutcome, GameFileTarget } from './game-file';
+import type { FileLook, FileOutcome, GameFileTarget } from './game-file';
+import { keyOf } from './game-file';
 import type { UnitOps } from './gated-session';
 import type { HandStore } from './hands';
 import { handsFor } from './hands';
@@ -316,9 +319,12 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
       const note = look?.note ?? null;
       return { game: { via: 'sheet', rows, ...(note === null ? {} : { note }) }, checks: [] };
     }
-    // An action the file doesn't have is set by hand: its rows are listed apart.
+    // An action the file doesn't have is set by hand, and so is a controller binding a file with
+    // no controller in it can't hold: their rows are listed apart, each in one list.
     const byHand = rows.filter((r) => look.byHand.includes(r.action));
-    const inFile = rows.filter((r) => !look.byHand.includes(r.action));
+    const pads = new Set((look.padByHand ?? []).map(keyOf));
+    const padByHand = rows.filter((r) => !look.byHand.includes(r.action) && pads.has(keyOf(r)));
+    const inFile = rows.filter((r) => !look.byHand.includes(r.action) && !pads.has(keyOf(r)));
     return {
       game: {
         via: 'file',
@@ -327,6 +333,7 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
         file: { name: look.name, same: look.same, ...(look.note === null ? {} : { made: true }) },
         ...(look.note === null ? {} : { note: look.note }),
         ...(byHand.length === 0 ? {} : { byHand }),
+        ...(padByHand.length === 0 ? {} : { padByHand }),
       },
       checks: look.checks,
     };
@@ -441,21 +448,24 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
 
   /**
    * Writes the game's file. Once it holds the bindings (written, or already), the game's baseline
-   * moves to them, but for the actions the file doesn't have (`byHand`): those are still to set by
-   * hand. A baseline that can't be moved is the problem said.
+   * moves to them, but for what the file couldn't take: the actions it doesn't have (`byHand`) and
+   * the controller bindings it has no controller for (`padByHand`) are still to set by hand. A
+   * baseline that can't be moved is the problem said.
    */
   const writeFile = async (
     target: GameFileTarget,
     game: Game,
     plan: Plan,
-    byHand: readonly string[],
+    look: Pick<FileLook, 'byHand' | 'padByHand'> | null,
   ): Promise<{ outcome: FileOutcome; problem: string | null }> => {
     const outcome = await target.write(game, plan);
     if (!outcome.ok) return { outcome, problem: null };
+    const byHand = look?.byHand ?? [];
+    const pads = new Set((look?.padByHand ?? []).map(keyOf));
     try {
       await deps.settleBaseline?.(
         game.id,
-        plan.gameBindings.filter((r) => !byHand.includes(r.action)),
+        plan.gameBindings.filter((r) => !byHand.includes(r.action) && !pads.has(keyOf(r))),
       );
     } catch (error) {
       trace(`couldn't move what ${game.id} holds: ${messageOf(error)}`);
@@ -544,7 +554,7 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
         const blocked = findingChecks(plan).find((c) => !c.ok) ?? fileBlocked;
         if (blocked) return refused(blocked.text);
         if (target !== undefined) {
-          const file = await writeFile(target, game, plan, look?.byHand ?? []);
+          const file = await writeFile(target, game, plan, look);
           if (file.outcome.missing === true) {
             const sheet = await bySheet(plan, game, file.outcome.message);
             const problem = await remember(schemeId, game.id, plan, fingerprint);
@@ -634,7 +644,7 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
       let sheet: ApplyGame | undefined;
       let fileProblem: string | null = null;
       if (outcome.result.ok && target !== undefined) {
-        const file = await writeFile(target, game, plan, look?.byHand ?? []);
+        const file = await writeFile(target, game, plan, look);
         if (file.outcome.missing === true) {
           sheet = await bySheet(plan, game, file.outcome.message);
         } else {

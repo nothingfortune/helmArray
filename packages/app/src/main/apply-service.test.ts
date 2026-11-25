@@ -1473,6 +1473,56 @@ describe("Apply with the game's file written", () => {
     });
   });
 
+  /** Fire's binding, by its set, mode and action: the one a file with no controller can't hold. */
+  const fireKey = (plan: Plan) => {
+    const fire = plan.gameBindings.find((b) => b.action === 'fire');
+    if (fire === undefined) throw new Error('The plan has no binding for fire.');
+    return { set: fire.set, mode: fire.mode, action: fire.action };
+  };
+
+  it("lists apart the controller rows the file can't hold, and leaves only those to set by hand", async () => {
+    const target = fileTarget({ ...READY, padByHand: [fireKey(writingPlan)] });
+    const settleBaseline = settler();
+    r = await rig({ scheme: writing, gameFile: target, settleBaseline });
+    const preview = await r.service.preview(writing.id);
+    const result = await r.service.apply(writing.id, preview.fingerprint);
+    expect({
+      ready: preview.ready,
+      file: preview.game.rows.map((row) => row.action),
+      padByHand: preview.game.padByHand?.map((row) => row.action),
+      byHand: preview.game.byHand,
+      ok: result.ok,
+      units: result.units.map((u) => u.status),
+      settled: settleBaseline.mock.calls,
+    }).toEqual({
+      ready: true,
+      file: ['boost'],
+      padByHand: ['fire'],
+      byHand: undefined,
+      ok: true,
+      units: ['applied', 'applied'],
+      settled: [[game.id, writingPlan.gameBindings.filter((b) => b.action !== 'fire')]],
+    });
+  });
+
+  it('moves the baseline for what was written only, with no Azeron in the setup', async () => {
+    const plan = resolve(keyboardOnly, game, BUILT_IN_DEVICES);
+    const target = fileTarget({ ...READY, padByHand: [fireKey(plan)] });
+    const settleBaseline = settler();
+    r = await rig({ scheme: keyboardOnly, gameFile: target, settleBaseline });
+    const preview = await r.service.preview(keyboardOnly.id);
+    const result = await r.service.apply(keyboardOnly.id, preview.fingerprint);
+    expect({
+      padByHand: preview.game.padByHand?.map((row) => row.action),
+      ok: result.ok,
+      settled: settleBaseline.mock.calls,
+    }).toEqual({
+      padByHand: ['fire'],
+      ok: true,
+      settled: [[game.id, plan.gameBindings.filter((b) => b.action !== 'fire')]],
+    });
+  });
+
   it('refuses while the game runs, before a unit is written', async () => {
     const target = fileTarget({
       ...READY,

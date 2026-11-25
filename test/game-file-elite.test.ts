@@ -4,7 +4,7 @@
 import { readFileSync } from 'node:fs';
 import type { GameBinding, Signal } from '@helmarray/core';
 import { gameProblem } from '@helmarray/core';
-import { GameFileError, harvestEliteBinds, writeEliteBinds } from '@helmarray/games';
+import { GameFileError, eliteHoldsPad, harvestEliteBinds, writeEliteBinds } from '@helmarray/games';
 import { describe, expect, it } from 'vitest';
 import { thrown } from './thrown';
 
@@ -261,6 +261,25 @@ describe('Elite: write', () => {
     );
     expect((error as GameFileError).problems).toEqual([
       "Yaw left: the file has no controller in it to bind the controller's A to.",
+    ]);
+  });
+
+  it('says which file can take a controller binding: one with a controller in it already', () => {
+    const padless = CUSTOM.replace(
+      /<(Primary|Secondary) Device="[^"]*" Key="(Pos_|Neg_)?GamePad_[^"]*"/g,
+      '<$1 Device="{NoDevice}" Key=""',
+    );
+    expect([eliteHoldsPad(CUSTOM), eliteHoldsPad(KMO), eliteHoldsPad(padless)]).toEqual([
+      true,
+      false,
+      false,
+    ]);
+  });
+
+  it('binds a controller in a file it says can hold one, on the device already there', () => {
+    const after = writeEliteBinds(CUSTOM, [row('YawLeftButton', 'controller', pad('A'))]);
+    expect(diff(CUSTOM, after).map(([, , now]) => now.trim())).toEqual([
+      '<Primary Device="28DE11FF" Key="GamePad_FaceDown" />',
     ]);
   });
 

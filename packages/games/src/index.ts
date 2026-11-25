@@ -24,6 +24,7 @@ export type { EliteFound, EliteNewBinds } from './elite-binds';
 export {
   ELITE_NEW_BINDS,
   ELITE_NEW_PRESET,
+  eliteHoldsPad,
   findEliteBinds,
   findEliteNewBinds,
   harvestEliteBinds,
