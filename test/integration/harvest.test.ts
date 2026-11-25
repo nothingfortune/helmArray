@@ -125,7 +125,7 @@ describe('J1 on Everspace 2 from its tile, with no game data: its file is the he
     }).toEqual({ saved: [], found: [ES2, 'elite-dangerous'] });
   });
 
-  it("saves the game's data when a scheme is made from it: the file's, with its Steam id", () => {
+  it("saves the game's data when a scheme is made from it: the file's, with its Steam id, and its sticks sending keys", () => {
     expect({
       saved: { ...saved, schemaVersion: undefined },
       problem: gameProblem(saved),
@@ -133,6 +133,7 @@ describe('J1 on Everspace 2 from its tile, with no game data: its file is the he
       saved: {
         ...mergeHarvest(null, ES2_HARVEST).game,
         steamAppId: 1128920,
+        needsKeyStick: true,
         schemaVersion: undefined,
       },
       problem: null,
@@ -168,6 +169,18 @@ describe('J1 on Everspace 2 from its tile, with no game data: its file is the he
 
   it('never wrote the game’s file to read it', async () => {
     expect((await readFile(ini)).equals(ES2_BYTES)).toBe(true);
+  });
+
+  it("sends keys from both sticks with the game's own keys, and says an Xbox stick won't do", async () => {
+    const xbox = await world.helm.createScheme(ES2, 'xbox');
+    const errorsOf = async (id: string) =>
+      (await world.planOf(await world.scheme(id))).findings
+        .filter((f) => f.severity === 'error' && f.rule === 'stick-not-keyboard')
+        .map((f) => f.control);
+    expect({ keys: await errorsOf(scheme.id), xbox: await errorsOf(xbox.id) }).toEqual({
+      keys: [],
+      xbox: ['L.stick', 'R.stick'],
+    });
   });
 });
 

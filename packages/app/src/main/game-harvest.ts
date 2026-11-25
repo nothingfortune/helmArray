@@ -25,15 +25,32 @@ export interface FileGame {
   /** Its Steam app id, so its tile is Steam's own (with the cover), when Steam lists it. */
   steamAppId: number;
   format: GameFileFormat;
+  /**
+   * Its sticks must send keys (`Game.needsKeyStick`), set on the head start only: on data you
+   * have, the flag is yours (the merge rule).
+   */
+  needsKeyStick?: true;
 }
 
 /**
  * The games helmArray has an adapter for. The ids are the ones the part 2 tests and the e2e seeds
  * use. The Steam app ids are each game's store page: store.steampowered.com/app/1128920
  * (EVERSPACE™ 2) and store.steampowered.com/app/359320 (Elite Dangerous), read 2026-11-25.
+ *
+ * Everspace 2's sticks must send keys. The legacy repo's games/SpaceSims/everspace/game.yaml sets
+ * `lint.require_keyboard_stick: true` ("a stick in gamepad/analog mode made the game flip between
+ * gamepad and keyboard/mouse input and stuttered the frame rate. Keyboard mode only"), and
+ * reference/legacy/CLAUDE.md, *Hard-won constraints* 1, says why: an Xbox stick stuttered, and a
+ * stick moving the mouse spins the ship.
  */
 export const FILE_GAMES: readonly FileGame[] = [
-  { id: 'everspace2', name: 'Everspace 2', steamAppId: 1128920, format: 'unreal-ini' },
+  {
+    id: 'everspace2',
+    name: 'Everspace 2',
+    steamAppId: 1128920,
+    format: 'unreal-ini',
+    needsKeyStick: true,
+  },
   { id: 'elite-dangerous', name: 'Elite Dangerous', steamAppId: 359320, format: 'elite-binds' },
 ];
 
@@ -152,7 +169,11 @@ export function createGameHarvester(deps: HarvestDeps): GameHarvester {
       if (taken) continue;
       const got = await read({ ...game, file: { format: game.format } });
       if (got.ok)
-        out.games.push({ ...mergeHarvest(null, got.game).game, steamAppId: game.steamAppId });
+        out.games.push({
+          ...mergeHarvest(null, got.game).game,
+          steamAppId: game.steamAppId,
+          ...(game.needsKeyStick === true ? { needsKeyStick: true } : {}),
+        });
       else if (got.reason === 'unreadable')
         out.unreadable.push({ steamAppId: game.steamAppId, message: got.message });
     }

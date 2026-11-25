@@ -39,7 +39,7 @@ const tile = (page: Page) => page.getByRole('button', { name: /^Everspace 2\. / 
 test.describe("Everspace 2's file as the head start", () => {
   test.use({ helmSeed: everspace2 });
 
-  test('J1 from its tile is 3 clicks, as for a game that ships with helmArray', async ({
+  test('Xbox controller from its tile opens the editor on the sticks: Everspace 2 needs them to send keys', async ({
     helm,
   }) => {
     const { page } = helm;
@@ -49,22 +49,31 @@ test.describe("Everspace 2's file as the head start", () => {
     ).toHaveCount(0);
     await tile(page).click();
     await page.getByRole('button', { name: 'Xbox controller' }).click();
-    await expect(drawer(page)).toBeVisible();
-    await expect(drawer(page).getByLabel('Game file')).toContainText('Input.ini');
-    await applyInDrawer(page).click();
-    const result = drawer(page).getByLabel('Result');
-    await expect(result).toContainText('Both units now run the layout.');
-    await expect(result).toContainText('Everspace 2 already has these controls.');
-    expect(await counted()).toEqual({ clicks: 3, drags: 0 });
-    // Saved by making the scheme, a moment later as every edit is.
+    // Something to fix, so the drawer stays shut: an Xbox stick makes Everspace 2 stutter.
+    await expect(
+      page.getByText(/stick must send keys: Everspace 2 stutters with an Xbox stick/).first(),
+    ).toBeVisible();
+    await expect(drawer(page)).toHaveCount(0);
+    expect(await counted()).toEqual({ clicks: 2, drags: 0 });
+    // Saved by making the scheme, a moment later as every edit is, with the rule kept in it.
     await expect
       .poll(async () => {
         const saved = JSON.parse(
           await readFile(savedGame(helm.dataDir), 'utf8').catch(() => '{}'),
-        ) as { steamAppId?: number; file?: { format: string }; actions?: unknown[] };
-        return [saved.steamAppId, saved.file, (saved.actions?.length ?? 0) > 50];
+        ) as {
+          steamAppId?: number;
+          file?: { format: string };
+          actions?: unknown[];
+          needsKeyStick?: boolean;
+        };
+        return [
+          saved.steamAppId,
+          saved.file,
+          (saved.actions?.length ?? 0) > 50,
+          saved.needsKeyStick,
+        ];
       })
-      .toEqual([1128920, { format: 'unreal-ini' }, true]);
+      .toEqual([1128920, { format: 'unreal-ini' }, true, true]);
   });
 
   test("Game's own keys from its tile is 3 clicks too: the units send the file's own keys", async ({

@@ -78,9 +78,15 @@ function watched(): { disk: GameFileDisk; touched: string[] } {
 }
 
 describe('the games helmArray reads the file of', () => {
-  it('are Everspace 2 and Elite Dangerous, each by its Steam store id', () => {
+  it('are Everspace 2 and Elite Dangerous, each by its Steam store id; Everspace 2 needs its sticks to send keys', () => {
     expect(FILE_GAMES).toEqual([
-      { id: 'everspace2', name: 'Everspace 2', steamAppId: 1128920, format: 'unreal-ini' },
+      {
+        id: 'everspace2',
+        name: 'Everspace 2',
+        steamAppId: 1128920,
+        format: 'unreal-ini',
+        needsKeyStick: true,
+      },
       {
         id: 'elite-dangerous',
         name: 'Elite Dangerous',
@@ -219,7 +225,7 @@ describe('the games found by their file', () => {
     const found = await harvester().found([]);
     expect(found).toEqual({
       games: [
-        { ...mergeHarvest(null, ES2_HARVEST).game, steamAppId: 1128920 },
+        { ...mergeHarvest(null, ES2_HARVEST).game, steamAppId: 1128920, needsKeyStick: true },
         { ...mergeHarvest(null, ELITE_HARVEST).game, steamAppId: 359320 },
       ],
       unreadable: [],
@@ -247,6 +253,14 @@ describe('the games found by their file', () => {
       { id: 'my-elite', steamAppId: 359320 },
     ]);
     expect(found).toEqual({ games: [], unreadable: [] });
+  });
+
+  it('start Everspace 2 with its sticks sending keys, and Elite with no such rule', async () => {
+    const { games: found } = await harvester().found([]);
+    expect(found.map((g) => [g.id, g.needsKeyStick])).toEqual([
+      ['everspace2', true],
+      ['elite-dangerous', undefined],
+    ]);
   });
 
   it("leave out a game whose file isn't there", async () => {
