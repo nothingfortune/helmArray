@@ -75,6 +75,7 @@ function setup() {
       Promise.resolve({ ok: true, message: 'Done.', units: [] }),
     ),
     saveGame: vi.fn<HelmHandlers['saveGame']>(() => Promise.resolve()),
+    saveFileRead: vi.fn<HelmHandlers['saveFileRead']>(() => Promise.resolve()),
     deleteGame: vi.fn<HelmHandlers['deleteGame']>(() => Promise.resolve()),
     dismissSheet: vi.fn<HelmHandlers['dismissSheet']>(() => Promise.resolve()),
     restoreGame: vi.fn<HelmHandlers['restoreGame']>(() => Promise.resolve()),
@@ -109,6 +110,7 @@ describe('the IPC channels', () => {
         CHANNELS.previewApply,
         CHANNELS.apply,
         CHANNELS.saveGame,
+        CHANNELS.saveFileRead,
         CHANNELS.deleteGame,
         CHANNELS.dismissSheet,
         CHANNELS.readGameFile,
@@ -287,6 +289,13 @@ describe('the game channels', () => {
     expect(calls.saveGame).toHaveBeenCalledWith(ROVER);
   });
 
+  it("passes a read of the game's file, with the actions that took the file's ids, through", async () => {
+    const { call, calls } = setup();
+    const moves = [{ action: 'hop', mode: 'default', to: 'jump', toMode: 'default' }];
+    await call(CHANNELS.saveFileRead, ROVER, moves);
+    expect(calls.saveFileRead).toHaveBeenCalledWith(ROVER, moves);
+  });
+
   it('passes the game whose reminder is done through', async () => {
     const { call, calls } = setup();
     await call(CHANNELS.dismissSheet, 'rover');
@@ -330,6 +339,39 @@ describe('the game channels', () => {
       'saveGame',
       [{ ...ROVER, actions: [{ ...ROVER.actions[0], native: { pad: 'Z' } }] }],
       "saveGame: Jump's default controller button isn't one an Xbox controller has.",
+    ],
+    ['saveFileRead', [null, []], "saveFileRead: this isn't a game helmArray can read."],
+    [
+      'saveFileRead',
+      [{ ...ROVER, id: '../settings' }, []],
+      "saveFileRead: this game's id can't be used as a file name.",
+    ],
+    ['saveFileRead', [ROVER, null], "saveFileRead: the moves aren't a list."],
+    ['saveFileRead', [ROVER, [null]], "saveFileRead: a move isn't one helmArray can follow."],
+    [
+      'saveFileRead',
+      [ROVER, [{ action: 'hop', mode: 'default', to: 'jump' }]],
+      "saveFileRead: a move isn't one helmArray can follow.",
+    ],
+    [
+      'saveFileRead',
+      [ROVER, [{ action: '', mode: 'default', to: 'jump', toMode: 'default' }]],
+      "saveFileRead: a move isn't one helmArray can follow.",
+    ],
+    [
+      'saveFileRead',
+      [ROVER, [{ action: 'hop', mode: 'default', to: 'leap', toMode: 'default' }]],
+      "saveFileRead: a move names an action the game doesn't have.",
+    ],
+    [
+      'saveFileRead',
+      [ROVER, [{ action: 'hop', mode: 'default', to: 'jump', toMode: 'air' }]],
+      "saveFileRead: a move names an action the game doesn't have.",
+    ],
+    [
+      'saveFileRead',
+      [ROVER, [{ action: 'jump', mode: 'default', to: 'jump', toMode: 'default' }]],
+      'saveFileRead: a move names an action the game still has.',
     ],
     ['deleteGame', ['con'], "deleteGame: that isn't an id."],
     ['deleteGame', [7], "deleteGame: that isn't an id."],

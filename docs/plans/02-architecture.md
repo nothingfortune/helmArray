@@ -192,15 +192,39 @@ name), with what the file has now, what it had at the last read, and what the da
   its mode isn't there. One in the data and not in the file stays: added by hand, or gone from
   the file.
 - An action you typed in by hand (in the data, not in the file, and not in it at the last read)
-  whose name is that of an action the file has in the same mode, compared in any case and with any
-  spaces, is the file's action: yours stays as you have it, and the file's isn't added beside it.
-  Each of yours stands for one of the file's. The list says so in one line ("Boost is in the file
-  too: yours stays, and the file's isn't added beside it."). A game typed in by hand before its
-  file was read (`everspace_2`, under Everspace 2's Steam id) reads the file into itself, never
-  into a second id. (A game made on the Game screen starts with one mode, `default`, which no file
-  has: its actions match none of the file's until they are in the same mode.)
-- `file.format` is the file's; the game's name, Steam id, retired ids and *the sticks must send
-  keys* are the data's.
+  whose name is that of an action the file has, compared in any case and with any spaces, is the
+  file's action. In a mode the file has, only an action of that mode matches. In a mode the file
+  doesn't have (a game made on the Game screen starts with one mode, `default`, which no file has),
+  it matches the one action of that name in any of the file's modes; when the file has the name
+  more than once, nothing is matched, all are kept, and the list says so in one line. Each of
+  yours stands for one of the file's, and one of yours in the file's mode is matched first. A match
+  takes the file's id and mode, so Apply writes it into the file, and the file's isn't added beside
+  it. Its other fields are merged as a game never read: what you typed stays yours, and only what
+  you left empty is filled from the file. Everything that names the old id is rewritten to the new
+  one, together and at once (`saveFileRead`, the store's `ON_ACTION_MOVED`; core's `moves.ts`): each
+  setup's placements (to the action's new mode, on the same control and press; a press already
+  holding another action keeps it), its key labels and kept findings, the plans applied (bindings,
+  game bindings, bind sheet rows, findings) and what the game holds (its baseline). A setup's
+  ledger is per control and press and names no action; nor do the settings or what the units hold.
+  The move sees every file of every kind it may change, not only the ones it can read: a file
+  the disk won't give up, or one a newer helmArray saved (a scheme only when it may be this game's),
+  refuses the whole read, and nothing is written. (A damaged file is passed over: no helmArray can
+  read it again, and it is set aside when written.) The screen takes the read only once main has
+  saved it; refused, the game and its history stay as they were, and the list says why in one
+  sentence. Deleting a game added by hand checks the same way first: a scheme of it, or the
+  settings, what it holds or the units' record, that can't be read refuses the delete before
+  anything goes. A mode of yours
+  the moves leave empty goes, unless a setup still places something else in it. The list says it
+  plainly: "Boost moves to Flight, where the game's file has it; your key stays." (In the same
+  mode: "Boost is in the file too: yours stays, and the file's isn't added beside it.") A read that
+  moves ids can't be undone on the Game screen: the setups already follow the new ids. A game typed
+  in by hand before its file was read (`everspace_2`, under Everspace 2's Steam id) reads the file
+  into itself, never into a second id.
+- `file.format` is the file's; the game's name, Steam id and retired ids are the data's. *The
+  sticks must send keys* is the data's once the file has been read into it: a first read (the head
+  start, or a game typed in by hand, with no `fromFile` yet) takes it from the game helmArray knows
+  the file by, where the source says so (Everspace 2), and the list says so ("Everspace 2 plays on
+  keys: from now on its sticks must send keys.").
 
 A file with nothing a game can be made of (empty, or only lines the adapter ignores: no action,
 or a game core's `gameProblem` refuses) is never a read: not a game found from its tile (the
@@ -218,9 +242,14 @@ a read). The games helmArray has a file format for are known by their Steam app 
 yet is listed as a game helmArray knows (its Steam tile, *Game's own keys* offered) and is saved
 the first time it is used: a scheme made from it, or an edit on the Game screen. So setting one up
 from its tile is a click on the tile, one on the preset, and Apply, as for a game that ships with
-helmArray. (Not Everspace 2 by *Xbox controller*: its sticks must send keys, from the legacy
-`game.yaml`'s `require_keyboard_stick`, so the head start sets *the sticks must send keys* and
-that preset opens the editor on the two sticks to fix.) One whose file isn't there yet (Everspace 2 saves its `Input.ini` only once a control
+helmArray. Everspace 2's sticks must send keys (the legacy `game.yaml`'s `require_keyboard_stick`:
+a stick sending controls made the game flip between controller and keyboard input and stutter), so
+the head start sets *the sticks must send keys*, and for such a game *Xbox controller* isn't
+offered: wherever a scheme is started (the Library, the Editor's scheme picker, the Game screen)
+it is shown off, with one sentence that says why ("Everspace 2 plays on keys: it stutters when a
+controller and keys are mixed."). Its J1 is *Game's own keys*, three clicks. Controller output
+picked by hand (the *Azerons send* toggle, or a copy of a scheme that has it) is still allowed,
+with the checks' errors and warnings as before. One whose file isn't there yet (Everspace 2 saves its `Input.ini` only once a control
 is changed in its menu) keeps its tile on *Set up*, and the Game screen says why in one sentence,
 in Apply's words: "helmArray can't find Everspace 2's controls file yet: changing any control in
 the game's own menu makes the game save one." Elite's tile says the same of its file, unless the
@@ -319,7 +348,10 @@ open Play view, quit.
   version 2 added `gameBindings`: an older plan claims none.)
 - **Snapshots:** every Apply saves the scheme and the plan it produced. History is a list in
   the UI, restore is one click.
-- **Undo** in the editor is in memory, per scheme. Edits autosave; Apply is separate.
+- **Undo** in the editor is in memory, per scheme. Edits autosave; Apply is separate. A screen
+  never keeps what main refused to save: a refused edit (a scheme in the Editor, a game on the
+  Game screen) goes back to what main has, and the screen says so in one sentence
+  (`renderer/screens/saves.ts`); a read of a game's file that moves ids is taken only once saved.
 - **Export / import:** one `.helm` file (JSON) per scheme, its game included.
 - Built-in presets and game action lists ship read-only inside the app; using one copies it.
 - **A game's data is yours to add and edit.** `games/<id>.json` holds a game you added, or your

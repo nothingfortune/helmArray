@@ -67,7 +67,7 @@ describe('mergeHarvest: the first read', () => {
 
 describe('mergeHarvest: a re-read', () => {
   it('changes nothing when neither the file nor the data changed', () => {
-    expect(mergeHarvest(first, FILE)).toEqual({ game: first, changes: [] });
+    expect(mergeHarvest(first, FILE)).toEqual({ game: first, changes: [], moves: [] });
   });
 
   it("takes a default the file changed, where the data still has the file's old one", () => {
@@ -353,7 +353,7 @@ describe('mergeHarvest: a re-read', () => {
   });
 });
 
-describe('mergeHarvest: an action typed in by hand that the file has too, by name', () => {
+describe('mergeHarvest: an action typed in by hand that the file has too, by name, in the same mode', () => {
   /** A game typed in by hand before its file was read: never read, its actions its own ids. */
   const typed = (actions: Action[], modes = [{ id: 'flight', name: 'Flight' }]): Game => ({
     id: 'es2',
@@ -364,39 +364,61 @@ describe('mergeHarvest: an action typed in by hand that the file has too, by nam
   });
   const MY_BOOST = act({ id: 'boost', name: 'boost', role: 'movement', native: { key: key('G') } });
 
-  it("keeps yours, and doesn't add the file's beside it", () => {
+  it("takes the file's id, keeps what you typed, fills what you left empty, and doesn't add the file's beside it", () => {
     const { game } = mergeHarvest(typed([MY_BOOST]), FILE);
-    expect(game.actions.map((a) => [a.id, a.name, a.native?.key])).toEqual([
-      ['boost', 'boost', key('G')],
-      ['Fire', 'Fire primary', undefined],
+    expect(game.actions).toEqual([
+      {
+        id: 'Boost',
+        name: 'boost',
+        mode: 'flight',
+        role: 'movement',
+        required: false,
+        native: { key: key('G'), pad: 'LB' },
+      },
+      FIRE,
     ]);
   });
 
-  it('says so, naming yours and the one in the file', () => {
+  it('says so, naming yours, the one in the file, and what of yours stays', () => {
     expect(mergeHarvest(typed([MY_BOOST]), FILE).changes).toEqual([
-      { kind: 'same-name', action: 'boost', name: 'boost', file: 'Boost' },
+      {
+        kind: 'same-name',
+        action: 'boost',
+        name: 'boost',
+        file: 'Boost',
+        from: 'flight',
+        mode: 'flight',
+        kept: ['name', 'role', 'key'],
+      },
       { kind: 'added', action: 'Fire', name: 'Fire primary', mode: 'flight' },
       { kind: 'format' },
     ]);
   });
 
-  it('matches a name in any case and with any spaces', () => {
+  it('gives the move from your id to the file’s, for everything that names yours', () => {
+    expect(mergeHarvest(typed([MY_BOOST]), FILE).moves).toEqual([
+      { action: 'boost', mode: 'flight', to: 'Boost', toMode: 'flight' },
+    ]);
+  });
+
+  it('matches a name in any case and with any spaces, and keeps yours where it is', () => {
     const mine = act({ id: 'fire', name: ' FIRE  pri mary ', mode: 'flight' });
     expect(mergeHarvest(typed([mine]), FILE).game.actions.map((a) => a.id)).toEqual([
-      'fire',
+      'Fire',
       'Boost',
     ]);
   });
 
-  it('matches only within one mode: the same name in another mode is another action', () => {
+  it('matches only within that mode when the file has your mode: the same name in another is another action', () => {
     const modes = [
       { id: 'flight', name: 'Flight' },
       { id: 'menus', name: 'Menus' },
     ];
+    const file = fileGame([BOOST, FIRE, act({ id: 'Map', mode: 'menus' })], modes);
     const mine = act({ id: 'boost', name: 'Boost', mode: 'menus' });
     expect(
-      mergeHarvest(typed([mine], modes), FILE).game.actions.map((a) => `${a.mode}/${a.id}`),
-    ).toEqual(['flight/Boost', 'flight/Fire', 'menus/boost']);
+      mergeHarvest(typed([mine], modes), file).game.actions.map((a) => `${a.mode}/${a.id}`),
+    ).toEqual(['flight/Boost', 'flight/Fire', 'menus/boost', 'menus/Map']);
   });
 
   it('matches each of yours once: a second action of that name in the file is added', () => {
@@ -405,7 +427,7 @@ describe('mergeHarvest: an action typed in by hand that the file has too, by nam
     expect([
       game.actions.map((a) => a.id),
       changes.filter((c) => c.kind === 'same-name').length,
-    ]).toEqual([['boost', 'Boost2'], 1]);
+    ]).toEqual([['Boost', 'Boost2'], 1]);
   });
 
   it("doesn't match an action the file had at the last read: it is the file's, not typed in", () => {
@@ -414,18 +436,280 @@ describe('mergeHarvest: an action typed in by hand that the file has too, by nam
     expect(game.actions.map((a) => a.id)).toEqual(['OldBoost', 'Boost', 'Fire']);
   });
 
-  it("matches the same way on every read: yours stays, the file's is never added", () => {
+  it("finds nothing more on the next read: yours is the file's now, and what you typed stays", () => {
     const once = mergeHarvest(typed([MY_BOOST]), FILE).game;
-    const { game, changes } = mergeHarvest(once, FILE);
-    expect([game.actions.map((a) => a.id), changes]).toEqual([
-      ['boost', 'Fire'],
-      [{ kind: 'same-name', action: 'boost', name: 'boost', file: 'Boost' }],
+    const again = mergeHarvest(once, FILE);
+    expect([again.game, again.moves, again.changes.map((c) => c.kind)]).toEqual([
+      once,
+      [],
+      ['kept', 'kept', 'kept'],
     ]);
   });
 
   it("leaves an action of yours whose id is the file's to the field rule, not the name rule", () => {
     const mine = typed([{ ...BOOST, native: { key: key('G') } }]);
     expect(mergeHarvest(mine, FILE).changes.map((c) => c.kind)).not.toContain('same-name');
+  });
+
+  it("doesn't match a file action whose id you retired: yours stays, and the file's stays out", () => {
+    const mine = { ...typed([MY_BOOST]), retired: { modes: [], actions: ['Boost'] } };
+    const { game, moves } = mergeHarvest(mine, FILE);
+    expect([game.actions.map((a) => a.id), moves]).toEqual([['boost', 'Fire'], []]);
+  });
+});
+
+describe("mergeHarvest: an action typed in by hand in a mode the file doesn't have", () => {
+  const MODES = [
+    { id: 'flight', name: 'Flight' },
+    { id: 'menus', name: 'Menus' },
+  ];
+  const MAP = act({ id: 'Map', name: 'Galaxy map', mode: 'menus', native: { key: key('M') } });
+  const FILE2 = fileGame([BOOST, FIRE, MAP], MODES);
+  /** A game typed in on the Game screen: one mode, `default`, which no file has. */
+  const typed = (actions: Action[]): Game => ({
+    id: 'es2',
+    name: 'Everspace 2',
+    steamAppId: 1128920,
+    modes: [{ id: 'default', name: 'Default' }],
+    actions: actions.map((a) => ({ ...a, mode: 'default' })),
+  });
+  const MY_BOOST: Action = {
+    id: 'boost',
+    name: 'Boost',
+    mode: 'default',
+    required: false,
+    native: { key: key('G') },
+  };
+  const WAVE: Action = { id: 'wave', name: 'Wave', mode: 'default', required: false };
+
+  it("takes the id and the mode of the one file action of that name, in whichever of the file's modes", () => {
+    const { game } = mergeHarvest(typed([MY_BOOST, WAVE]), FILE2);
+    expect(game.actions.find((a) => a.name === 'Boost')).toEqual({
+      id: 'Boost',
+      name: 'Boost',
+      mode: 'flight',
+      role: 'combat',
+      required: false,
+      native: { key: key('G'), pad: 'LB' },
+    });
+  });
+
+  it("goes where the file's would, at the end of its mode in the file's order; what is left of yours stays", () => {
+    const { game } = mergeHarvest(typed([MY_BOOST, WAVE]), FILE2);
+    expect(game.actions.map((a) => `${a.mode}/${a.id}`)).toEqual([
+      'menus/Map',
+      'flight/Boost',
+      'flight/Fire',
+      'default/wave',
+    ]);
+  });
+
+  it('says it moves, from where to where, and what of yours stays; and gives the move', () => {
+    const { changes, moves } = mergeHarvest(typed([MY_BOOST, WAVE]), FILE2);
+    expect([changes.filter((c) => c.kind === 'same-name'), moves]).toEqual([
+      [
+        {
+          kind: 'same-name',
+          action: 'boost',
+          name: 'Boost',
+          file: 'Boost',
+          from: 'default',
+          mode: 'flight',
+          kept: ['key'],
+        },
+      ],
+      [{ action: 'boost', mode: 'default', to: 'Boost', toMode: 'flight' }],
+    ]);
+  });
+
+  it('keeps nothing of yours over the file when you typed only the name', () => {
+    const mine: Action = { id: 'boost', name: 'Boost', mode: 'default', required: false };
+    const change = mergeHarvest(typed([mine]), FILE2).changes.find((c) => c.kind === 'same-name');
+    expect(change && 'kept' in change ? change.kept : null).toEqual([]);
+  });
+
+  it('removes the mode it leaves empty, and says so', () => {
+    const { game, changes } = mergeHarvest(typed([MY_BOOST]), FILE2);
+    expect([game.modes.map((m) => m.id), changes.filter((c) => c.kind === 'mode-removed')]).toEqual(
+      [['flight', 'menus'], [{ kind: 'mode-removed', mode: 'default', name: 'Default' }]],
+    );
+  });
+
+  it('keeps that mode while a setup still places something else in it', () => {
+    const uses = [
+      { mode: 'default', action: 'boost' },
+      { mode: 'default', action: 'gone' },
+    ];
+    const { game, changes } = mergeHarvest(typed([MY_BOOST]), FILE2, null, uses);
+    expect([game.modes.map((m) => m.id), changes.map((c) => c.kind)]).toEqual([
+      ['default', 'flight', 'menus'],
+      ['mode-added', 'mode-added', 'same-name', 'added', 'added', 'format'],
+    ]);
+  });
+
+  it('removes it when the only thing a setup places in it is what moves', () => {
+    const uses = [{ mode: 'default', action: 'boost' }];
+    const { game } = mergeHarvest(typed([MY_BOOST]), FILE2, null, uses);
+    expect(game.modes.map((m) => m.id)).toEqual(['flight', 'menus']);
+  });
+
+  it('keeps a mode of yours that was empty before the read', () => {
+    const mine = {
+      ...typed([MY_BOOST, WAVE]),
+      modes: [
+        { id: 'default', name: 'Default' },
+        { id: 'spare', name: 'Spare' },
+      ],
+    };
+    expect(mergeHarvest(mine, FILE2).game.modes.map((m) => m.id)).toEqual([
+      'default',
+      'spare',
+      'flight',
+      'menus',
+    ]);
+  });
+
+  it('matches nothing when the file has the name more than once, keeps them all, and says so', () => {
+    const twice = fileGame([BOOST, FIRE, { ...MAP, id: 'MenuBoost', name: 'boost ' }], MODES);
+    const { game, changes, moves } = mergeHarvest(typed([MY_BOOST]), twice);
+    expect({
+      ids: game.actions.map((a) => a.id),
+      several: changes.filter((c) => c.kind === 'same-name-several'),
+      moves,
+    }).toEqual({
+      ids: ['MenuBoost', 'Boost', 'Fire', 'boost'],
+      several: [
+        {
+          kind: 'same-name-several',
+          action: 'boost',
+          name: 'Boost',
+          modes: ['flight', 'menus'],
+        },
+      ],
+      moves: [],
+    });
+  });
+
+  it('names a mode once when the file has the name twice in it', () => {
+    const twice = fileGame([BOOST, FIRE, MAP, { ...BOOST, id: 'Boost2' }], MODES);
+    const change = mergeHarvest(typed([MY_BOOST]), twice).changes.find(
+      (c) => c.kind === 'same-name-several',
+    );
+    expect(change && 'modes' in change ? change.modes : null).toEqual(['flight']);
+  });
+
+  it('gives one file action to one of yours: a second of that name stays in your mode', () => {
+    const second = { ...MY_BOOST, id: 'boost_2', native: { key: key('H') } };
+    const { game, moves } = mergeHarvest(typed([MY_BOOST, second]), FILE2);
+    expect([game.actions.map((a) => `${a.mode}/${a.id}`), moves.map((m) => m.action)]).toEqual([
+      ['menus/Map', 'flight/Boost', 'flight/Fire', 'default/boost_2'],
+      ['boost'],
+    ]);
+  });
+
+  it("puts the moved one after the file's actions before it in its mode, in the file's order", () => {
+    const fileFirst = fileGame([FIRE, BOOST, MAP], MODES);
+    const wave2 = { ...WAVE, id: 'wave2', name: 'Wave 2' };
+    expect(
+      mergeHarvest(typed([MY_BOOST, WAVE, wave2]), fileFirst).game.actions.map(
+        (a) => `${a.mode}/${a.id}`,
+      ),
+    ).toEqual(['menus/Map', 'flight/Fire', 'flight/Boost', 'default/wave', 'default/wave2']);
+  });
+
+  it('keeps a mode whose only use by a setup is in another mode out of it', () => {
+    const uses = [{ mode: 'flight', action: 'Fire' }];
+    expect(mergeHarvest(typed([MY_BOOST]), FILE2, null, uses).game.modes.map((m) => m.id)).toEqual([
+      'flight',
+      'menus',
+    ]);
+  });
+
+  it('lets one of yours in the same mode take it first', () => {
+    const mine: Game = {
+      ...typed([MY_BOOST]),
+      modes: [
+        { id: 'default', name: 'Default' },
+        { id: 'flight', name: 'Flight' },
+      ],
+      actions: [MY_BOOST, { ...MY_BOOST, id: 'flight_boost', mode: 'flight' }],
+    };
+    const { game, moves } = mergeHarvest(mine, FILE2);
+    expect([moves, game.actions.filter((a) => a.name === 'Boost').map((a) => a.id)]).toEqual([
+      [{ action: 'flight_boost', mode: 'flight', to: 'Boost', toMode: 'flight' }],
+      ['boost', 'Boost'],
+    ]);
+  });
+
+  it('matches no file action whose mode you deleted', () => {
+    const mine = { ...typed([MY_BOOST]), retired: { modes: ['flight'], actions: [] } };
+    const { game, moves } = mergeHarvest(mine, FILE2);
+    expect([game.actions.map((a) => `${a.mode}/${a.id}`), moves]).toEqual([
+      ['menus/Map', 'default/boost'],
+      [],
+    ]);
+  });
+
+  it('matches no file action that is already in your data', () => {
+    const mine: Game = {
+      ...typed([MY_BOOST]),
+      modes: [
+        { id: 'default', name: 'Default' },
+        { id: 'flight', name: 'Flight' },
+      ],
+      actions: [MY_BOOST, BOOST],
+    };
+    expect(mergeHarvest(mine, FILE2).moves).toEqual([]);
+  });
+
+  it('leaves a game that can be saved, and a second read that changes nothing', () => {
+    const once = mergeHarvest(typed([MY_BOOST, WAVE]), FILE2).game;
+    const again = mergeHarvest(once, FILE2);
+    expect([gameProblem(once), again.game, again.moves]).toEqual([null, once, []]);
+  });
+});
+
+describe("mergeHarvest: the sticks must send keys, from the game's head start", () => {
+  const keysOnly: Game = { ...FILE, needsKeyStick: true };
+  const handGame: Game = {
+    id: 'es2',
+    name: 'Everspace 2',
+    modes: [{ id: 'default', name: 'Default' }],
+    actions: [{ id: 'wave', name: 'Wave', mode: 'default', required: false }],
+  };
+
+  it('is set on a game typed in by hand when its file is first read into it, and said', () => {
+    const { game, changes } = mergeHarvest(handGame, keysOnly);
+    expect([game.needsKeyStick, changes.filter((c) => c.kind === 'key-stick')]).toEqual([
+      true,
+      [{ kind: 'key-stick' }],
+    ]);
+  });
+
+  it('is set on a first read with no data, and listed', () => {
+    const { game, changes } = mergeHarvest(null, keysOnly);
+    expect([game.needsKeyStick, changes.at(-1)]).toEqual([true, { kind: 'key-stick' }]);
+  });
+
+  it("is yours once the game was read: a later read doesn't set it", () => {
+    const { game, changes } = mergeHarvest(first, keysOnly);
+    expect([game.needsKeyStick, changes]).toEqual([undefined, []]);
+  });
+
+  it('is yours when you set it either way', () => {
+    const { game, changes } = mergeHarvest({ ...handGame, needsKeyStick: false }, keysOnly);
+    expect([game.needsKeyStick, changes.some((c) => c.kind === 'key-stick')]).toEqual([
+      false,
+      false,
+    ]);
+  });
+
+  it("isn't set from a file that doesn't say it", () => {
+    const { game, changes } = mergeHarvest(handGame, FILE);
+    expect([game.needsKeyStick, changes.map((c) => c.kind).includes('key-stick')]).toEqual([
+      undefined,
+      false,
+    ]);
   });
 });
 

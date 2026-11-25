@@ -1,4 +1,4 @@
-import type { Action, Game, HarvestChange } from '@helmarray/core';
+import type { Action, Game, HarvestChange, HarvestField } from '@helmarray/core';
 import { mergeHarvest } from '@helmarray/core';
 import { describe, expect, it } from 'vitest';
 import { fileReadView, readLines } from './file-read';
@@ -218,9 +218,25 @@ describe('the words for what a read of the file changes', () => {
     expect(
       readLines(
         [
-          { kind: 'same-name', action: 'boost', name: 'Boost', file: 'Boost' },
+          {
+            kind: 'same-name',
+            action: 'boost',
+            name: 'Boost',
+            file: 'Boost',
+            from: 'flight',
+            mode: 'flight',
+            kept: [],
+          },
           { kind: 'gone', action: 'Log', name: 'Log' },
-          { kind: 'same-name', action: 'map', name: 'map', file: 'Map' },
+          {
+            kind: 'same-name',
+            action: 'map',
+            name: 'map',
+            file: 'Map',
+            from: 'flight',
+            mode: 'flight',
+            kept: [],
+          },
           {
             kind: 'kept',
             action: 'Scan',
@@ -241,8 +257,137 @@ describe('the words for what a read of the file changes', () => {
 
   it('says one action you typed in that the file has too as one', () => {
     expect(
-      readLines([{ kind: 'same-name', action: 'boost', name: 'Boost', file: 'Boost' }], FIRST),
+      readLines(
+        [
+          {
+            kind: 'same-name',
+            action: 'boost',
+            name: 'Boost',
+            file: 'Boost',
+            from: 'flight',
+            mode: 'flight',
+            kept: [],
+          },
+        ],
+        FIRST,
+      ),
     ).toEqual(["Boost is in the file too: yours stays, and the file's isn't added beside it."]);
+  });
+
+  /** Boost, typed in under Default, is the file's Boost in Flight now, as the game leaves it. */
+  const moved = (kept: HarvestField[]): HarvestChange => ({
+    kind: 'same-name',
+    action: 'boost',
+    name: 'Boost',
+    file: 'Boost',
+    from: 'default',
+    mode: 'flight',
+    kept,
+  });
+
+  it.each<[string, HarvestField[], string]>([
+    ['your key', ['key'], "Boost moves to Flight, where the game's file has it; your key stays."],
+    [
+      'nothing of yours but the name',
+      ['name'],
+      "Boost moves to Flight, where the game's file has it.",
+    ],
+    [
+      'your role, key and button',
+      ['role', 'key', 'pad'],
+      "Boost moves to Flight, where the game's file has it; your role, key and controller button stay.",
+    ],
+    [
+      'your required',
+      ['required', 'key'],
+      "Boost moves to Flight, where the game's file has it; your key stays, and it stays required.",
+    ],
+  ])(
+    'says an action of yours that moves to the mode the file has it in, keeping %s',
+    (_what, kept, line) => {
+      const after: Game = {
+        ...FIRST,
+        actions: FIRST.actions.map((a) => (a.id === 'Boost' ? { ...a, required: true } : a)),
+      };
+      expect(readLines([moved(kept)], after)).toEqual([line]);
+    },
+  );
+
+  it('says it stays not required, when that is yours', () => {
+    const after: Game = {
+      ...FIRST,
+      actions: [...FIRST.actions].reverse().map((a) => ({ ...a, required: a.id !== 'Boost' })),
+    };
+    expect(readLines([moved(['required'])], after)).toEqual([
+      "Boost moves to Flight, where the game's file has it; it stays not required.",
+    ]);
+  });
+
+  it('says each move in its own line, after the ones the file has in the same mode', () => {
+    expect(
+      readLines(
+        [
+          moved(['key']),
+          {
+            kind: 'same-name',
+            action: 'map',
+            name: 'map',
+            file: 'Map',
+            from: 'menu',
+            mode: 'menu',
+            kept: [],
+          },
+          {
+            kind: 'same-name',
+            action: 'scan',
+            name: 'Scan',
+            file: 'Map',
+            from: 'default',
+            mode: 'menu',
+            kept: [],
+          },
+        ],
+        FIRST,
+      ),
+    ).toEqual([
+      "map is in the file too: yours stays, and the file's isn't added beside it.",
+      "Boost moves to Flight, where the game's file has it; your key stays.",
+      "Scan moves to Menus, where the game's file has it.",
+    ]);
+  });
+
+  it('says an action of yours whose name the file has more than once stays, beside them', () => {
+    expect(
+      readLines(
+        [{ kind: 'same-name-several', action: 'boost', name: 'Boost', modes: ['flight', 'menu'] }],
+        FIRST,
+      ),
+    ).toEqual([
+      "Boost is in the file more than once (Flight and Menus): yours stays as it is, beside the file's.",
+    ]);
+  });
+
+  it('says a mode of yours left empty goes', () => {
+    expect(readLines([{ kind: 'mode-removed', mode: 'default', name: 'Default' }], FIRST)).toEqual([
+      'The mode Default goes: nothing is left in it.',
+    ]);
+  });
+
+  it('says the sticks must send keys from now on, right after the format', () => {
+    expect(
+      readLines(
+        [
+          { kind: 'mode-added', mode: 'menu', name: 'Menus' },
+          { kind: 'key-stick' },
+          { kind: 'format' },
+        ],
+        FIRST,
+      ),
+    ).toEqual([
+      'New mode: Menus.',
+      "Apply can write the game's controls file from now on.",
+      'Everspace 2 plays on keys: from now on its sticks must send keys.',
+    ]);
   });
 
   it('says one gone action as one', () => {
@@ -304,6 +449,7 @@ describe('what the Game screen shows of a read', () => {
       kind: 'changes',
       game: mergeHarvest(FIRST, later).game,
       lines: ['Map: default key M → N.'],
+      moves: [],
     });
   });
 
@@ -335,7 +481,7 @@ describe('what the Game screen shows of a read', () => {
     const view = fileReadView(typed, { ok: true, file: FILE, held: null });
     expect(view).toMatchObject({
       kind: 'changes',
-      game: { actions: [{ id: 'Map' }, { id: 'boost' }] },
+      game: { actions: [{ id: 'Map' }, { id: 'Boost', name: 'BOOST' }] },
       lines: [
         'New mode: Menus.',
         "Apply can write the game's controls file from now on.",
@@ -343,6 +489,58 @@ describe('what the Game screen shows of a read', () => {
         "BOOST is in the file too: yours stays, and the file's isn't added beside it.",
       ],
     });
+  });
+
+  it('reads a game typed in on the Game screen: Boost moves to Flight, and Default goes', () => {
+    const typed: Game = {
+      id: 'everspace_2',
+      name: 'Everspace 2',
+      modes: [{ id: 'default', name: 'Default' }],
+      actions: [
+        act({
+          id: 'boost',
+          name: 'Boost',
+          mode: 'default',
+          native: { key: { kind: 'key', code: 'G' } },
+        }),
+      ],
+    };
+    const view = fileReadView(typed, {
+      ok: true,
+      file: { ...FILE, needsKeyStick: true },
+      held: null,
+    });
+    expect(view).toEqual({
+      kind: 'changes',
+      game: mergeHarvest(typed, { ...FILE, needsKeyStick: true }).game,
+      lines: [
+        'New mode: Flight.',
+        'New mode: Menus.',
+        "Apply can write the game's controls file from now on.",
+        'Everspace 2 plays on keys: from now on its sticks must send keys.',
+        '1 new action in Menus: Map.',
+        "Boost moves to Flight, where the game's file has it; your key stays.",
+        'The mode Default goes: nothing is left in it.',
+      ],
+      moves: [{ action: 'boost', mode: 'default', to: 'Boost', toMode: 'flight' }],
+    });
+  });
+
+  it('keeps the mode a setup still places something else in', () => {
+    const typed: Game = {
+      id: 'everspace_2',
+      name: 'Everspace 2',
+      modes: [{ id: 'default', name: 'Default' }],
+      actions: [act({ id: 'boost', name: 'Boost', mode: 'default' })],
+    };
+    const view = fileReadView(typed, { ok: true, file: FILE, held: null }, [
+      { mode: 'default', action: 'gone' },
+    ]);
+    expect(view.kind === 'changes' && view.game.modes.map((m) => m.id)).toEqual([
+      'default',
+      'flight',
+      'menu',
+    ]);
   });
 
   it('counts the same data in another key order as nothing to save', () => {

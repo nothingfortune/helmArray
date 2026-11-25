@@ -29,8 +29,9 @@ export interface FileGame {
   steamAppId: number;
   format: GameFileFormat;
   /**
-   * Its sticks must send keys (`Game.needsKeyStick`), set on the head start only: on data you
-   * have, the flag is yours (the merge rule).
+   * Its sticks must send keys (`Game.needsKeyStick`). A read of its file carries it, and a first
+   * read takes it: the head start, or a game typed in by hand when its file is first read into it.
+   * On data read from the file before, the flag is yours (the merge rule).
    */
   needsKeyStick?: true;
 }
@@ -211,7 +212,9 @@ export function createGameHarvester(deps: HarvestDeps): GameHarvester {
       return unreadable(`${file} has nothing helmArray can read.`);
     }
     trace(`${game.id}: read ${path}`);
-    return { ok: true, game: harvested };
+    // The head start's rule goes with the file's game: a first read into a game takes it from here.
+    const keyStick = known(game)?.needsKeyStick === true ? { needsKeyStick: true } : {};
+    return { ok: true, game: { ...harvested, ...keyStick } };
   };
 
   const found: GameHarvester['found'] = async (have, dismissed) => {
@@ -222,12 +225,9 @@ export function createGameHarvester(deps: HarvestDeps): GameHarvester {
       const got = await read({ ...game, file: { format: game.format } });
       if (got.ok && dismissed.includes(game.id))
         out.restorable.push({ steamAppId: game.steamAppId, gameId: game.id });
+      // The read carries the game's sticks-send-keys rule, which a first read keeps.
       else if (got.ok)
-        out.games.push({
-          ...mergeHarvest(null, got.game).game,
-          steamAppId: game.steamAppId,
-          ...(game.needsKeyStick === true ? { needsKeyStick: true } : {}),
-        });
+        out.games.push({ ...mergeHarvest(null, got.game).game, steamAppId: game.steamAppId });
       else if (got.reason === 'unreadable')
         out.unreadable.push({ steamAppId: game.steamAppId, message: got.message });
       else out.missing.push({ steamAppId: game.steamAppId, message: missingNote(game.name) });

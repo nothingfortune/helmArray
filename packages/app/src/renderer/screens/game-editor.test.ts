@@ -2,7 +2,7 @@ import type { Game, Scheme } from '@helmarray/core';
 import { blankKeysScheme } from '@helmarray/core';
 import { describe, expect, it, vi } from 'vitest';
 import type { HelmApi } from '../../shared/api';
-import { GameEditor } from './game-editor';
+import { GameEditor, NAME_FIELD } from './game-editor';
 import type { EditorApi } from './game-editor';
 import { addAction, newGame, renameGame, renameMode, updateAction } from './game-model';
 
@@ -25,6 +25,7 @@ const rover: Game = {
 function api(over: Partial<EditorApi> = {}) {
   return {
     saveGame: vi.fn<HelmApi['saveGame']>(over.saveGame ?? (() => Promise.resolve())),
+    saveFileRead: vi.fn<HelmApi['saveFileRead']>(over.saveFileRead ?? (() => Promise.resolve())),
     deleteGame: vi.fn<HelmApi['deleteGame']>(over.deleteGame ?? (() => Promise.resolve())),
     createScheme: vi.fn<HelmApi['createScheme']>(
       over.createScheme ??
@@ -49,6 +50,7 @@ const open = (
     saved: boolean;
     taken: string[];
     reserved: { modes: string[]; actions: string[] };
+    uses: { mode: string; action: string }[];
     found: boolean;
     readsFile: boolean;
   }> = {},
@@ -111,7 +113,7 @@ describe('an edit', () => {
     expect(editor.state.edited).toBe(false);
   });
 
-  it('says so in one sentence when main refuses the save', async () => {
+  it('says so in one sentence when main refuses the save, and undoes what it refused', async () => {
     const { editor } = open(
       rover,
       {},
@@ -126,7 +128,10 @@ describe('an edit', () => {
     );
     editor.edit((g) => renameGame(g, 'Mine'));
     await settle();
-    expect(editor.state.saveError).toBe("Couldn't save the game. The disk is full.");
+    expect([editor.state.saveError, editor.game.name]).toEqual([
+      "That change couldn't be saved, so it was undone. The disk is full.",
+      'Rover',
+    ]);
   });
 
   it('clears that sentence once a save goes through', async () => {
@@ -437,7 +442,29 @@ describe('deleting the game', () => {
 
 describe('what the screen offers', () => {
   it('offers the defaults a game with actions can start from', () => {
-    expect(open().editor.starts).toEqual(['xbox', 'keys']);
+    expect(open().editor.starts.map((c) => [c.preset, c.unavailable])).toEqual([
+      ['xbox', undefined],
+      ['keys', undefined],
+    ]);
+  });
+
+  it('shows Xbox controller off, with why, for a game whose sticks must send keys', () => {
+    expect(open({ ...rover, needsKeyStick: true }).editor.starts).toEqual([
+      {
+        preset: 'xbox',
+        label: 'Xbox controller',
+        unavailable: 'Rover plays on keys: it stutters when a controller and keys are mixed.',
+      },
+      { preset: 'keys', label: "Game's own keys" },
+    ]);
+  });
+
+  it('offers only Xbox controller for a game with no keys of its own', () => {
+    const padOnly = {
+      ...rover,
+      actions: rover.actions.map((a) => ({ ...a, native: { pad: 'A' as const } })),
+    };
+    expect(open(padOnly).editor.starts.map((c) => c.preset)).toEqual(['xbox']);
   });
 
   it('offers none while the game is not whole', () => {
@@ -621,6 +648,84 @@ describe('the wait and the question belong to the mode shown: every move ends th
   });
 });
 
+describe('an edit main refuses', () => {
+  const refusing = (after: number) => {
+    let n = 0;
+    return api({
+      saveGame: () =>
+        ++n > after
+          ? Promise.reject(new Error('saveGame: the game needs a name.'))
+          : Promise.resolve(),
+    });
+  };
+
+  it('is undone, back to the game main took last, and says so in one sentence', async () => {
+    const { editor } = open(rover, {}, refusing(1));
+    editor.edit((g) => renameGame(g, 'Rover 2'));
+    editor.edit((g) => renameGame(g, 'Rover 3'));
+    await settle();
+    expect([editor.game.name, editor.state.saveError]).toEqual([
+      'Rover 2',
+      "That change couldn't be saved, so it was undone. saveGame: the game needs a name.",
+    ]);
+  });
+
+  it('goes back to the game as it opened when main took nothing', async () => {
+    const { editor } = open(rover, {}, refusing(0));
+    editor.edit((g) => renameGame(g, 'Rover 2'));
+    await settle();
+    expect(editor.game).toEqual(rover);
+  });
+
+  it("makes a new game's id afresh after going back to it: main never had the one it was given", async () => {
+    let n = 0;
+    const calls = api({
+      saveGame: () => (++n === 1 ? Promise.reject(new Error('No.')) : Promise.resolve()),
+    });
+    const { editor } = open(newGame('', []), { saved: false, taken: [] }, calls);
+    editor.edit((g) => renameGame(g, 'Rover'), NAME_FIELD);
+    editor.nameDone();
+    await settle();
+    editor.edit((g) => renameGame(g, 'Skiff'), NAME_FIELD);
+    editor.nameDone();
+    await settle();
+    expect(calls.saveGame.mock.calls.map(([g]) => g.id)).toEqual(['rover', 'skiff']);
+  });
+
+  it('puts away a read of the file made while the refused edit was on its way', async () => {
+    let refuse = (): void => undefined;
+    const calls = api({
+      saveGame: () => new Promise<void>((_done, no) => (refuse = () => no(new Error('No.')))),
+      readGameFile: () => Promise.resolve({ ok: false, message: 'No file.' }),
+    });
+    const { editor } = open(rover, { readsFile: true }, calls);
+    editor.edit((g) => renameGame(g, 'Rover 2'));
+    await editor.readFile();
+    const during = editor.state.fileRead;
+    refuse();
+    await settle();
+    expect([during, editor.state.fileRead]).toEqual([
+      { kind: 'failed', message: 'No file.' },
+      null,
+    ]);
+  });
+
+  it('waits while a later edit may still be saved', async () => {
+    let n = 0;
+    const { editor } = open(
+      rover,
+      {},
+      api({
+        saveGame: () => (++n === 1 ? Promise.reject(new Error('busy')) : Promise.resolve()),
+      }),
+    );
+    editor.edit((g) => renameGame(g, 'Rover 2'));
+    editor.edit((g) => renameGame(g, 'Rover 3'));
+    await settle();
+    expect([editor.game.name, editor.state.saveError]).toEqual(['Rover 3', null]);
+  });
+});
+
 describe("reading the game's own file", () => {
   /** Rover as its file has it now: Jump moved to J, and a new action. */
   const fileRover: Game = {
@@ -664,6 +769,7 @@ describe("reading the game's own file", () => {
           '1 new action in Default: Duck.',
           'Jump keeps your default key, Space (the file has J).',
         ],
+        moves: [],
       },
       asked: [['rover']],
       saved: 0,
@@ -744,6 +850,182 @@ describe("reading the game's own file", () => {
     await editor.readFile();
     await first;
     expect(calls.readGameFile).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("reading the game's own file into a game typed in on the Game screen", () => {
+  /** Rover as its file has it: Jump in Ground, a mode the game typed in doesn't have. */
+  const fileRover: Game = {
+    ...rover,
+    file: { format: 'unreal-ini' },
+    modes: [{ id: 'ground', name: 'Ground' }],
+    actions: [{ id: 'Jump', name: 'Jump', mode: 'ground', required: false }],
+  };
+  const reads = (over: Partial<EditorApi> = {}) =>
+    api({
+      readGameFile: () => Promise.resolve({ ok: true, file: fileRover, held: null }),
+      ...over,
+    });
+  const MOVE = { action: 'jump', mode: 'default', to: 'Jump', toMode: 'ground' };
+
+  it('saves it with the moves, for main to follow everywhere at once, and not as a plain save', async () => {
+    const { editor, calls } = open(rover, { readsFile: true }, reads());
+    await editor.readFile();
+    editor.takeFile();
+    await settle();
+    expect({
+      file: calls.saveFileRead.mock.calls,
+      plain: calls.saveGame.mock.calls.length,
+      ids: editor.game.actions.map((a) => `${a.mode}/${a.id}`),
+      saved: editor.state.saved,
+    }).toEqual({
+      file: [[editor.game, [MOVE]]],
+      plain: 0,
+      ids: ['ground/Jump'],
+      saved: true,
+    });
+  });
+
+  it('shows the mode tabs when the read leaves more than one mode', async () => {
+    const twoModes: Game = {
+      ...fileRover,
+      modes: [...fileRover.modes, { id: 'air', name: 'Air' }],
+      actions: [...fileRover.actions, { id: 'Fly', name: 'Fly', mode: 'air', required: false }],
+    };
+    const { editor } = open(
+      rover,
+      { readsFile: true },
+      reads({ readGameFile: () => Promise.resolve({ ok: true, file: twoModes, held: null }) }),
+    );
+    const before = editor.state.modesShown;
+    await editor.readFile();
+    editor.takeFile();
+    await settle();
+    expect([before, editor.state.modesShown]).toEqual([false, true]);
+  });
+
+  it('makes a built-in game your copy once that save is done, and clears an earlier error', async () => {
+    let fail = true;
+    const { editor } = open(
+      rover,
+      { readsFile: true, builtIn: true },
+      reads({
+        saveGame: () => (fail ? Promise.reject(new Error('disk full')) : Promise.resolve()),
+      }),
+    );
+    editor.edit((g) => renameGame(g, 'Rover 2'));
+    await settle();
+    const before = [editor.state.edited, editor.state.saveError !== null];
+    fail = false;
+    await editor.readFile();
+    editor.takeFile();
+    await settle();
+    expect([before, editor.state.edited, editor.state.saveError]).toEqual([
+      [false, true],
+      true,
+      null,
+    ]);
+  });
+
+  it('goes back to the read once main has saved it when the next edit is refused, and takes edits again', async () => {
+    let n = 0;
+    const { editor } = open(
+      rover,
+      { readsFile: true },
+      reads({ saveGame: () => (++n === 1 ? Promise.reject(new Error('No.')) : Promise.resolve()) }),
+    );
+    await editor.readFile();
+    editor.takeFile();
+    await settle();
+    const read = editor.game;
+    editor.edit((g) => renameGame(g, 'Rover 2'));
+    await settle();
+    const back = editor.game;
+    editor.edit((g) => renameGame(g, 'Rover 3'));
+    await settle();
+    expect([back === read, read.actions[0]?.id, editor.game.name]).toEqual([
+      true,
+      'Jump',
+      'Rover 3',
+    ]);
+  });
+
+  it("can't be undone once main has saved it: the setups already follow the file's ids", async () => {
+    const { editor } = open(rover, { readsFile: true }, reads());
+    editor.edit((g) => renameGame(g, 'Rover 2'));
+    await editor.readFile();
+    editor.takeFile();
+    await settle();
+    expect([editor.canUndo, editor.canRedo]).toEqual([false, false]);
+  });
+
+  it("isn't taken until main has saved it: nothing changes here, and edits wait, meanwhile", async () => {
+    let finish = (): void => undefined;
+    const { editor, calls } = open(
+      rover,
+      { readsFile: true },
+      reads({ saveFileRead: () => new Promise<void>((done) => (finish = done)) }),
+    );
+    await editor.readFile();
+    editor.takeFile();
+    editor.edit((g) => renameGame(g, 'Rover 2'));
+    const during = [editor.game, editor.state.busy, calls.saveGame.mock.calls.length];
+    finish();
+    await settle();
+    expect([during, editor.game.actions.map((a) => a.id), editor.state.busy]).toEqual([
+      [rover, true, 0],
+      ['Jump'],
+      false,
+    ]);
+  });
+
+  it("keeps the game and its history when main refuses it, says so, and a later edit saves the game's own ids (Codex's case)", async () => {
+    const { editor, calls } = open(
+      rover,
+      { readsFile: true },
+      reads({
+        saveFileRead: () =>
+          Promise.reject(
+            new Error(
+              "Error invoking remote method 'helm:save-file-read': StoreError: sheets.json was left as it was: This list of bindings to set in the game was saved by a newer helmArray. Update helmArray to open it.",
+            ),
+          ),
+      }),
+    );
+    editor.edit((g) => renameGame(g, 'Rover 2'));
+    await editor.readFile();
+    editor.takeFile();
+    await settle();
+    const after = {
+      game: editor.game,
+      canUndo: editor.canUndo,
+      read: editor.state.fileRead,
+    };
+    editor.edit((g) => renameGame(g, 'Rover 3'));
+    expect([after, calls.saveGame.mock.calls.at(-1)?.[0]?.actions.map((a) => a.id)]).toEqual([
+      {
+        game: { ...rover, name: 'Rover 2' },
+        canUndo: true,
+        read: {
+          kind: 'failed',
+          message:
+            "What was read from the game's file wasn't saved, so nothing changed. sheets.json was left as it was: This list of bindings to set in the game was saved by a newer helmArray. Update helmArray to open it.",
+        },
+      },
+      ['jump'],
+    ]);
+  });
+
+  it('keeps a mode a setup still places something else in', async () => {
+    const { editor } = open(
+      rover,
+      { readsFile: true, uses: [{ mode: 'default', action: 'gone' }] },
+      reads(),
+    );
+    await editor.readFile();
+    editor.takeFile();
+    await settle();
+    expect(editor.game.modes.map((m) => m.id)).toEqual(['default', 'ground']);
   });
 });
 

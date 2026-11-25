@@ -96,13 +96,47 @@ export function statusLine(entry: LibraryEntry, onUnits: ReadonlySet<string>): S
   return { text: count === 1 ? '1 scheme' : `${count} schemes`, tone: 'plain' };
 }
 
-/** What to start a new scheme from. "Game's own keys" only for a game that has its own keys. */
-export function defaultChoices(entry: LibraryEntry): { preset: Preset; label: string }[] {
-  const choices: { preset: Preset; label: string }[] = [
-    { preset: 'xbox', label: 'Xbox controller' },
+/** A preset to start a scheme from; `unavailable`, why the game can't use it (shown off). */
+export interface PresetChoice {
+  preset: Preset;
+  label: string;
+  unavailable?: string;
+}
+
+/**
+ * Why *Xbox controller* is off for a game whose sticks must send keys, in one sentence. From the
+ * legacy repo's Everspace 2 notes: a stick sending controls made the game flip between controller
+ * and keyboard input and stutter, so it plays on keys only.
+ */
+export const keysOnlyNote = (name: string): string =>
+  `${name} plays on keys: it stutters when a controller and keys are mixed.`;
+
+/**
+ * What a new scheme can start from, wherever one is started (the Library, the Editor's scheme
+ * picker, the Game screen): *Xbox controller*, shown off with why for a game whose sticks must send
+ * keys, and *Game's own keys* for a game that has its own keys.
+ */
+export function presetChoices(game: {
+  name: string;
+  nativeKeys: boolean;
+  needsKeyStick: boolean;
+}): PresetChoice[] {
+  const choices: PresetChoice[] = [
+    game.needsKeyStick
+      ? { preset: 'xbox', label: 'Xbox controller', unavailable: keysOnlyNote(game.name) }
+      : { preset: 'xbox', label: 'Xbox controller' },
   ];
-  if (entry.nativeKeys) choices.push({ preset: 'keys', label: "Game's own keys" });
+  if (game.nativeKeys) choices.push({ preset: 'keys', label: "Game's own keys" });
   return choices;
+}
+
+/** What to start a new scheme from in the Library. */
+export function defaultChoices(entry: LibraryEntry): PresetChoice[] {
+  return presetChoices({
+    name: entry.name,
+    nativeKeys: entry.nativeKeys,
+    needsKeyStick: entry.needsKeyStick === true,
+  });
 }
 
 /** The games whose name holds what was typed, in any case. An empty search keeps them all. */

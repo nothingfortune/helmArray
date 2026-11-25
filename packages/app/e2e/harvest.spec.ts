@@ -13,8 +13,8 @@ import {
   applyInDrawer,
   countInput,
   drawer,
-  editorApply,
   eliteSeed,
+  schemePicker,
   seriousViolations,
 } from './screens';
 
@@ -42,11 +42,13 @@ const everspace2: Seed = {
 };
 
 const tile = (page: Page) => page.getByRole('button', { name: /^Everspace 2\. / });
+/** Why *Xbox controller* is off for Everspace 2, wherever a scheme is started. */
+const KEYS_ONLY = 'Everspace 2 plays on keys: it stutters when a controller and keys are mixed.';
 
 test.describe("Everspace 2's file as the head start", () => {
   test.use({ helmSeed: everspace2 });
 
-  test('Xbox controller from its tile opens the editor on the sticks: Everspace 2 needs them to send keys, two fixes, then Apply', async ({
+  test('Xbox controller is off on its tile, saying why: Everspace 2 plays on keys, so J1 is its own keys, 3 clicks', async ({
     helm,
   }) => {
     const { page } = helm;
@@ -55,31 +57,19 @@ test.describe("Everspace 2's file as the head start", () => {
       page.getByRole('button', { name: /^Set up (EVERSPACE™ 2|Everspace 2)$/ }),
     ).toHaveCount(0);
     await tile(page).click();
-    await page.getByRole('button', { name: 'Xbox controller' }).click();
-    // Something to fix, so the drawer stays shut: an Xbox stick makes Everspace 2 stutter.
-    await expect(
-      page.getByText(/stick must send keys: Everspace 2 stutters with an Xbox stick/).first(),
-    ).toBeVisible();
-    await expect(drawer(page)).toHaveCount(0);
-    expect(await counted()).toEqual({ clicks: 2, drags: 0 });
-    // Each stick's fix gives it the game's keys for its directions; the stutter rule is met.
-    for (const hand of ['left', 'right']) {
-      await page
-        .locator('.ed-check', { hasText: `The ${hand} stick` })
-        .getByRole('button', { name: 'Give it the movement keys' })
-        .click();
-    }
-    await expect(page.locator('.ed-check', { hasText: /stick must send keys/ })).toHaveCount(0);
-    // What stays is a warning, not an error: keys from the sticks beside Xbox buttons.
-    await expect(
-      page.locator('.ed-check', {
-        hasText: 'This stick sends keys while the buttons are an Xbox controller.',
-      }),
-    ).toHaveCount(2);
-    await editorApply(page).click();
+    // Shown, off, with the one sentence that says why as its description.
+    const xbox = page.getByRole('button', { name: 'Xbox controller' });
+    await expect(xbox).toBeDisabled();
+    await expect(xbox).toHaveAccessibleDescription(KEYS_ONLY);
+    await expect(page.getByText(KEYS_ONLY)).toBeVisible();
+    expect(await seriousViolations(page)).toEqual([]);
+    await page.getByRole('button', { name: "Game's own keys" }).click();
+    await expect(drawer(page)).toBeVisible();
     await applyInDrawer(page).click();
-    await expect(drawer(page).getByLabel('Result')).toContainText('Both units now run the layout.');
-    expect(await counted()).toEqual({ clicks: 6, drags: 0 });
+    await expect(drawer(page).getByLabel('Result')).toContainText(
+      'Everspace 2 already has these controls.',
+    );
+    expect(await counted()).toEqual({ clicks: 3, drags: 0 });
     // Saved by making the scheme, a moment later as every edit is, with the rule kept in it.
     await expect
       .poll(async () => {
@@ -347,6 +337,7 @@ test.describe('Everspace 2 typed in by hand, then read from its file', () => {
     );
     await found.getByRole('button', { name: 'Save these changes' }).click();
     await expect(found).toHaveCount(0);
+    // Yours is the file's action now, under its id, so Apply writes it into the file.
     await expect
       .poll(async () => {
         const saved = JSON.parse(
@@ -355,12 +346,12 @@ test.describe('Everspace 2 typed in by hand, then read from its file', () => {
         const ids = (saved.actions ?? []).map((a) => a.id);
         return [
           ids.includes('boost_hold'),
-          ids.includes('Boost'),
+          saved.actions?.find((a) => a.id === 'Boost')?.name,
           ids.includes('wave'),
           ids.length > 50,
         ];
       })
-      .toEqual([true, false, true, true]);
+      .toEqual([false, 'boost [hold]', true, true]);
     // On the screen: yours, once, and no row for the file's of the same name.
     await expect(
       page.getByRole('textbox', { name: 'boost [hold], name', exact: true }),
@@ -368,6 +359,173 @@ test.describe('Everspace 2 typed in by hand, then read from its file', () => {
     await expect(
       page.getByRole('textbox', { name: 'Boost [HOLD], name', exact: true }),
     ).toHaveCount(0);
+  });
+});
+
+/** Steam lists Everspace 2, which hasn't saved an Input.ini yet: no control changed in its menu. */
+const steamOnly: Seed = {
+  files: async (dataDir) => {
+    await writeFile(
+      join(dataDir, 'steam', 'steamapps', `appmanifest_${ES2_APP_ID}.acf`),
+      `"AppState"\n{\n\t"appid"\t\t"${ES2_APP_ID}"\n\t"name"\t\t"EVERSPACE™ 2"\n\t"installdir"\t\t"EVERSPACE 2"\n}\n`,
+    );
+  },
+};
+
+test.describe('Everspace 2 typed in on the Game screen, then read from its file', () => {
+  test.use({ helmSeed: steamOnly });
+
+  test('Boost moves to Flight, where the file has it, with your key: no second Boost, and Apply writes it', async ({
+    helm,
+  }) => {
+    const { page } = helm;
+    // Its id is made from Steam's name for it (EVERSPACE™ 2): the one game saved.
+    const saved = async () => {
+      const [file] = await readdir(join(helm.dataDir, 'games')).catch(() => [] as string[]);
+      return JSON.parse(
+        file === undefined ? '{}' : await readFile(join(helm.dataDir, 'games', file), 'utf8'),
+      ) as {
+        modes?: { id: string }[];
+        actions?: { id: string; name: string; mode: string; native?: { key?: { code: string } } }[];
+        needsKeyStick?: boolean;
+      };
+    };
+    // Set up on its Steam tile: typed in by hand, Boost [HOLD] on G.
+    await page.getByRole('button', { name: 'Set up EVERSPACE™ 2' }).click();
+    await expect(page.getByRole('textbox', { name: 'Game name' })).toHaveValue('EVERSPACE™ 2');
+    const field = page.getByRole('textbox', { name: 'New action' });
+    await field.fill('Boost [HOLD]');
+    await field.press('Enter');
+    await page.keyboard.press('g');
+    await expect(page.getByRole('button', { name: 'Boost [HOLD], key: G' })).toBeVisible();
+    await expect
+      .poll(async () => (await saved()).actions?.map((a) => [a.id, a.mode]))
+      .toEqual([['boost_hold', 'default']]);
+
+    // The game saves its Input.ini (a control changed in its menu); the game is opened again.
+    const ini = iniOf(helm.dataDir);
+    await mkdir(join(ini, '..'), { recursive: true });
+    await writeFile(ini, await readFile(REFERENCE));
+    await page.getByRole('button', { name: 'Library' }).click();
+    await page.getByRole('button', { name: 'Edit actions: EVERSPACE™ 2' }).click();
+    await page.getByRole('button', { name: "Read from the game's file" }).click();
+    const found = page.getByRole('region', { name: "From the game's file" });
+    await expect(found).toContainText(
+      "Boost [HOLD] moves to Flight, where the game's file has it; your key stays.",
+    );
+    await expect(found).toContainText('The mode Default goes: nothing is left in it.');
+    await expect(found).toContainText(
+      'EVERSPACE™ 2 plays on keys: from now on its sticks must send keys.',
+    );
+    await found.getByRole('button', { name: 'Save these changes' }).click();
+    await expect(found).toHaveCount(0);
+
+    // One Boost, the file's, in Flight, on your key; no Default left.
+    await expect(
+      page.getByRole('textbox', { name: 'Boost [HOLD], name', exact: true }),
+    ).toHaveCount(1);
+    await expect
+      .poll(async () => {
+        const game = await saved();
+        return [
+          game.actions
+            ?.filter((a) => a.name === 'Boost [HOLD]')
+            .map((a) => [a.id, a.mode, a.native?.key?.code]),
+          game.modes?.some((m) => m.id === 'default'),
+          game.needsKeyStick,
+        ];
+      })
+      .toEqual([[['Boost', 'flight', 'G']], false, true]);
+
+    // A scheme from it: Xbox controller is off now, its own keys go to Apply, which writes Boost.
+    const starts = page.getByRole('group', { name: 'New scheme from' });
+    await expect(starts.getByRole('button', { name: 'Xbox controller' })).toBeDisabled();
+    await expect(
+      starts.getByRole('button', { name: 'Xbox controller' }),
+    ).toHaveAccessibleDescription(
+      'EVERSPACE™ 2 plays on keys: it stutters when a controller and keys are mixed.',
+    );
+    await starts.getByRole('button', { name: "Game's own keys" }).click();
+    await expect(drawer(page)).toBeVisible();
+    await expect(drawer(page).getByLabel('Game file')).toContainText('Input.ini');
+    await applyInDrawer(page).click();
+    await expect(drawer(page).getByLabel('Result')).toContainText('Both units now run the layout.');
+    await expect
+      .poll(async () =>
+        (await readFile(ini, 'utf8'))
+          .split('\n')
+          .find((l) => l.includes('Action=Boost,') && l.includes('GroupName="Keyboard"'))
+          ?.includes('Key1=G,'),
+      )
+      .toBe(true);
+
+    // The Editor's scheme picker says the same: Xbox controller off, with why.
+    await drawer(page).getByRole('button', { name: 'Close' }).click();
+    await schemePicker(page).click();
+    const picker = page
+      .getByRole('dialog', { name: 'Schemes' })
+      .getByRole('group', { name: 'New from' });
+    await expect(picker.getByRole('button', { name: 'Xbox controller' })).toBeDisabled();
+    await expect(
+      picker.getByRole('button', { name: 'Xbox controller' }),
+    ).toHaveAccessibleDescription(
+      'EVERSPACE™ 2 plays on keys: it stutters when a controller and keys are mixed.',
+    );
+    await expect(picker.getByRole('button', { name: "Game's own keys" })).toBeEnabled();
+    expect(await seriousViolations(page)).toEqual([]);
+  });
+});
+
+test.describe("Everspace 2 typed in on the Game screen, read when main can't save the read", () => {
+  test.use({ helmSeed: steamOnly });
+
+  test('the screen keeps the game it has and says why; a later rename saves its own ids', async ({
+    helm,
+  }) => {
+    const { page } = helm;
+    const saved = async () => {
+      const [file] = await readdir(join(helm.dataDir, 'games')).catch(() => [] as string[]);
+      return JSON.parse(
+        file === undefined ? '{}' : await readFile(join(helm.dataDir, 'games', file), 'utf8'),
+      ) as { name?: string; actions?: { id: string; mode: string }[] };
+    };
+    await page.getByRole('button', { name: 'Set up EVERSPACE™ 2' }).click();
+    const field = page.getByRole('textbox', { name: 'New action' });
+    await field.fill('Boost [HOLD]');
+    await field.press('Enter');
+    await page.keyboard.press('g');
+    await expect(page.getByRole('button', { name: 'Boost [HOLD], key: G' })).toBeVisible();
+    await expect
+      .poll(async () => (await saved()).actions?.map((a) => a.id))
+      .toEqual(['boost_hold']);
+    // The game's file appears; what the game holds was saved by a newer helmArray.
+    const ini = iniOf(helm.dataDir);
+    await mkdir(join(ini, '..'), { recursive: true });
+    await writeFile(ini, await readFile(REFERENCE));
+    await writeFile(
+      join(helm.dataDir, 'sheets.json'),
+      JSON.stringify({ schemaVersion: 999, games: [] }),
+    );
+    await page.getByRole('button', { name: 'Library' }).click();
+    await page.getByRole('button', { name: 'Edit actions: EVERSPACE™ 2' }).click();
+    await page.getByRole('button', { name: "Read from the game's file" }).click();
+    const found = page.getByRole('region', { name: "From the game's file" });
+    await found.getByRole('button', { name: 'Save these changes' }).click();
+    await expect(page.getByRole('alert', { name: "From the game's file" })).toContainText(
+      "What was read from the game's file wasn't saved, so nothing changed.",
+    );
+    // Still the game it had: Boost in Default, nothing from the file.
+    await expect(page.getByRole('button', { name: 'Boost [HOLD], key: G' })).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Flight' })).toHaveCount(0);
+    // A rename saves the game as it is here: its own ids.
+    await page.getByRole('textbox', { name: 'Game name' }).fill('Everspace 2 (mine)');
+    await page.getByRole('textbox', { name: 'Game name' }).press('Enter');
+    await expect
+      .poll(async () => {
+        const game = await saved();
+        return [game.name, game.actions?.map((a) => [a.id, a.mode])];
+      })
+      .toEqual(['Everspace 2 (mine)', [['boost_hold', 'default']]]);
   });
 });
 

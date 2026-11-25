@@ -2,6 +2,7 @@
 // it crosses IPC by structured clone. The preload exposes `HelmApi` as `window.helm`.
 
 import type {
+  ActionMove,
   Game,
   GameBinding,
   KeptSheet,
@@ -82,6 +83,11 @@ export interface LibraryEntry {
   } | null;
   /** True when some action has a key the game ships with: "Game's own keys" can be offered. */
   nativeKeys: boolean;
+  /**
+   * The game's sticks must send keys (`Game.needsKeyStick`): *Xbox controller* is shown off, with
+   * why. Absent otherwise.
+   */
+  needsKeyStick?: true;
   /** True when some action has a key or an Xbox control the game ships it on: defaults found. */
   shipsDefaults: boolean;
   /** Whether a portrait cover and a header image can be had for `coverUrl`. */
@@ -419,6 +425,13 @@ export interface HelmApi {
    */
   saveGame(game: Game): Promise<void>;
   /**
+   * Saves a read of the game's own file in which actions you typed in took the file's ids (core's
+   * `mergeHarvest`, its `moves`): the game, and everything that names an old id (its setups, the
+   * plans applied, what the game holds), at once and together. Refused, writing nothing, when the
+   * game or any of those can't be saved. With no move it is `saveGame`.
+   */
+  saveFileRead(game: Game, moves: readonly ActionMove[]): Promise<void>;
+  /**
    * Deletes a game you added, or drops your copy of a built-in one (*back to helmArray's*). Its
    * schemes are kept.
    */
@@ -453,6 +466,7 @@ export const CHANNELS = {
   previewApply: 'helm:preview-apply',
   apply: 'helm:apply',
   saveGame: 'helm:save-game',
+  saveFileRead: 'helm:save-file-read',
   deleteGame: 'helm:delete-game',
   dismissSheet: 'helm:dismiss-sheet',
   readGameFile: 'helm:read-game-file',

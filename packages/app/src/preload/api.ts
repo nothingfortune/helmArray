@@ -62,6 +62,9 @@ export function createHelmApi(bridge: IpcBridge): HelmApi {
     saveGame: async (game) => {
       await bridge.invoke(CHANNELS.saveGame, game);
     },
+    saveFileRead: async (game, moves) => {
+      await bridge.invoke(CHANNELS.saveFileRead, game, moves);
+    },
     deleteGame: async (gameId) => {
       await bridge.invoke(CHANNELS.deleteGame, gameId);
     },

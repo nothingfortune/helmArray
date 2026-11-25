@@ -10,6 +10,8 @@ import { ROLE_WORDS } from './role-words';
 import type { Preset } from '../../shared/api';
 import { CANT_PRESS, mouseSignalOf } from './capture';
 import type { FileReadView } from './file-read';
+import type { PresetChoice } from './libraryView';
+import { PresetButtons } from './PresetButtons';
 import { padWord, signalText } from './editor-view';
 import { NAME_FIELD, modeNameField } from './game-editor';
 import type { Waiting } from './game-editor';
@@ -27,11 +29,6 @@ import {
 
 /** An edit of the game, and the text field it was typed in (so typing is one step to undo). */
 export type Edit = (fn: (game: Game) => Game, field?: string | null) => void;
-
-export const PRESET_WORDS: Record<Preset, string> = {
-  xbox: 'Xbox controller',
-  keys: "Game's own keys",
-};
 
 /** The action's name as the screen says it: an action being renamed to nothing is "This action". */
 const nameOf = (action: Action) => (action.name.trim() === '' ? 'This action' : action.name);
@@ -71,7 +68,8 @@ export interface TitleBarProps {
   canRedo: boolean;
   confirming: boolean;
   busy: boolean;
-  starts: readonly Preset[];
+  /** What a new scheme can start from: the first one on is the primary button. */
+  starts: readonly PresetChoice[];
   nameRef?: RefObject<HTMLInputElement | null>;
   edit: Edit;
   onBack(): void;
@@ -194,17 +192,13 @@ export function TitleBar({
       {starts.length > 0 && (
         <div className="gm-start" role="group" aria-label="New scheme from">
           <span className="gm-start-label">New scheme from</span>
-          {starts.map((preset, i) => (
-            <button
-              key={preset}
-              type="button"
-              className={i === 0 ? 'btn primary' : 'btn'}
-              disabled={busy}
-              onClick={() => onStart(preset)}
-            >
-              {PRESET_WORDS[preset]}
-            </button>
-          ))}
+          <PresetButtons
+            choices={starts}
+            idPrefix="gm-start"
+            primary
+            busy={busy}
+            onChoose={onStart}
+          />
         </div>
       )}
     </div>

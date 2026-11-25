@@ -58,6 +58,7 @@ import {
 } from './EditorParts';
 import type { PickerActions } from './EditorParts';
 import { RecentGames } from './RecentGames';
+import { Saves } from './saves';
 import type { ApplyButton } from '../apply/applyButton';
 import './editor.css';
 
@@ -224,6 +225,9 @@ function EditorBody({
 }: BodyProps) {
   const [history, setHistory] = useState<History<Scheme>>(() => startHistory(loaded));
   const historyRef = useRef(history);
+  // What main has taken of the scheme: a refused save goes back to it (saves.ts).
+  const saves = useRef<Saves<Scheme> | null>(null);
+  saves.current ??= new Saves(loaded);
   // Where the Editor is, and what it shows there for now (reveal.ts): every move goes through
   // `navigate` or `reveal`, so what belongs to one location never outlives it.
   const [here, setPlace] = useState<EditorPlace>(() => ({
@@ -247,9 +251,22 @@ function EditorBody({
     if (after === before) return;
     historyRef.current = after;
     setHistory(after);
+    const tracked = saves.current;
+    const n = tracked?.send() ?? 0;
     window.helm.saveScheme(after.present).then(
-      () => setSaveFailed(false),
-      () => setSaveFailed(true),
+      () => {
+        tracked?.took(n, after.present);
+        setSaveFailed(false);
+      },
+      () => {
+        // Main refused it: back to the scheme main has, never keeping what it refused.
+        const back = tracked?.refused(n) ?? null;
+        if (back === null) return;
+        const restored = startHistory(back);
+        historyRef.current = restored;
+        setHistory(restored);
+        setSaveFailed(true);
+      },
     );
   }, []);
   // Every edit carries the key labels along: a label goes with its action (followLabels).
@@ -534,7 +551,7 @@ function EditorBody({
         )}
         {saveFailed && (
           <p className="notice tone-warning" role="status">
-            Your last change couldn&apos;t be saved. It is still here; try again in a moment.
+            Your last change couldn&apos;t be saved, so it was undone. Try it again in a moment.
           </p>
         )}
 

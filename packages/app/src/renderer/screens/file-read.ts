@@ -2,7 +2,16 @@
 // changes in the game's data (core's mergeHarvest), as one plain list to read before it is saved,
 // and whether there is anything to save at all. Pure.
 
-import type { Game, HarvestChange, HarvestField, PadControl, Role, Signal } from '@helmarray/core';
+import type {
+  ActionMove,
+  ActionUse,
+  Game,
+  HarvestChange,
+  HarvestField,
+  PadControl,
+  Role,
+  Signal,
+} from '@helmarray/core';
 import { mergeHarvest } from '@helmarray/core';
 import type { GameFileRead } from '../../shared/api';
 import { padWord, signalText } from './editor-view';
@@ -13,7 +22,8 @@ export type FileReadView =
   | { kind: 'failed'; message: string }
   /** Nothing to save; `lines` says what of yours stays though the file differs. */
   | { kind: 'same'; message: string; lines: string[] }
-  | { kind: 'changes'; game: Game; lines: string[] };
+  /** `moves`: the actions of yours that took the file's ids, for main to follow when it saves. */
+  | { kind: 'changes'; game: Game; lines: string[]; moves: ActionMove[] };
 
 /** How many new actions of one mode are named before the rest are counted. */
 const NAMED = 5;
@@ -82,10 +92,39 @@ function keptLine(game: Game, c: Extract<HarvestChange, { kind: 'kept' }>): stri
   }
 }
 
+/** The fields of yours a move keeps, as the line says them: the name is said by the line itself. */
+const MOVE_WORDS: Readonly<Partial<Record<HarvestField, string>>> = {
+  role: 'role',
+  key: 'key',
+  pad: 'controller button',
+};
+
+/**
+ * One line for an action of yours that moves to the mode the file has it in: "Boost moves to
+ * Flight, where the game's file has it; your key stays."
+ */
+function movedLine(after: Game, c: Extract<HarvestChange, { kind: 'same-name' }>): string {
+  const mode = valueWords(after, 'mode', c.mode);
+  const words = c.kept.flatMap((f) => {
+    const word = MOVE_WORDS[f];
+    return word === undefined ? [] : [word];
+  });
+  const parts: string[] = [];
+  if (words.length > 0) parts.push(`your ${names(words)} ${words.length === 1 ? 'stays' : 'stay'}`);
+  if (c.kept.includes('required')) {
+    const required = after.actions.find((a) => a.id === c.file)?.required === true;
+    parts.push(`it stays ${required ? 'required' : 'not required'}`);
+  }
+  const rest = parts.length === 0 ? '' : `; ${parts.join(', and ')}`;
+  return `${c.name} moves to ${mode}, where the game's file has it${rest}.`;
+}
+
 /**
  * The list, in the order a person checks it: the file's format, modes, then each action's
- * changes in the game's order, the new actions by mode, what the file no longer has, the actions
- * you typed in that the file has too, and what of yours stays. `after` is the data as it would be.
+ * changes in the game's order, whether the sticks must send keys, the new actions by mode, what the
+ * file no longer has, the actions you typed in that the file has too (in the same mode, then each
+ * one that moves to the file's mode, then each whose name the file has more than once), a mode of
+ * yours left empty, and what of yours stays. `after` is the data as it would be.
  */
 export function readLines(changes: readonly HarvestChange[], after: Game): string[] {
   const lines: string[] = [];
@@ -93,6 +132,10 @@ export function readLines(changes: readonly HarvestChange[], after: Game): strin
   const kept: string[] = [];
   const gone: string[] = [];
   const typed: string[] = [];
+  const moved: string[] = [];
+  const several: string[] = [];
+  const removed: string[] = [];
+  let keyStick = false;
   for (const c of changes) {
     switch (c.kind) {
       case 'format':
@@ -117,10 +160,25 @@ export function readLines(changes: readonly HarvestChange[], after: Game): strin
         gone.push(c.name);
         break;
       case 'same-name':
-        typed.push(c.name);
+        if (c.from === c.mode) typed.push(c.name);
+        else moved.push(movedLine(after, c));
+        break;
+      case 'same-name-several': {
+        const modes = c.modes.map((m) => valueWords(after, 'mode', m));
+        several.push(
+          `${c.name} is in the file more than once (${names(modes)}): yours stays as it is, beside the file's.`,
+        );
+        break;
+      }
+      case 'mode-removed':
+        removed.push(`The mode ${c.name} goes: nothing is left in it.`);
+        break;
+      case 'key-stick':
+        keyStick = true;
         break;
     }
   }
+  if (keyStick) lines.push(`${after.name} plays on keys: from now on its sticks must send keys.`);
   for (const [mode, list] of added) {
     const modeName = after.modes.find((m) => m.id === mode)?.name ?? mode;
     const count = list.length === 1 ? '1 new action' : `${list.length} new actions`;
@@ -137,7 +195,7 @@ export function readLines(changes: readonly HarvestChange[], after: Game): strin
         ? `${names(typed)} is in the file too: yours stays, and the file's isn't added beside it.`
         : `${names(typed)} are in the file too: yours stay, and the file's aren't added beside them.`,
     );
-  return [...lines, ...kept];
+  return [...lines, ...moved, ...several, ...removed, ...kept];
 }
 
 /** Whether two games are the same data, whatever the order of each object's keys. */
@@ -151,12 +209,19 @@ const sameData = (a: Game, b: Game): boolean => {
   return canon(a) === canon(b);
 };
 
-/** What a read of the game's file means for the game as the screen has it. */
-export function fileReadView(game: Game, read: GameFileRead): FileReadView {
+/**
+ * What a read of the game's file means for the game as the screen has it. `uses`: where the game's
+ * setups place its actions, so a mode of yours one still places something in stays.
+ */
+export function fileReadView(
+  game: Game,
+  read: GameFileRead,
+  uses: readonly ActionUse[] = [],
+): FileReadView {
   if (!read.ok) return { kind: 'failed', message: read.message };
   let merged: ReturnType<typeof mergeHarvest>;
   try {
-    merged = mergeHarvest(game, read.file, read.held);
+    merged = mergeHarvest(game, read.file, read.held, uses);
   } catch {
     // A file with nothing usable in it: the merge refuses it, so nothing can be saved from it.
     return {
@@ -179,5 +244,6 @@ export function fileReadView(game: Game, read: GameFileRead): FileReadView {
       lines.length > 0
         ? lines
         : ['Nothing you see changes: helmArray notes what the file has now.'],
+    moves: merged.moves,
   };
 }

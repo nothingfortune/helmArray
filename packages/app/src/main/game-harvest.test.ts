@@ -114,11 +114,30 @@ describe('the games helmArray reads the file of', () => {
 });
 
 describe('reading a game file', () => {
-  it("gives Everspace 2 as its Input.ini has it, under the game's own id and name", async () => {
+  it("gives Everspace 2 as its Input.ini has it, under the game's own id and name, with its head start's rule", async () => {
     expect(await harvester().read({ id: 'es2-mine', name: 'ES2', steamAppId: 1128920 })).toEqual({
       ok: true,
-      game: harvestUnrealIni(ES2_BYTES.toString('utf8'), { id: 'es2-mine', name: 'ES2' }).game,
+      game: {
+        ...harvestUnrealIni(ES2_BYTES.toString('utf8'), { id: 'es2-mine', name: 'ES2' }).game,
+        needsKeyStick: true,
+      },
     });
+  });
+
+  it('carries the sticks-send-keys rule of the game helmArray knows it by, and no rule where there is none', async () => {
+    const h = harvester();
+    const rules = await Promise.all(
+      [
+        { id: 'everspace2', name: 'Everspace 2' },
+        { id: 'typed', name: 'Everspace 2', steamAppId: 1128920 },
+        { id: 'typed', name: 'ES2', file: { format: 'unreal-ini' as const } },
+        { ...ELITE, file: { format: 'elite-binds' as const } },
+      ].map(async (g) => {
+        const read = await h.read(g);
+        return read.ok ? read.game.needsKeyStick : 'unread';
+      }),
+    );
+    expect(rules).toEqual([true, true, undefined, undefined]);
   });
 
   it("gives Elite as the player's own .binds has it", async () => {

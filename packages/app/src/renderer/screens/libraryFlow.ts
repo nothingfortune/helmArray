@@ -54,6 +54,8 @@ export function step(state: FlowState, event: FlowEvent): Step {
     }
     case 'choose': {
       if (state.busy || event.entry.gameId === null) return stay;
+      // Shown off, with why: a game whose sticks must send keys isn't started as a controller.
+      if (event.preset === 'xbox' && event.entry.needsKeyStick === true) return stay;
       return {
         state: { picking: null, busy: true, error: null },
         command: { type: 'make-and-open', gameId: event.entry.gameId, preset: event.preset },

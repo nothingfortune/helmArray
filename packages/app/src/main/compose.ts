@@ -341,6 +341,10 @@ export async function composeServices(options: ComposeOptions): Promise<Services
         // A setup of this game may resolve differently now: the pill looks again at once.
         void helm.plansChanged();
       },
+      saveFileRead: async (game, moves) => {
+        await data.saveFileRead(game, moves);
+        void helm.plansChanged();
+      },
       deleteGame: async (gameId) => {
         const game = (await data.listGames()).find((e) => e.game.id === gameId)?.game;
         await data.deleteGame(gameId);
