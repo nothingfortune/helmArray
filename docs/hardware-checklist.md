@@ -70,6 +70,8 @@ which step and what the app showed, and attach the exchange log (Settings → Ex
 ## v1 · M4 and M4.5: pick a game, play, and setups
 
 Have Helldivers 2 installed, and closed. Back up both units first (see *Before you start*).
+Close the Azeron app (step 13 leaves it open; check the tray too) and wait until both chips
+are ready and the pill no longer says *Azeron app is open* before step 14.
 
 ### J1: pick a game, pick a default, play
 
@@ -102,7 +104,7 @@ Have Helldivers 2 installed, and closed. Back up both units first (see *Before y
 21. [ ] Make a scheme for the left Azeron and the mouse (Devices, *Left + mouse*). Apply it.
         Only the left unit is written: the right unit still runs its previous layout, and the
         Library card names both ("Right unit: Helldivers 2 · …").
-22. [ ] Make a keyboard-only scheme and apply it while the Azeron app is open. helmArray
+22. [ ] Open the Azeron app. Make a keyboard-only scheme and apply it. helmArray
         doesn't ask you to close the Azeron app, and nothing is written to either unit.
 
 ### A game helmArray doesn't know
