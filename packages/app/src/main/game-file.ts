@@ -4,7 +4,9 @@
 //
 // What a write does, in order, and what it never does:
 //   1. Finds the file (the adapter's `find`, over the folders the app hands in) and reads it. A
-//      file that isn't there, can't be read, or isn't UTF-8 text is refused, in a sentence.
+//      file that isn't there is not refused: the units are written, and the game's bindings are
+//      set by hand (the bind sheet), with one sentence saying why. One that can't be read, or isn't
+//      UTF-8 text, is refused, in a sentence.
 //   2. Writes the plan's bindings into the text in memory. A file that can't take them (an action
 //      it doesn't have, a key it can't name) is refused, with the adapter's reasons. Text that
 //      comes out the same is not written at all: the game already holds the bindings.
@@ -106,6 +108,11 @@ export interface GameFilesOptions {
 export interface FileLook {
   /** `file`: helmArray writes it; `sheet`: it doesn't, and the bindings are set by hand. */
   via: 'file' | 'sheet';
+  /**
+   * Why the bindings are set by hand when helmArray would write the file but can't find it, in one
+   * sentence; null otherwise.
+   */
+  note: string | null;
   /** The file's name, once found: `Input.ini`. */
   name: string | null;
   /** The file already holds these bindings: nothing is written. */
@@ -126,6 +133,10 @@ export interface GameFileTarget {
   look(game: Game, plan: Plan): Promise<FileLook>;
   write(game: Game, plan: Plan): Promise<FileOutcome>;
 }
+
+/** Why a game's bindings are set by hand when its file isn't there: the game makes it later. */
+const missingSentence = (game: Game): string =>
+  `helmArray can't find ${game.name}'s controls file, so set these in the game's own menu (changing any control there makes the game save one).`;
 
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
@@ -151,7 +162,7 @@ function backupName(at: number, name: string, n: number): string {
 }
 
 type Prepared =
-  | { status: 'sheet' }
+  | { status: 'sheet'; note: string | null }
   | { status: 'blocked'; processNames: readonly string[]; name: string | null; problem: string }
   | {
       status: 'ready';
@@ -179,21 +190,22 @@ export function createGameFileTarget(deps: GameFileDeps): GameFileTarget {
   const prepare = async (game: Game, plan: Plan): Promise<Prepared> => {
     const format = plan.gameFile?.format;
     const kind = format === undefined ? undefined : kinds[format];
-    if (kind === undefined) return { status: 'sheet' };
+    if (kind === undefined) return { status: 'sheet', note: null };
     if (kind.processNames === null || kind.processNames.length === 0) {
       trace(`${game.id}: its file isn't written, since whether it runs can't be told`);
-      return { status: 'sheet' };
+      return { status: 'sheet', note: null };
     }
     const processNames = kind.processNames;
     const path = kind.find(deps.localAppData, deps.disk.folders);
-    const missing = `helmArray can't find ${game.name}'s controls file: change any control in the game's own menu once, then apply.`;
+    // Not a refusal: the units are written, and the game's half is set by hand.
+    const missing: Prepared = { status: 'sheet', note: missingSentence(game) };
     const blocked = (name: string | null, problem: string): Prepared => ({
       status: 'blocked',
       processNames,
       name,
       problem,
     });
-    if (path === null) return blocked(null, missing);
+    if (path === null) return missing;
     const name = baseName(path);
     let before: Uint8Array | null;
     try {
@@ -204,7 +216,7 @@ export function createGameFileTarget(deps: GameFileDeps): GameFileTarget {
         `helmArray couldn't read ${game.name}'s controls file (${clause(messageOf(error))}).`,
       );
     }
-    if (before === null) return blocked(null, missing);
+    if (before === null) return missing;
     let text: string;
     try {
       text = decode(before);
@@ -304,23 +316,30 @@ export function createGameFileTarget(deps: GameFileDeps): GameFileTarget {
 
   const look = async (game: Game, plan: Plan): Promise<FileLook> => {
     const ready = await prepare(game, plan);
-    if (ready.status === 'sheet') return { via: 'sheet', name: null, same: false, checks: [] };
+    if (ready.status === 'sheet')
+      return { via: 'sheet', note: ready.note, name: null, same: false, checks: [] };
     const check = await closed(game, ready.processNames);
     if (ready.status === 'blocked') {
       return {
         via: 'file',
+        note: null,
         name: ready.name,
         same: false,
         checks: [check, { ok: false, kind: 'game-file', text: ready.problem }],
       };
     }
-    return { via: 'file', name: ready.name, same: ready.same, checks: [check] };
+    return { via: 'file', note: null, name: ready.name, same: ready.same, checks: [check] };
   };
 
   const write = async (game: Game, plan: Plan): Promise<FileOutcome> => {
     const ready = await prepare(game, plan);
     if (ready.status === 'sheet') {
-      return { ok: false, written: false, message: `helmArray doesn't write ${game.name}'s file.` };
+      // The file gone since the drawer looked: nothing is written, and the bindings are set by hand.
+      return {
+        ok: false,
+        written: false,
+        message: ready.note ?? `helmArray doesn't write ${game.name}'s file.`,
+      };
     }
     if (ready.status === 'blocked') return { ok: false, written: false, message: ready.problem };
     const check = await closed(game, ready.processNames);

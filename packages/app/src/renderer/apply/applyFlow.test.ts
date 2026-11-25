@@ -284,6 +284,16 @@ describe('the game half of the drawer', () => {
     });
   });
 
+  it("says why the rows are set by hand when the game's file helmArray would write isn't there", () => {
+    const note = "helmArray can't find Skiff's controls file, so set these in the game's own menu.";
+    expect(gameSection({ via: 'sheet', rows: [row()], note })).toEqual({
+      title: "In the game's controls",
+      summary: '1 to set by hand',
+      note,
+      groups: [{ label: null, lines: ['Set Reload to Xbox Y'] }],
+    });
+  });
+
   it('says to take an action off what it was on when the setup puts it on nothing', () => {
     expect(gameSection({ via: 'sheet', rows: [row({ to: null })] })?.groups[0]?.lines).toEqual([
       'Take Reload off Xbox X',

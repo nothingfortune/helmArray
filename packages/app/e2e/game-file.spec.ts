@@ -137,16 +137,31 @@ test.describe("the game's file in Apply", () => {
     expect(await counted()).toEqual({ clicks: 3, drags: 0 });
   });
 
-  test("says how to make the file when the game hasn't saved one yet, and writes no unit", async ({
+  test("with no file saved by the game yet, writes the units and lists the game's bindings to set by hand, saying why", async ({
     helm,
   }) => {
     const { page } = helm;
     await rm(iniOf(helm.dataDir));
     await openEverspace2(page);
-    await expect(drawer(page).getByLabel('What is ready')).toContainText(
-      "helmArray can't find Everspace 2's controls file: change any control in the game's own menu once, then apply.",
-    );
-    await expect(applyInDrawer(page)).toBeDisabled();
-    expect((await helm.units()).map((u) => u.writesReceived)).toEqual([0, 0]);
+    await drawer(page).getByRole('button', { name: 'Cancel' }).click();
+    // Photo mode onto the button carrying Hover up: a controller binding the game doesn't ship.
+    await page
+      .locator('.ed-actions')
+      .getByRole('button', { name: /^Photo mode/ })
+      .dragTo(leftUnit(page).getByRole('button', { name: /^Hover up/ }));
+    await editorApply(page).click();
+
+    const why =
+      "helmArray can't find Everspace 2's controls file, so set these in the game's own menu (changing any control there makes the game save one).";
+    const sheet = drawer(page).getByLabel("In the game's controls");
+    await expect(sheet).toContainText(why);
+    await expect(sheet).toContainText(/Photo mode/);
+    await expect(gameFile(page)).toHaveCount(0);
+    await expect(drawer(page).getByLabel('What is ready')).not.toContainText('Everspace 2');
+    await expect(applyInDrawer(page)).toBeEnabled();
+    await applyInDrawer(page).click();
+    await expect(drawer(page).getByLabel('Result')).toContainText('Both units now run the layout.');
+    await expect(drawer(page).getByLabel("Now, in Everspace 2's controls")).toContainText(why);
+    expect((await helm.units()).every((u) => u.writesReceived > 0)).toBe(true);
   });
 });

@@ -217,19 +217,39 @@ describe('Apply on Everspace 2, when the file is not to be written', () => {
     });
   });
 
-  it('refuses when the file is missing, and says how to make it', async () => {
+  it('when the file is missing, writes the units and lists the bindings to set by hand, saying why', async () => {
     await rm(ini);
-    const { preview, result, unitReports } = await attempt();
-    const text =
-      "helmArray can't find Everspace 2's controls file: change any control in the game's own menu once, then apply.";
+    // Boost on another button: a key the game doesn't ship it on, so there is a row to set.
+    await moveBoost(world, scheme.id, 'R.index_2');
+    const { preview, result, unitReports, file } = await attempt();
+    await world.idle();
     expect({
-      check: preview.checks.find((c) => c.kind === 'game-file'),
-      result,
-      unitReports,
+      ready: preview.ready,
+      via: preview.game.via,
+      note: preview.game.note,
+      rows: preview.game.rows.some((r) => r.action === 'Boost'),
+      fileChecks: preview.checks.filter((c) => c.kind === 'game' || c.kind === 'game-file'),
+      ok: result.ok,
+      units: result.units.map((u) => u.status),
+      gameFile: result.gameFile,
+      wroteUnits: unitReports > 0,
+      file,
+      copies: await backupsOf(world),
+      // Not settled: what is left to set by hand stays on the Library's reminder.
+      reminder: world.state.sheets.some((s) => s.gameId === ES2 && s.rows.length > 0),
     }).toEqual({
-      check: { ok: false, kind: 'game-file', text },
-      result: { ok: false, message: text, units: [] },
-      unitReports: 0,
+      ready: true,
+      via: 'sheet',
+      note: "helmArray can't find Everspace 2's controls file, so set these in the game's own menu (changing any control there makes the game save one).",
+      rows: true,
+      fileChecks: [],
+      ok: true,
+      units: ['applied', 'applied'],
+      gameFile: undefined,
+      wroteUnits: true,
+      file: null,
+      copies: [],
+      reminder: true,
     });
   });
 
@@ -243,6 +263,59 @@ describe('Apply on Everspace 2, when the file is not to be written', () => {
       "helmArray couldn't read Everspace 2's controls file (EBUSY: resource busy or locked).",
       0,
     ]);
+  });
+});
+
+describe('Apply on Everspace 2, when the file goes between the drawer and the write', () => {
+  let world: World;
+  let ini: string;
+  let scheme: Scheme;
+
+  beforeAll(async () => {
+    world = await World.create();
+    await world.boot();
+    ({ ini } = await seed(world));
+    scheme = await ownKeys(world);
+  });
+
+  afterAll(async () => {
+    await world.dispose();
+  });
+
+  it('when the file goes after the drawer looked, writes the units, keeps no copy, and leaves the bindings to set by hand', async () => {
+    await moveBoost(world, scheme.id, 'R.index_2');
+    const preview = await world.helm.previewApply(scheme.id);
+    // Gone once Apply is pressed: Apply's own look still finds it, the write does not.
+    let reads = 0;
+    world.gameDisk = {
+      ...nodeGameFileDisk,
+      read: (path) =>
+        path === ini && ++reads > 1 ? Promise.resolve(null) : nodeGameFileDisk.read(path),
+    };
+    const before = unitWrites(world);
+    const result = await world.helm.apply(scheme.id, preview.fingerprint);
+    await world.idle();
+    expect({
+      via: preview.game.via,
+      units: result.units.map((u) => u.status),
+      wroteUnits: unitWrites(world) > before,
+      gameFile: result.gameFile,
+      file: (await readFile(ini)).equals(ES2_BYTES),
+      copies: await backupsOf(world),
+      reminder: world.state.sheets.some((s) => s.gameId === ES2 && s.rows.length > 0),
+    }).toEqual({
+      via: 'file',
+      units: ['applied', 'applied'],
+      wroteUnits: true,
+      gameFile: {
+        ok: false,
+        message:
+          "helmArray can't find Everspace 2's controls file, so set these in the game's own menu (changing any control there makes the game save one).",
+      },
+      file: true,
+      copies: [],
+      reminder: true,
+    });
   });
 });
 

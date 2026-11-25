@@ -127,7 +127,10 @@ export interface GameSection {
   summary: string;
   /** The game's file, by name, once found: only for the file helmArray writes. */
   file?: string;
-  /** For the file: how many bindings in each mode, and that a copy is kept; or that none change. */
+  /**
+   * For the file: how many bindings in each mode, and that a copy is kept; or that none change. For
+   * a sheet: why the rows are set by hand, when the file helmArray would write isn't there.
+   */
   note?: string;
   /** A label only when there is more than one group. */
   groups: { label: string | null; lines: string[] }[];
@@ -312,7 +315,11 @@ export function gameSection(game: ApplyGame, title?: string): GameSection | null
     title: title ?? (sheet ? "In the game's controls" : 'Game file'),
     summary: sheet ? `${n} to set by hand` : file?.same === true ? 'No change' : counted,
     ...(file === undefined || file.name === null ? {} : { file: file.name }),
-    ...(file === undefined ? {} : { note: fileNote(game) }),
+    ...(file !== undefined
+      ? { note: fileNote(game) }
+      : game.note === undefined
+        ? {}
+        : { note: game.note }),
     groups: [...groups.values()].map((g) => ({
       label: groups.size > 1 ? g.label : null,
       lines: g.lines,

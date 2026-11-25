@@ -305,7 +305,10 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
     }
     const rows = changedRows(plan, game, holds);
     const look = await fileLook(plan, game);
-    if (look === null || look.via === 'sheet') return { game: { via: 'sheet', rows }, checks: [] };
+    if (look === null || look.via === 'sheet') {
+      const note = look?.note ?? null;
+      return { game: { via: 'sheet', rows, ...(note === null ? {} : { note }) }, checks: [] };
+    }
     return {
       game: {
         via: 'file',

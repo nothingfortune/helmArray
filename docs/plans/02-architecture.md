@@ -186,7 +186,7 @@ interface Target<P> {
 | Target      | apply                                                                                  | verify                         | Refuses when                       |
 | ----------- | -------------------------------------------------------------------------------------- | ------------------------------ | ---------------------------------- |
 | Units       | write the one slot, switch to it, delete every other slot; only the units the setup uses (left only for *left Azeron + mouse*) | read every slot back           | Azeron app running; unknown unit   |
-| Game file   | back up, write the whole file: keyboard **and** controller bindings for the setup      | re-read, harvest, compare      | game running; file not found, unreadable, or can't take the bindings |
+| Game file   | back up, write the whole file: keyboard **and** controller bindings for the setup      | re-read, harvest, compare      | game running; file unreadable, or can't take the bindings (a file not found isn't a refusal: the bind sheet) |
 | Bind sheet  | nothing to write; shown and printable                                                  | —                              | —                                  |
 | Helper (v2) | load the macro program                                                                 | —                              | game not opted in                  |
 
@@ -195,9 +195,12 @@ The units' profile button is never part of any flow: the app writes, switches, a
 
 **The game file target** (M5, `app/main/game-file.ts`). Its preview is the write done in memory:
 the file found (the adapter's `find`, under `%LOCALAPPDATA%`), read as UTF-8 and given the plan's
-`gameBindings`, so a file that is missing, unreadable or can't take them (an action it doesn't
-have, a key it can't name) is a check that isn't ready, before any unit is written; text that
-comes out the same is not written at all. The game must be closed, told from the running
+`gameBindings`, so a file that is unreadable or can't take them (an action it doesn't have, a key
+it can't name) is a check that isn't ready, before any unit is written; text that comes out the
+same is not written at all. A file that isn't there (Everspace 2 saves one only once a control is
+changed in its menu) doesn't stop Apply: the units are written, and the game's half is bind sheet
+rows with one sentence saying why; the game's baseline doesn't move, so the Library's reminder
+keeps them until *Done*. The game must be closed, told from the running
 programs; a game whose programs helmArray doesn't know can't be told running, so its file is
 never written and its bindings stay on the bind sheet. A write keeps a copy of the file first in
 the data folder (`backups/<game>/`, named by when, the newest five), then reads the file back:

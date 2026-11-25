@@ -265,6 +265,11 @@ export interface ApplyGame {
    * these bindings already (nothing is written, and no row is listed).
    */
   file?: { name: string | null; same: boolean };
+  /**
+   * Why the rows are set by hand, in one sentence, when helmArray would write the game's file but
+   * can't find it: the units are still written.
+   */
+  note?: string;
 }
 
 /** What the Apply drawer shows before anything is written. */

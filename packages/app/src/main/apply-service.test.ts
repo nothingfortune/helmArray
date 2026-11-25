@@ -1243,7 +1243,13 @@ describe("Apply with the game's file written", () => {
   };
 
   const CLOSED = { ok: true, kind: 'game', text: 'Skiff is closed.' } as const;
-  const READY: FileLook = { via: 'file', name: 'Custom.4.1.binds', same: false, checks: [CLOSED] };
+  const READY: FileLook = {
+    via: 'file',
+    note: null,
+    name: 'Custom.4.1.binds',
+    same: false,
+    checks: [CLOSED],
+  };
   const WROTE: FileOutcome = { ok: true, written: true, message: 'Skiff now has the controls.' };
 
   /** A game-file target that says what it is told, and counts what it is asked. */
@@ -1300,7 +1306,7 @@ describe("Apply with the game's file written", () => {
   it('keeps the bindings on the bind sheet when the target says it does not write this file', async () => {
     r = await rig({
       scheme: writing,
-      gameFile: fileTarget({ via: 'sheet', name: null, same: false, checks: [] }),
+      gameFile: fileTarget({ via: 'sheet', note: null, name: null, same: false, checks: [] }),
     });
     const preview = await r.service.preview(writing.id);
     expect({
@@ -1313,6 +1319,32 @@ describe("Apply with the game's file written", () => {
       file: undefined,
       rows: 2,
       checks: ['azeron-app', 'unit', 'unit', 'scheme'],
+    });
+  });
+
+  it("writes the units and lists the game's bindings to set by hand, saying why, when the file isn't there", async () => {
+    const note = "helmArray can't find Skiff's controls file, so set these in the game's own menu.";
+    const target = fileTarget({ via: 'sheet', note, name: null, same: false, checks: [] });
+    const settleBaseline = settler();
+    r = await rig({ scheme: writing, gameFile: target, settleBaseline });
+    const preview = await r.service.preview(writing.id);
+    const result = await r.service.apply(writing.id, preview.fingerprint);
+    expect({
+      game: preview.game,
+      ready: preview.ready,
+      ok: result.ok,
+      units: result.units.map((u) => u.status),
+      gameFile: result.gameFile,
+      written: target.write.mock.calls.length,
+      settled: settleBaseline.mock.calls.length,
+    }).toEqual({
+      game: { via: 'sheet', rows: preview.game.rows, note },
+      ready: true,
+      ok: true,
+      units: ['applied', 'applied'],
+      gameFile: undefined,
+      written: 0,
+      settled: 0,
     });
   });
 
@@ -1477,7 +1509,7 @@ describe("Apply with the game's file written", () => {
   });
 
   it('writes nothing to the file when the target says it does not write it', async () => {
-    const target = fileTarget({ via: 'sheet', name: null, same: false, checks: [] });
+    const target = fileTarget({ via: 'sheet', note: null, name: null, same: false, checks: [] });
     r = await rig({ scheme: writing, gameFile: target });
     const result = await r.service.apply(writing.id, fp(writing));
     expect([result.ok, target.write.mock.calls.length, result.gameFile]).toEqual([
