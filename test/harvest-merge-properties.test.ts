@@ -5,12 +5,15 @@
 //   role, an action deleted, an action added by hand); a field left as the file had it is no edit;
 // - the result is a game that can be saved;
 // - reading the same file once more changes nothing.
+// And a file the adapter reads nothing usable from (empty, or only lines it ignores) is refused,
+// as a first read and into edited data: the merge never gives a game core's gameProblem refuses.
 
 import { readFileSync } from 'node:fs';
 import type { Action, Game, PadControl, Role, Signal } from '@helmarray/core';
 import { KEY_CODES, PAD_CONTROLS, ROLES, gameProblem, mergeHarvest } from '@helmarray/core';
 import { harvestEliteBinds, harvestUnrealIni } from '@helmarray/games';
 import { describe, expect, it } from 'vitest';
+import { thrown } from './thrown';
 
 const read = (name: string): string =>
   readFileSync(new URL(`../reference/game-files/${name}`, import.meta.url), 'utf8');
@@ -246,5 +249,44 @@ describe.each(FILES)('reading $name again after edits and an update', ({ harvest
       }),
     );
     expect(faults).toEqual([]);
+  });
+});
+
+/** Files the adapters read nothing usable from: nothing, or only what they ignore. */
+const UNUSABLE: { name: string; harvest: () => Game }[] = [
+  { name: 'an empty Input.ini', harvest: () => harvestUnrealIni('', META).game },
+  {
+    name: 'an Input.ini of comments and other sections',
+    harvest: () =>
+      harvestUnrealIni(
+        '; nothing\r\n[/Script/Engine.InputSettings]\r\nbAltEnterTogglesFullscreen=True\r\n[/Script/ES2.CustomPlayerInput]\r\nKeybindingsConfig=(Action=Boost)\r\n',
+        META,
+      ).game,
+  },
+  { name: 'an empty .binds', harvest: () => harvestEliteBinds('', META).game },
+  {
+    name: 'a .binds root with no controls',
+    harvest: () =>
+      harvestEliteBinds(
+        '<?xml version="1.0" encoding="UTF-8" ?>\r\n<Root PresetName="Custom">\r\n</Root>\r\n',
+        META,
+      ).game,
+  },
+];
+
+describe.each(UNUSABLE)('reading $name', ({ harvest }) => {
+  it(`is refused, never a game that can't be saved: first, and into edited data, over ${RUNS} runs`, () => {
+    const file = harvest();
+    const messages = [
+      thrown<Error>(() => mergeHarvest(null, file)).message,
+      ...Array.from({ length: RUNS }, (_, run) => {
+        const real = (FILES[run % FILES.length] as (typeof FILES)[number]).harvest();
+        const { game: mine } = edit(mergeHarvest(null, real).game, random(0x0dd + run));
+        return thrown<Error>(() => mergeHarvest(mine, file)).message;
+      }),
+    ];
+    expect([...new Set(messages)]).toEqual([
+      "There is nothing in the game's file helmArray can use.",
+    ]);
   });
 });

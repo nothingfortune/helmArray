@@ -127,6 +127,7 @@ describe('reading a game file', () => {
     await rm(iniPath);
     expect(await harvester().read(ES2)).toEqual({
       ok: false,
+      reason: 'missing',
       message:
         "helmArray can't find Everspace 2's controls file: change any control in the game's own menu once, then read it again.",
     });
@@ -150,6 +151,7 @@ describe('reading a game file', () => {
     };
     expect(await harvester({ disk }).read(ES2)).toEqual({
       ok: false,
+      reason: 'unreadable',
       message:
         "helmArray couldn't read Everspace 2's controls file (EBUSY: resource busy or locked).",
     });
@@ -159,6 +161,7 @@ describe('reading a game file', () => {
     await writeFile(iniPath, Buffer.from([0xff, 0xfe, 0x00, 0xd8]));
     expect(await harvester().read(ES2)).toEqual({
       ok: false,
+      reason: 'unreadable',
       message: "Everspace 2's controls file isn't text helmArray can read.",
     });
   });
@@ -175,7 +178,11 @@ describe('reading a game file', () => {
       },
     };
     expect({ read: await harvester({ kinds }).read(ES2), lines }).toEqual({
-      read: { ok: false, message: "Everspace 2's controls file isn't one helmArray can read." },
+      read: {
+        ok: false,
+        reason: 'unreadable',
+        message: "Everspace 2's controls file isn't one helmArray can read.",
+      },
       lines: [`everspace2: couldn't read ${iniPath}: no section`],
     });
   });
@@ -188,6 +195,7 @@ describe('reading a game file', () => {
   it('says it reads no file for a game it has no format for', async () => {
     expect(await harvester().read({ id: 'skiff', name: 'Skiff' })).toEqual({
       ok: false,
+      reason: 'unreadable',
       message: "helmArray can't read Skiff's controls file.",
     });
   });
@@ -195,6 +203,7 @@ describe('reading a game file', () => {
   it('says it reads no file for a format it is not given', async () => {
     expect(await harvester({ kinds: {} }).read(ES2)).toEqual({
       ok: false,
+      reason: 'unreadable',
       message: "helmArray can't read Everspace 2's controls file.",
     });
   });
@@ -208,14 +217,17 @@ describe('reading a game file', () => {
 describe('the games found by their file', () => {
   it('are each game whose file is there, as a first read leaves it, with its Steam id', async () => {
     const found = await harvester().found([]);
-    expect(found).toEqual([
-      { ...mergeHarvest(null, ES2_HARVEST).game, steamAppId: 1128920 },
-      { ...mergeHarvest(null, ELITE_HARVEST).game, steamAppId: 359320 },
-    ]);
+    expect(found).toEqual({
+      games: [
+        { ...mergeHarvest(null, ES2_HARVEST).game, steamAppId: 1128920 },
+        { ...mergeHarvest(null, ELITE_HARVEST).game, steamAppId: 359320 },
+      ],
+      unreadable: [],
+    });
   });
 
   it('are games that can be saved, with every action and a default key to start from', async () => {
-    const found = await harvester().found([]);
+    const { games: found } = await harvester().found([]);
     expect(
       found.map((g) => [
         gameProblem(g),
@@ -234,15 +246,137 @@ describe('the games found by their file', () => {
       { id: 'everspace2' },
       { id: 'my-elite', steamAppId: 359320 },
     ]);
-    expect(found).toEqual([]);
+    expect(found).toEqual({ games: [], unreadable: [] });
   });
 
   it("leave out a game whose file isn't there", async () => {
     await rm(iniPath);
-    expect((await harvester().found([])).map((g) => g.id)).toEqual(['elite-dangerous']);
+    expect((await harvester().found([])).games.map((g) => g.id)).toEqual(['elite-dangerous']);
   });
 
   it('look in nothing but the folders given', async () => {
-    expect(await harvester({ localAppData: [join(root, 'elsewhere')] }).found([])).toEqual([]);
+    expect(await harvester({ localAppData: [join(root, 'elsewhere')] }).found([])).toEqual({
+      games: [],
+      unreadable: [],
+    });
+  });
+});
+
+describe('a file with nothing helmArray can read', () => {
+  const NOTHING_ES2 = "Everspace 2's controls file has nothing helmArray can read.";
+  const NOTHING_ELITE = "Elite Dangerous's controls file has nothing helmArray can read.";
+  const binds = () => join(bindsDir, 'Custom.4.1.binds');
+
+  it.each([
+    ['empty', ''],
+    ['blank lines only', '\r\n\r\n   \r\n'],
+    ['comments only', '; Everspace 2 input\r\n; nothing here\r\n'],
+    ['its section with no binding lines', '[/Script/ES2.CustomPlayerInput]\r\n\r\n'],
+    [
+      'lines the adapter ignores',
+      '[/Script/Engine.InputSettings]\r\nbAltEnterTogglesFullscreen=True\r\n[/Script/ES2.CustomPlayerInput]\r\nKeybindingsConfig=(Action=Boost)\r\n',
+    ],
+  ])('is no read of Everspace 2 when the file is %s', async (_what, text) => {
+    await writeFile(iniPath, text);
+    expect(await harvester().read(ES2)).toEqual({
+      ok: false,
+      reason: 'unreadable',
+      message: NOTHING_ES2,
+    });
+  });
+
+  it.each([
+    ['empty', ''],
+    [
+      'a root with no controls',
+      '<?xml version="1.0" encoding="UTF-8" ?>\r\n<Root PresetName="Custom" MajorVersion="4" MinorVersion="1">\r\n</Root>\r\n',
+    ],
+  ])('is no read of Elite when the file is %s', async (_what, text) => {
+    await writeFile(binds(), text);
+    expect(await harvester().read(ELITE)).toEqual({
+      ok: false,
+      reason: 'unreadable',
+      message: NOTHING_ELITE,
+    });
+  });
+
+  it('is no read when the adapter gives a game core refuses: actions in no mode it has', async () => {
+    const kinds = {
+      'unreal-ini': {
+        find: () => iniPath,
+        harvest: () => ({
+          game: {
+            id: 'everspace2',
+            name: 'Everspace 2',
+            modes: [],
+            actions: [{ id: 'Boost', name: 'Boost', mode: 'flight', required: false }],
+          },
+          kept: [],
+        }),
+        write: (t: string) => t,
+        processNames: null,
+      },
+    };
+    expect({ read: await harvester({ kinds }).read(ES2), lines }).toEqual({
+      read: { ok: false, reason: 'unreadable', message: NOTHING_ES2 },
+      lines: [
+        `everspace2: ${iniPath} has nothing helmArray can use: the game needs at least one mode.`,
+      ],
+    });
+  });
+
+  it('is no read of a file whose modes are there but no action', async () => {
+    const kinds = {
+      'unreal-ini': {
+        find: () => iniPath,
+        harvest: () => ({
+          game: {
+            id: 'everspace2',
+            name: 'Everspace 2',
+            modes: [{ id: 'flight', name: 'Flight' }],
+            actions: [],
+          },
+          kept: [],
+        }),
+        write: (t: string) => t,
+        processNames: null,
+      },
+    };
+    expect(await harvester({ kinds }).read(ES2)).toEqual({
+      ok: false,
+      reason: 'unreadable',
+      message: NOTHING_ES2,
+    });
+  });
+
+  it('says a missing file is missing, not unreadable', async () => {
+    await rm(iniPath);
+    expect((await harvester().read(ES2)) as { reason?: string }).toMatchObject({
+      reason: 'missing',
+    });
+  });
+
+  it('leaves the game out of those found, and says which Steam game had a file it could not read', async () => {
+    await writeFile(iniPath, '');
+    const found = await harvester().found([]);
+    expect({ games: found.games.map((g) => g.id), unreadable: found.unreadable }).toEqual({
+      games: ['elite-dangerous'],
+      unreadable: [{ steamAppId: 1128920, message: NOTHING_ES2 }],
+    });
+  });
+
+  it('says nothing of a game whose file is not there: it is not found, and that is all', async () => {
+    await rm(iniPath);
+    expect((await harvester().found([])).unreadable).toEqual([]);
+  });
+
+  it('says nothing of a game the app has data for already, whatever its file holds', async () => {
+    await writeFile(iniPath, '');
+    expect((await harvester().found([{ id: 'everspace2' }])).unreadable).toEqual([]);
+  });
+
+  it('never reports a game core refuses, for any file found', async () => {
+    const found = await harvester().found([]);
+    expect(found.games.map((g) => gameProblem(g))).toEqual([null, null]);
   });
 });

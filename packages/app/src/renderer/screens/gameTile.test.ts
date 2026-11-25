@@ -43,6 +43,13 @@ describe('gameTarget', () => {
     });
   });
 
+  it("carries the sentence saying why the game's own file couldn't be used", () => {
+    const note = "Everspace 2's controls file has nothing helmArray can read.";
+    expect(
+      gameTarget(entry({ gameId: null, name: 'Everspace 2', appId: '1128920', fileNote: note })),
+    ).toEqual({ kind: 'new', name: 'Everspace 2', steamAppId: 1128920, note });
+  });
+
   it('opens the game helmArray knows', () => {
     expect(gameTarget(entry({ gameId: 'helldivers2' }))).toEqual({
       kind: 'edit',

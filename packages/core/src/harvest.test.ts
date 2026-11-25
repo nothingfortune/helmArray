@@ -464,3 +464,37 @@ describe("gameProblem: what was last read from the game's file", () => {
     );
   });
 });
+
+describe('mergeHarvest: a file with nothing usable in it', () => {
+  const empty: Game = {
+    id: 'es2',
+    name: 'Everspace 2',
+    modes: [],
+    actions: [],
+    file: { format: 'unreal-ini' },
+  };
+  const noModes: Game = { ...empty, actions: [act({ id: 'Boost' })] };
+  const noActions: Game = { ...empty, modes: [{ id: 'flight', name: 'Flight' }] };
+  const REFUSED = "There is nothing in the game's file helmArray can use.";
+
+  it.each([
+    ['no modes and no actions', empty],
+    ['actions in no mode it has', noModes],
+    ['modes and no action', noActions],
+  ])('is refused, as a first read and into data you have, for a file with %s', (_what, file) => {
+    expect([
+      thrown(() => mergeHarvest(null, file)),
+      thrown(() => mergeHarvest(first, file)),
+    ]).toEqual([REFUSED, REFUSED]);
+  });
+});
+
+/** The message of what `fn` throws, or null when it throws nothing. */
+function thrown(fn: () => unknown): string | null {
+  try {
+    fn();
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+  return null;
+}

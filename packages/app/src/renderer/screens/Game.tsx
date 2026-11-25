@@ -263,6 +263,8 @@ function GameBody({
             : null,
           state.saveError,
           state.notice,
+          // Why the game's own file couldn't be read: said until the game is saved by hand.
+          state.saved ? null : (loaded.note ?? null),
         ]}
       />
       <ModeTabs

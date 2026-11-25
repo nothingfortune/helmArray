@@ -44,7 +44,9 @@ test.describe("Everspace 2's file as the head start", () => {
   }) => {
     const { page } = helm;
     const counted = await countInput(page);
-    await expect(page.getByRole('button', { name: 'Set up Everspace 2' })).toHaveCount(0);
+    await expect(
+      page.getByRole('button', { name: /^Set up (EVERSPACE™ 2|Everspace 2)$/ }),
+    ).toHaveCount(0);
     await tile(page).click();
     await page.getByRole('button', { name: 'Xbox controller' }).click();
     await expect(drawer(page)).toBeVisible();
@@ -181,4 +183,59 @@ test.describe("Elite's file as the head start", () => {
       expect(await counted()).toEqual({ clicks: 3, drags: 0 });
     });
   }
+});
+
+const NOTHING = "Everspace 2's controls file has nothing helmArray can read.";
+const HARVEST = new URL('../../games/src/__fixtures__/everspace2.harvest.json', import.meta.url);
+
+/** Steam lists Everspace 2, whose Input.ini holds comments and another section only. */
+const unreadable: Seed = {
+  files: async (dataDir) => {
+    await everspace2.files(dataDir);
+    await writeFile(
+      iniOf(dataDir),
+      '; nothing\r\n[/Script/Engine.InputSettings]\r\nbAltEnterTogglesFullscreen=True\r\n',
+    );
+  },
+};
+
+test.describe('Everspace 2 with a file helmArray can read nothing from', () => {
+  test.use({ helmSeed: unreadable });
+
+  test('its tile says Set up, and the Game screen says why in one sentence', async ({ helm }) => {
+    const { page } = helm;
+    // Steam's own name, as for any game helmArray has no data for.
+    await page.getByRole('button', { name: 'Set up EVERSPACE™ 2' }).click();
+    await expect(page.getByRole('textbox', { name: 'Game name' })).toHaveValue('EVERSPACE™ 2');
+    await expect(page.getByText(NOTHING)).toBeVisible();
+  });
+});
+
+/** Everspace 2's data in the app, and then its file emptied by the game. */
+const emptiedLater: Seed = {
+  files: async (dataDir) => {
+    await everspace2.files(dataDir);
+    const { game } = JSON.parse(await readFile(HARVEST, 'utf8')) as { game: object };
+    await mkdir(join(dataDir, 'games'), { recursive: true });
+    await writeFile(
+      join(dataDir, 'games', 'everspace2.json'),
+      JSON.stringify({ schemaVersion: 1, ...game, steamAppId: 1128920 }),
+    );
+    await writeFile(iniOf(dataDir), '');
+  },
+};
+
+test.describe('Everspace 2 read again once its file is empty', () => {
+  test.use({ helmSeed: emptiedLater });
+
+  test('says the file has nothing it can read, and saves nothing', async ({ helm }) => {
+    const { page } = helm;
+    const before = await readFile(savedGame(helm.dataDir), 'utf8');
+    await page.getByRole('button', { name: 'Edit actions: Everspace 2' }).click();
+    await page.getByRole('button', { name: "Read from the game's file" }).click();
+    const found = page.getByRole('alert', { name: "From the game's file" });
+    await expect(found).toContainText(NOTHING);
+    await expect(found.getByRole('button', { name: 'Save these changes' })).toHaveCount(0);
+    expect(await readFile(savedGame(helm.dataDir), 'utf8')).toBe(before);
+  });
 });

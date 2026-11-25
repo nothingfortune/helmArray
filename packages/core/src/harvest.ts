@@ -17,10 +17,14 @@
 //   - In the data and not in the file: kept as it is, added by hand or gone from the file.
 // `file.format` is the file's. Everything else of the game (its id, Steam id, retired ids, whether
 // the sticks must send keys) is the data's.
+// A file with nothing usable in it (no action, or a game core's gameProblem refuses: an empty
+// file, or one of lines the adapter ignores) is refused, so a merge never gives a game that can't
+// be saved.
 
 import type { Action, ActionId, Game, Mode, ModeId, PadControl, Signal } from './model';
 import type { GameBinding } from './plan';
 import { clone } from './clone';
+import { gameProblem } from './game-data';
 
 /** The parts of an action the file and the person can both set. */
 export type HarvestField = 'name' | 'mode' | 'role' | 'required' | 'key' | 'pad';
@@ -138,13 +142,16 @@ function setAside(
  * The game's data with what its file holds merged in. `mine` is the data as it is (null: there is
  * none yet, and the file's is taken whole); `file` is the adapter's harvest; `held` is what the
  * game holds from helmArray's last apply, when it holds anything. The result keeps `fromFile` up
- * to date, and lists every change (`changes` empty: nothing to save).
+ * to date, and lists every change (`changes` empty: nothing to save). Throws for a file with
+ * nothing usable in it: no action, or a game core refuses.
  */
 export function mergeHarvest(
   mine: Game | null,
   file: Game,
   held: readonly GameBinding[] | null = null,
 ): HarvestMerge {
+  if (file.actions.length === 0 || gameProblem(file) !== null)
+    throw new Error("There is nothing in the game's file helmArray can use.");
   const baseActions = new Map((mine?.fromFile?.actions ?? []).map((a) => [a.id, a]));
   const baseModes = new Map((mine?.fromFile?.modes ?? []).map((m) => [m.id, m]));
   const theirs = setAside(file.actions, held ?? [], baseActions);

@@ -25,6 +25,7 @@ import { createGameFileTarget } from './game-file';
 import type { GameFilesOptions } from './game-file';
 import { nodeGameFileDisk } from './game-file-disk';
 import { createGameHarvester } from './game-harvest';
+import type { Found } from './game-harvest';
 import type { ExchangeLog } from './exchange-log';
 import { jsonFileStorage, openHandStore } from './hands';
 import type { HandStore } from './hands';
@@ -147,23 +148,37 @@ export async function composeServices(options: ComposeOptions): Promise<Services
           ...(files.kinds === undefined ? {} : { kinds: files.kinds }),
           trace: (line) => log.write('(game file)', line),
         });
-  /** The store's games, each marked when its file can be read, then the ones found. */
-  const games = async (): Promise<GameEntry[]> => {
+  /**
+   * The store's games, each marked when its file can be read, then the ones found; and, by Steam
+   * app id, why a game's file that is there can't be used (its tile stays *Set up*).
+   */
+  const scan = async (): Promise<{ entries: GameEntry[]; notes: Map<string, string> }> => {
     const entries = await data.listGames();
-    if (harvester === undefined) return entries;
-    let found: Game[] = [];
+    const notes = new Map<string, string>();
+    if (harvester === undefined) return { entries, notes };
+    let found: Found = { games: [], unreadable: [] };
     try {
       found = await harvester.found(entries.map((e) => e.game));
     } catch (error) {
       log.write('(game file)', `couldn't look for games' files: ${String(error)}`);
     }
-    return [
-      ...entries.map((e) =>
-        harvester.formatOf(e.game) === null ? e : { ...e, readsFile: true as const },
-      ),
-      ...found.map((game): GameEntry => ({ game, builtIn: false, found: true, readsFile: true })),
-    ];
+    for (const { steamAppId, message } of found.unreadable) notes.set(String(steamAppId), message);
+    return {
+      entries: [
+        ...entries.map((e) =>
+          harvester.formatOf(e.game) === null ? e : { ...e, readsFile: true as const },
+        ),
+        ...found.games.map((game): GameEntry => ({
+          game,
+          builtIn: false,
+          found: true,
+          readsFile: true,
+        })),
+      ],
+      notes,
+    };
   };
+  const games = async (): Promise<GameEntry[]> => (await scan()).entries;
   /** A game found by its file is saved the first time it is used: a scheme is made from it. */
   const keepFound = async (gameId: string): Promise<void> => {
     if ((await data.listGames()).some((e) => e.game.id === gameId)) return;
@@ -184,6 +199,7 @@ export async function composeServices(options: ComposeOptions): Promise<Services
   const library = createLibraryService({
     readSteam: () => readSteamLibrary(options.steam),
     games,
+    fileNotes: async () => (await scan()).notes,
     listSchemes: (gameId) => data.listSchemes(gameId),
     activeSchemeOf: (gameId) => data.activeSchemeOf(gameId),
     lastApplied: (gameId) => data.lastApplied(gameId),

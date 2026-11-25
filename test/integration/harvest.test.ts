@@ -247,6 +247,7 @@ describe("reading Everspace 2's file again, from the Game screen", () => {
     await writeFile(ini, bytes);
     expect(read).toEqual({
       ok: false,
+      reason: 'missing',
       message:
         "helmArray can't find Everspace 2's controls file: change any control in the game's own menu once, then read it again.",
     });
@@ -400,5 +401,63 @@ describe('Everspace 2 with an action added by hand, applied', () => {
   it("keeps Wave, and only Wave, on the Library's reminder to set by hand", () => {
     const sheet = world.state.sheets.find((s) => s.gameId === ES2);
     expect([...new Set(sheet?.rows.map((r) => r.action))]).toEqual(['wave']);
+  });
+});
+
+describe('games whose file has nothing helmArray can read', () => {
+  let world: World;
+  let ini: string;
+  let binds: string;
+  let library: LibraryEntry[];
+  let listed: GameEntry[];
+
+  beforeAll(async () => {
+    world = await World.create({ steam: STEAM });
+    ({ ini, binds } = await placeFiles(world));
+    // Everspace 2's holds comments and another section only; Elite's a root with no controls.
+    await writeFile(
+      ini,
+      '; nothing\r\n[/Script/Engine.InputSettings]\r\nbAltEnterTogglesFullscreen=True\r\n',
+    );
+    await writeFile(
+      binds,
+      '<?xml version="1.0" encoding="UTF-8" ?>\r\n<Root PresetName="Custom">\r\n</Root>\r\n',
+    );
+    await world.boot();
+    library = await world.helm.listLibrary();
+    listed = await world.helm.listGames();
+  });
+
+  afterAll(async () => {
+    await world.dispose();
+  });
+
+  it('leaves each on the Set up flow, with one sentence saying why', () => {
+    expect(
+      ['1128920', '359320'].map((appId) => {
+        const tile = tileOf(library, appId);
+        return [tile?.gameId, tile?.fileNote];
+      }),
+    ).toEqual([
+      [null, "Everspace 2's controls file has nothing helmArray can read."],
+      [null, "Elite Dangerous's controls file has nothing helmArray can read."],
+    ]);
+  });
+
+  it('lists neither as a game found, and makes no scheme of either', async () => {
+    expect({
+      found: listed.filter((e) => e.found === true).map((e) => e.game.id),
+      saved: await savedGames(world),
+    }).toEqual({ found: [], saved: [] });
+    await expect(world.helm.createScheme(ES2, 'xbox')).rejects.toThrow('There is no such game.');
+  });
+
+  it("refuses the Game screen's read of such a file, for a game you have, saying why", async () => {
+    await world.helm.saveGame({ ...ES2_HARVEST, steamAppId: 1128920 });
+    expect(await world.helm.readGameFile(ES2)).toEqual({
+      ok: false,
+      reason: 'unreadable',
+      message: "Everspace 2's controls file has nothing helmArray can read.",
+    });
   });
 });

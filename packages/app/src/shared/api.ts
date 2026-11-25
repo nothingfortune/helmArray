@@ -39,7 +39,8 @@ export interface GameEntry {
  * (null: what it ships), so a binding helmArray put in the file isn't read as a default.
  */
 export type GameFileRead =
-  { ok: true; file: Game; held: GameBinding[] | null } | { ok: false; message: string };
+  | { ok: true; file: Game; held: GameBinding[] | null }
+  | { ok: false; message: string; reason?: 'missing' | 'unreadable' };
 
 /** One scheme of a game, as the Library lists it. */
 export interface LibrarySchemeRef {
@@ -91,6 +92,11 @@ export interface LibraryEntry {
    * added and not given any yet. Such a game is set up on the Game screen before a scheme.
    */
   actionCount: number;
+  /**
+   * For a game helmArray has a file format for and no data: why its own file, which is there,
+   * can't be used, in one sentence. Its tile is *Set up*, and the Game screen says it.
+   */
+  fileNote?: string;
 }
 
 /** The starting points a new scheme is copied from. Using one never edits it. */

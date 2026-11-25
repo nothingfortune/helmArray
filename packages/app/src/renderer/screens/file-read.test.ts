@@ -229,6 +229,16 @@ describe('what the Game screen shows of a read', () => {
     });
   });
 
+  it.each([
+    ['nothing in it', { ...FILE, modes: [], actions: [] }],
+    ['actions in no mode it has', { ...FILE, modes: [] }],
+  ])('says the file had nothing helmArray could read, for a read with %s', (_what, file) => {
+    expect(fileReadView(FIRST, { ok: true, file, held: null })).toEqual({
+      kind: 'failed',
+      message: "Everspace 2's controls file has nothing helmArray can read.",
+    });
+  });
+
   it('has nothing to save when the file has nothing new', () => {
     expect(fileReadView(FIRST, { ok: true, file: FILE, held: null })).toEqual({
       kind: 'same',

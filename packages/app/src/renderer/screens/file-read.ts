@@ -143,7 +143,16 @@ const sameData = (a: Game, b: Game): boolean => {
 /** What a read of the game's file means for the game as the screen has it. */
 export function fileReadView(game: Game, read: GameFileRead): FileReadView {
   if (!read.ok) return { kind: 'failed', message: read.message };
-  const merged = mergeHarvest(game, read.file, read.held);
+  let merged: ReturnType<typeof mergeHarvest>;
+  try {
+    merged = mergeHarvest(game, read.file, read.held);
+  } catch {
+    // A file with nothing usable in it: the merge refuses it, so nothing can be saved from it.
+    return {
+      kind: 'failed',
+      message: `${game.name}'s controls file has nothing helmArray can read.`,
+    };
+  }
   const lines = readLines(merged.changes, merged.game);
   if (sameData(merged.game, game))
     return {

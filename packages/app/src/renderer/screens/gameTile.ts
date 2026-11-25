@@ -16,7 +16,8 @@ export const needsSetUp = (entry: LibraryEntry): boolean =>
 export function gameTarget(entry: LibraryEntry): GameTarget {
   if (entry.gameId !== null) return { kind: 'edit', gameId: entry.gameId };
   const appId = Number(entry.appId);
+  const note = entry.fileNote === undefined ? {} : { note: entry.fileNote };
   return Number.isSafeInteger(appId) && appId > 0
-    ? { kind: 'new', name: entry.name, steamAppId: appId }
-    : { kind: 'new', name: entry.name };
+    ? { kind: 'new', name: entry.name, steamAppId: appId, ...note }
+    : { kind: 'new', name: entry.name, ...note };
 }

@@ -194,6 +194,12 @@ name), with what the file has now, what it had at the last read, and what the da
 - `file.format` is the file's; the game's name, Steam id, retired ids and *the sticks must send
   keys* are the data's.
 
+A file with nothing a game can be made of (empty, or only lines the adapter ignores: no action,
+or a game core's `gameProblem` refuses) is never a read: not a game found from its tile (the
+tile stays *Set up*, and the Game screen says in one sentence that the file has nothing
+helmArray can read), not a re-read, and `mergeHarvest` refuses it, so no merge gives a game that
+can't be saved.
+
 A re-read is shown before it is saved: one list of what changes (and what of yours stays though
 the file differs), and one button. The first read of a game has nothing of yours to lose and
 saves at once.

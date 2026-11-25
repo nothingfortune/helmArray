@@ -57,6 +57,8 @@ export interface Loaded {
   found?: boolean;
   /** helmArray can read the game's own file into it (*Read from the game's file*). */
   readsFile?: boolean;
+  /** Why the game's own file couldn't be used, for a new game set up from its tile. */
+  note?: string;
   /** The other games' ids, which a new game's id must not be. */
   taken?: readonly string[];
   /** The ids the game's saved schemes name: never given to a new mode or action. */

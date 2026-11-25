@@ -404,6 +404,11 @@ describe('loadedOf', () => {
     expect(loadedOf({ kind: 'edit', gameId: 'gone' }, entries)).toBeNull();
   });
 
+  it("says, for a new game, why its own file couldn't be used", () => {
+    const note = "Everspace 2's controls file has nothing helmArray can read.";
+    expect(loadedOf({ kind: 'new', name: 'Everspace 2', note }, entries)?.note).toBe(note);
+  });
+
   it('makes a new game, not saved yet, with an id no game has', () => {
     expect(loadedOf({ kind: 'new', name: 'Rover', steamAppId: 7 }, entries)).toEqual({
       game: {
