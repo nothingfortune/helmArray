@@ -26,12 +26,14 @@ import {
   own,
   padSignalOf,
   setupOf,
+  PAD_CONTROLS,
   stickForOutput,
+  stickKeysOf,
   withOwn,
   xboxControllerPreset,
 } from '@helmarray/core';
 import type { Slot } from './editor-model';
-import { assign, clear, isStick, setLatch, shownAction } from './editor-model';
+import { assign, clear, isStick, setLatch, setPadControl, shownAction } from './editor-model';
 
 export interface Fix {
   /** The button's words. */
@@ -125,24 +127,81 @@ function emptyPlaces(scheme: Scheme, game: Game, mode: ModeId, action: ActionId)
   );
 }
 
-/**
- * Puts an action on the first empty button that can send it (`placesFor`), on its tap: the
- * button and the scheme it makes, or undefined when none can. With controller output a button
- * that would be left sending no Xbox control (every one taken) can't, and the next is tried.
+/*
+ * A KEPT LEDGER KEY. An emptied button keeps the key it was given ("a key once given never moves",
+ * 02-architecture.md: the ledger is the resolver's, and the editor never touches it). So putting
+ * an action there sends that old key, which may clash (W, which the stick sends for Move forward).
+ * The fix doesn't drop the key to make room: such a button is only a worse place, and the gate
+ * passes on to the next place that settles.
  */
+
+/** The actions the mode shows on some control. */
+const shownIn = (scheme: Scheme, mode: ModeId): Set<ActionId> => {
+  const controls = new Set([
+    ...Object.keys(own(scheme.map, mode) ?? {}),
+    ...Object.keys(scheme.padMap),
+  ]);
+  return new Set(
+    [...controls].flatMap((c) => {
+      const id = shownAction(scheme, mode, c)?.id;
+      return id === undefined ? [] : [id];
+    }),
+  );
+};
+
+/**
+ * Every place an action could be put, in order of preference (`placesFor`), as the scheme each
+ * makes and the control it went on: on the tap of an empty control, with the Xbox control THE PAD
+ * RULE gives a unit's button; then, with controller output and `signals`, each unit button with
+ * each other Xbox control it may send. A place that leaves it not shown there, leaves a unit button
+ * sending nothing, or takes another action off the controls it was on (an Xbox control already
+ * doing something) isn't one: putting an action on never undoes another.
+ */
+export function* placesTried(
+  scheme: Scheme,
+  game: Game,
+  mode: ModeId,
+  action: ActionId,
+  signals = true,
+): Generator<{ control: ControlId; scheme: Scheme }> {
+  const empty = emptyPlaces(scheme, game, mode, action);
+  const before = shownIn(scheme, mode);
+  const works = (next: Scheme, control: ControlId) => {
+    if (shownAction(next, mode, control)?.id !== action) return false;
+    if (isUnit(control) && next.output === 'pad' && padSignalOf(next, control) === undefined)
+      return false;
+    const after = shownIn(next, mode);
+    return [...before].every((id) => after.has(id));
+  };
+  const placed = new Map<ControlId, Scheme>();
+  for (const control of empty) {
+    const next = assign(scheme, { mode, control, press: 'tap' }, action, game);
+    placed.set(control, next);
+    if (works(next, control)) yield { control, scheme: next };
+  }
+  if (scheme.output !== 'pad' || !signals) return;
+  for (const control of empty) {
+    const next = placed.get(control);
+    if (next === undefined || !isUnit(control)) continue;
+    for (const pad of PAD_CONTROLS) {
+      if (padSignalOf(next, control) === pad) continue;
+      const other = setPadControl(next, control, pad, game);
+      if (other !== next && works(other, control)) yield { control, scheme: other };
+    }
+  }
+}
+
+const isUnit = (control: ControlId): boolean =>
+  control.startsWith('L.') || control.startsWith('R.');
+
+/** Puts an action on the first place `placesTried` gives, or undefined when there is none. */
 export function putOnButton(
   scheme: Scheme,
   game: Game,
   mode: ModeId,
   action: ActionId,
 ): { control: ControlId; scheme: Scheme } | undefined {
-  for (const control of emptyPlaces(scheme, game, mode, action)) {
-    const next = assign(scheme, { mode, control, press: 'tap' }, action, game);
-    const unit = control.startsWith('L.') || control.startsWith('R.');
-    if (shownAction(next, mode, control)?.id !== action) continue;
-    if (unit && next.output === 'pad' && padSignalOf(next, control) === undefined) continue;
-    return { control, scheme: next };
-  }
+  for (const tried of placesTried(scheme, game, mode, action)) return tried;
   return undefined;
 }
 
@@ -161,37 +220,69 @@ function withStick(scheme: Scheme, control: ControlId, stick: StickBehaviour): S
   };
 }
 
-/** What a stick becomes for the Azerons' output, and the button's words for it. */
-function stickCandidate(
-  scheme: Scheme,
-  game: Game,
-  control: ControlId,
-  output: Scheme['output'],
-): FixCandidate | undefined {
+/**
+ * What a stick may become, in order of preference: first what the Azerons' output makes it
+ * (`stickForOutput`: the game's movement keys, else the mouse, with keys; its hand's Xbox stick with
+ * a controller), then every other: the movement keys, the mouse, its hand's Xbox stick, the other
+ * hand's. Each with the button's words. Tuning is kept.
+ */
+function stickTries(scheme: Scheme, game: Game, control: ControlId, only?: 'keys'): FixTry[] {
   const hand = handOf(control);
-  if (hand === undefined) return undefined;
-  const next = stickForOutput(hand, own(scheme.behaviour, control)?.stick, output, game);
-  const label =
-    next.mode === 'keys'
-      ? 'Give it the movement keys'
-      : next.mode === 'mouse'
-        ? 'Use it as the mouse'
-        : 'Use as controller stick';
-  return { label, run: (s) => changed(s, withStick(s, control, next)), cannot: BY_HAND };
+  if (hand === undefined) return [];
+  const before = own(scheme.behaviour, control)?.stick;
+  const tuning: Partial<StickBehaviour> = { ...before };
+  delete tuning.mode;
+  delete tuning.directions;
+  const keys = stickKeysOf(game, hand);
+  const options: [StickBehaviour, string][] = [
+    [stickForOutput(hand, before, scheme.output, game), ''],
+    ...(Object.keys(keys).length > 0
+      ? [[{ ...tuning, mode: 'keys', directions: keys }, ''] as [StickBehaviour, string]]
+      : []),
+    [{ ...tuning, mode: 'mouse' }, ''],
+    [{ ...tuning, mode: hand === 'left' ? 'pad-left' : 'pad-right' }, ''],
+    [
+      { ...tuning, mode: hand === 'left' ? 'pad-right' : 'pad-left' },
+      `Use as the ${hand === 'left' ? 'right' : 'left'} controller stick`,
+    ],
+  ];
+  const seen = new Set<string>();
+  const out: FixTry[] = [];
+  for (const [stick, words] of options) {
+    if (only === 'keys' && stick.mode !== 'keys') continue;
+    const id = JSON.stringify(stick);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const label =
+      words !== ''
+        ? words
+        : stick.mode === 'keys'
+          ? 'Give it the movement keys'
+          : stick.mode === 'mouse'
+            ? 'Use it as the mouse'
+            : 'Use as controller stick';
+    out.push({ label, scheme: withStick(scheme, control, stick) });
+  }
+  return out;
 }
 
 // ---- The fix for each finding: one shape, then one gate ----
 
+/** One way a fix may go: the scheme it makes, its button's words, and the control it put on. */
+export interface FixTry {
+  scheme: Scheme;
+  label: string;
+  select?: ControlId;
+}
+
 /**
- * A fix, before the gate: its words, and a pure run that gives the scheme it makes, or null when
- * it can't act (nothing to change, no button that can send it). `cannot` is what the finding says
- * when it is not offered.
+ * A fix, before the gate: the ways it may go on a scheme, in order of preference (one for a fix
+ * with no choice; none when it can't act at all), and what the finding says when none settles.
  */
 export interface FixCandidate {
-  label: string;
-  run: (scheme: Scheme) => Scheme | null;
-  select?: (scheme: Scheme) => ControlId | undefined;
-  cannot: string;
+  tries: (scheme: Scheme) => Iterable<FixTry>;
+  /** Why none settles, worked out only when none does. */
+  cannot: (scheme: Scheme) => string;
 }
 
 /** The rules with a fix (`fixCandidate`): every other finding is the player's to settle. */
@@ -207,14 +298,20 @@ export const FIXABLE_RULES: ReadonlySet<string> = new Set([
   'sends-nothing',
 ]);
 
-/** Said when a fix ran but would not settle its finding, or would break something else. */
+/** Said when no way the fix may go settles the finding without breaking something else. */
 const BY_HAND = 'No one click fixes this; change it by hand.';
 
-/** The scheme an edit made, or null when it changed nothing: a run that can't act. */
-const changed = (before: Scheme, after: Scheme): Scheme | null => (after === before ? null : after);
+/** A fix with no choice: one way, when its edit changes anything. */
+const one = (label: string, edit: (s: Scheme) => Scheme): FixCandidate => ({
+  tries: (s) => {
+    const made = edit(s);
+    return made === s ? [] : [{ label, scheme: made }];
+  },
+  cannot: () => BY_HAND,
+});
 
 /**
- * The one edit that may clear a finding, as a candidate: undefined for a rule with none. A key
+ * The edit that may clear a finding, as a candidate: undefined for a rule with none. A key
  * collision has none: which of two actions should give way is the player's call. Nor has a mix of
  * devices (which to drop is theirs), or the resolver's own findings.
  */
@@ -228,52 +325,52 @@ export function fixCandidate(
   if (finding.rule === 'missing-required') {
     const action = finding.action;
     if (action === undefined || mode === undefined) return undefined;
-    // Every Xbox control in use: the controller's own buttons, or what an Azeron button may send.
-    const setup = setupOf(scheme.devices);
-    const pad = setup.controller || (setup.hands.length > 0 && scheme.output === 'pad');
     return {
-      label: 'Put it on a button',
-      run: (s) => putOnButton(s, game, mode, action)?.scheme ?? null,
-      select: (s) => putOnButton(s, game, mode, action)?.control,
-      cannot: pad
-        ? 'Every controller button is in use; clear one first.'
-        : 'Every button is in use; clear one first.',
+      tries: function* (s) {
+        for (const tried of placesTried(s, game, mode, action))
+          yield { label: 'Put it on a button', scheme: tried.scheme, select: tried.control };
+      },
+      cannot: (s) => {
+        // A free place it could go but that breaks something: not a full device, a clash.
+        for (const _free of placesTried(s, game, mode, action, false)) return BY_HAND;
+        const setup = setupOf(s.devices);
+        const pad = setup.controller || (setup.hands.length > 0 && s.output === 'pad');
+        return pad
+          ? 'Every controller button is in use; clear one first.'
+          : 'Every button is in use; clear one first.';
+      },
     };
   }
   if (control === undefined) return undefined;
   switch (finding.rule) {
     case 'stick-no-directions':
-      return stickCandidate(scheme, game, control, scheme.output);
+    case 'mixed-input':
+      // A stick that sends nothing, or into the other set from the buttons: it follows the buttons
+      // first, and any other way it may go after.
+      if (handOf(control) === undefined) return undefined;
+      return { tries: (s) => stickTries(s, game, control), cannot: () => BY_HAND };
     case 'stick-not-keyboard': {
       // Only keys settle it, and only keys the game has for that stick's directions.
-      const fix = stickCandidate(scheme, game, control, 'keys');
-      if (fix === undefined) return undefined;
-      return fix.label === 'Give it the movement keys'
-        ? fix
-        : {
-            ...fix,
-            run: () => null,
-            cannot: `${game.name} has no keys for this stick’s directions.`,
-          };
+      const hand = handOf(control);
+      if (hand === undefined) return undefined;
+      return {
+        tries: (s) => stickTries(s, game, control, 'keys'),
+        cannot: () =>
+          Object.keys(stickKeysOf(game, hand)).length === 0
+            ? `${game.name} has no keys for this stick’s directions.`
+            : BY_HAND,
+      };
     }
-    case 'mixed-input':
-      // A stick sending into the other set from the buttons: it follows the buttons.
-      return stickCandidate(scheme, game, control, scheme.output);
     case 'action-deleted': {
       const gone = finding.action;
       if (gone === undefined) return undefined;
-      return {
-        label: control.startsWith('key.') ? 'Take it off the key' : 'Take it off the button',
-        run: (s) => changed(s, takeOff(s, control, gone)),
-        cannot: BY_HAND,
-      };
+      return one(
+        control.startsWith('key.') ? 'Take it off the key' : 'Take it off the button',
+        (s) => takeOff(s, control, gone),
+      );
     }
     case 'hold-on-movement':
-      return {
-        label: 'Turn off hold to latch',
-        run: (s) => changed(s, setLatch(s, control, false)),
-        cannot: BY_HAND,
-      };
+      return one('Turn off hold to latch', (s) => setLatch(s, control, false));
     case 'combat-tap-delayed': {
       // The unit keeps one setting per button for every mode, so the delay reaches them all.
       const slots = game.modes.flatMap((m) =>
@@ -283,11 +380,7 @@ export function fixCandidate(
       const hasDouble = slots.some((s) => s.press === 'double');
       const what =
         hasLong && hasDouble ? 'long press and double tap' : hasLong ? 'long press' : 'double tap';
-      return {
-        label: `Remove ${what}`,
-        run: (s) => changed(s, clearAll(s, slots)),
-        cannot: BY_HAND,
-      };
+      return one(`Remove ${what}`, (s) => clearAll(s, slots));
     }
     case 'menu-with-combat': {
       if (mode === undefined) return undefined;
@@ -295,14 +388,10 @@ export function fixCandidate(
         (s) => game.actions.find((a) => a.id === s.action)?.role === 'menu',
       );
       const first = slots[0];
-      return {
-        label:
-          first === undefined
-            ? 'Take the menu action off'
-            : `Take ${nameOf(game, first.action)} off`,
-        run: (s) => changed(s, clearAll(s, slots)),
-        cannot: BY_HAND,
-      };
+      return one(
+        first === undefined ? 'Take the menu action off' : `Take ${nameOf(game, first.action)} off`,
+        (s) => clearAll(s, slots),
+      );
     }
     case 'sends-nothing': {
       if (mode === undefined) return undefined;
@@ -317,11 +406,7 @@ export function fixCandidate(
       const sendsNothing = (press: Press): boolean =>
         pin !== undefined ? pin.presses[press] === undefined : known ? press !== 'tap' : true;
       const slots = slotsOn(scheme, mode, control).filter((s) => sendsNothing(s.press));
-      return {
-        label: 'Take it off the button',
-        run: (s) => changed(s, clearAll(s, slots)),
-        cannot: BY_HAND,
-      };
+      return one('Take it off the button', (s) => clearAll(s, slots));
     }
     default:
       return undefined;
@@ -331,19 +416,43 @@ export function fixCandidate(
 /** What a finding offers: a fix that works, a sentence on why there is none, or nothing at all. */
 export type Offer = { fix: Fix } | { why: string } | null;
 
+/** The first way the fix may go that settles the finding on this scheme, or undefined. */
+function firstSettling(
+  candidate: FixCandidate,
+  finding: Finding,
+  scheme: Scheme,
+  game: Game,
+  plan: Plan,
+): FixTry | undefined {
+  for (const tried of candidate.tries(scheme)) {
+    if (tried.scheme === scheme) continue;
+    if (settles(finding, plan, resolve(tried.scheme, game, BUILT_IN_DEVICES))) return tried;
+  }
+  return undefined;
+}
+
 /**
- * THE FIX GATE. A finding offers its fix only when the fix can act, and when re-resolving what it
- * makes no longer has the finding and has no error the scheme didn't have. Otherwise it says why
- * there is none, in one sentence; a finding of a rule with no fix offers nothing.
+ * THE FIX GATE. A finding offers its fix only when one of the ways it may go, tried in order of
+ * preference, settles it: re-resolving what it makes no longer has the finding and has no error the
+ * scheme didn't have. The first that does is the fix. When none does, the finding says why, in one
+ * sentence; a finding of a rule with no fix offers nothing.
  */
 export function offerFor(finding: Finding, scheme: Scheme, game: Game, plan: Plan): Offer {
   const candidate = fixCandidate(finding, scheme, game, plan);
   if (candidate === undefined) return null;
-  const { run, label, select, cannot } = candidate;
-  const made = run(scheme);
-  if (made === null) return { why: cannot };
-  if (!settles(finding, plan, resolve(made, game, BUILT_IN_DEVICES))) return { why: BY_HAND };
-  const fix: Fix = { label, apply: (s) => run(s) ?? s, ...(select ? { select } : {}) };
+  const chosen = firstSettling(candidate, finding, scheme, game, plan);
+  if (chosen === undefined) return { why: candidate.cannot(scheme) };
+  // Applied to the scheme it was worked out on, it is that very way; to any other (an edit in
+  // between), the gate picks again there.
+  const on = (s: Scheme): FixTry | undefined =>
+    s === scheme
+      ? chosen
+      : firstSettling(candidate, finding, s, game, resolve(s, game, BUILT_IN_DEVICES));
+  const fix: Fix = {
+    label: chosen.label,
+    apply: (s) => on(s)?.scheme ?? s,
+    ...(chosen.select === undefined ? {} : { select: (s: Scheme) => on(s)?.select }),
+  };
   return { fix };
 }
 

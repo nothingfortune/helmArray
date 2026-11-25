@@ -80,9 +80,19 @@ describe('the near-full controller (Codex, #106)', () => {
     expect(offer).toEqual({ why: 'Every controller button is in use; clear one first.' });
   });
 
-  it('has the fix itself give nothing back: it can’t act', () => {
-    const candidate = fixCandidate(missing(plan, 'a16'), scheme, crowded, plan);
-    expect([candidate?.label, candidate?.run(scheme)]).toEqual(['Put it on a button', null]);
+  it('has no way of the fix that settles: each place it may go breaks something or does nothing', () => {
+    // Was: its one run gave null. Fixes now try every place in order, so the claim is that none
+    // of them settles, which is stronger.
+    const finding = missing(plan, 'a16');
+    const candidate = fixCandidate(finding, scheme, crowded, plan);
+    const settling = [...(candidate?.tries(scheme) ?? [])].filter((t) => {
+      const after = planOf(t.scheme, crowded);
+      return (
+        !after.findings.some((f) => same(f, finding)) &&
+        errorsOf(after).every((e) => errorsOf(plan).some((b) => same(b, e)))
+      );
+    });
+    expect(settling.map((t) => t.select)).toEqual([]);
   });
 
   it('offers it again once a button is cleared, and then it removes the finding', () => {
@@ -252,12 +262,12 @@ describe('the fix gate, over 400 seeded schemes', () => {
         if (fresh.length > 0) faults.push(`${where}: adds ${fresh.map((f) => f.rule).join(', ')}`);
       } else if (candidate !== undefined) {
         refused.add(finding.rule);
-        const ran = candidate.run(scheme);
-        if (ran !== null) {
-          const after = planOf(ran, game);
+        // Every way the fix may go: none settles (fixes-complete.test.ts goes further, past them).
+        for (const tried of candidate.tries(scheme)) {
+          const after = planOf(tried.scheme, game);
           const fresh = errorsOf(after).filter((e) => !errorsOf(plan).some((b) => same(b, e)));
           if (!after.findings.some((f) => same(f, finding)) && fresh.length === 0)
-            faults.push(`${where}: not offered, though it works`);
+            faults.push(`${where}: not offered, though ${tried.label} works`);
         }
       }
     }
