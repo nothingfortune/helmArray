@@ -288,7 +288,8 @@ function fileNote(game: ApplyGame): string {
 
 /** The game's half, or null when no binding changes and no file is written. */
 export function gameSection(game: ApplyGame, title?: string): GameSection | null {
-  const file = game.via === 'file' ? game.file : undefined;
+  // Main sends the file only for the file it writes.
+  const { file } = game;
   if (game.rows.length === 0 && file === undefined) return null;
   const sets = new Set(game.rows.map((r) => r.set));
   const modes = new Set(game.rows.map((r) => r.mode));
@@ -327,7 +328,7 @@ function progressWords(preview: ApplyPreview): string {
   const used = [preview.left, preview.right].filter((u) => u.used).map((u) => u.hand);
   const { game } = preview;
   const name = preview.gameName === '' ? 'the game' : preview.gameName;
-  const file = game.via === 'file' && game.file !== undefined && !game.file.same;
+  const file = game.file !== undefined && !game.file.same;
   const its = `${preview.gameName === '' ? "the game's" : `${preview.gameName}'s`} controls file`;
   if (used.length === 0) return file ? `Writing ${its}. Keep ${name} closed.` : 'Applying…';
   const units =

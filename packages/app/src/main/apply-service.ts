@@ -418,23 +418,19 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
    * moves to them; a baseline that can't be moved is the problem said.
    */
   const writeFile = async (
+    target: GameFileTarget,
     game: Game,
     plan: Plan,
   ): Promise<{ outcome: FileOutcome; problem: string | null }> => {
-    const outcome: FileOutcome = (await deps.gameFile?.write(game, plan)) ?? {
-      ok: false,
-      written: false,
-      message: `helmArray doesn't write ${game.name}'s file.`,
-    };
+    const outcome = await target.write(game, plan);
     if (!outcome.ok) return { outcome, problem: null };
     try {
       await deps.settleBaseline?.(game.id, plan.gameBindings);
     } catch (error) {
       trace(`couldn't move what ${game.id} holds: ${messageOf(error)}`);
-      const done = outcome.message.replace(/[.\s]+$/, '');
       return {
         outcome,
-        problem: `${done}, but helmArray couldn't note it (${messageOf(error)}), so it may still list them to set by hand.`,
+        problem: `${outcome.message} helmArray couldn't note it (${messageOf(error)}), so the Library may still list them to set by hand.`,
       };
     }
     return { outcome, problem: null };
@@ -506,17 +502,18 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
       // what the game holds (sheets.json), never kept from here; the game's file written moves
       // what it holds.
       const look = await fileLook(plan, game);
-      const writesFile = look?.via === 'file';
+      // The target, when it writes this game's file.
+      const target = look?.via === 'file' ? deps.gameFile : undefined;
       // The game closed and its file able to take the bindings, before anything is written.
-      const fileBlocked = writesFile ? look.checks.find((c) => !c.ok) : undefined;
+      const fileBlocked = look?.via === 'file' ? look.checks.find((c) => !c.ok) : undefined;
 
       // A setup with no Azeron writes no unit: it is remembered, and the game's half is the
       // game's file, or the player's, from the drawer.
       if (handsOf(plan).length === 0) {
         const blocked = findingChecks(plan).find((c) => !c.ok) ?? fileBlocked;
         if (blocked) return refused(blocked.text);
-        if (writesFile) {
-          const file = await writeFile(game, plan);
+        if (target !== undefined) {
+          const file = await writeFile(target, game, plan);
           const gameFile = { ok: file.outcome.ok, message: file.outcome.message };
           if (!file.outcome.ok)
             return { ok: false, message: file.outcome.message, units: [], gameFile };
@@ -594,8 +591,8 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
       // Then the game's file, once every unit holds the layout: the first failure stops Apply.
       let gameFile: ApplyResult['gameFile'];
       let fileProblem: string | null = null;
-      if (outcome.result.ok && writesFile) {
-        const file = await writeFile(game, plan);
+      if (outcome.result.ok && target !== undefined) {
+        const file = await writeFile(target, game, plan);
         gameFile = { ok: file.outcome.ok, message: file.outcome.message };
         fileProblem = file.outcome.ok ? file.problem : file.outcome.message;
       }

@@ -30,6 +30,10 @@ describe('programRunning', () => {
     },
   );
 
+  it('takes off only the .exe at the end of a name', () => {
+    expect(programRunning(['My.exes.exe'], ['My.exes'])).toBe(true);
+  });
+
   it.each([
     [['explorer.exe'], ['Game.exe']],
     [['Game Launcher.exe'], ['Game.exe']],

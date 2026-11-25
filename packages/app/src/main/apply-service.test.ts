@@ -1435,15 +1435,55 @@ describe("Apply with the game's file written", () => {
   });
 
   it("says so when the game's baseline can't be moved after the file is written", async () => {
+    const lines: string[] = [];
     r = await rig({
       scheme: writing,
       gameFile: fileTarget(),
       settleBaseline: () => Promise.reject(new Error('disk full')),
+      trace: (line) => lines.push(line),
     });
     const result = await r.service.apply(writing.id, fp(writing));
-    expect([result.ok, result.message]).toEqual([
+    expect([
+      result.ok,
+      result.message,
+      lines.includes("couldn't move what skiff holds: disk full"),
+    ]).toEqual([
       false,
-      "Skiff now has the controls, but helmArray couldn't note it (disk full), so it may still list them to set by hand.",
+      "Skiff now has the controls. helmArray couldn't note it (disk full), so the Library may still list them to set by hand.",
+      true,
+    ]);
+  });
+
+  it("says so for a setup with no Azeron too, when the game's baseline can't be moved", async () => {
+    r = await rig({
+      scheme: keyboardOnly,
+      gameFile: fileTarget(),
+      settleBaseline: () => Promise.reject(new Error('disk full')),
+    });
+    const result = await r.service.apply(keyboardOnly.id, fp(keyboardOnly));
+    expect([result.ok, result.message, r.saveApplied.mock.calls.length]).toEqual([
+      false,
+      "Skiff now has the controls. helmArray couldn't note it (disk full), so the Library may still list them to set by hand.",
+      1,
+    ]);
+  });
+
+  it("puts the file's checks first for a setup with no Azeron, before the scheme's", async () => {
+    r = await rig({ scheme: keyboardOnly, gameFile: fileTarget() });
+    expect((await r.service.preview(keyboardOnly.id)).checks.map((c) => c.text)).toEqual([
+      'Skiff is closed.',
+      'The scheme has no errors.',
+    ]);
+  });
+
+  it('writes nothing to the file when the target says it does not write it', async () => {
+    const target = fileTarget({ via: 'sheet', name: null, same: false, checks: [] });
+    r = await rig({ scheme: writing, gameFile: target });
+    const result = await r.service.apply(writing.id, fp(writing));
+    expect([result.ok, target.write.mock.calls.length, result.gameFile]).toEqual([
+      true,
+      0,
+      undefined,
     ]);
   });
 

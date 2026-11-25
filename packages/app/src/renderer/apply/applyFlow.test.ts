@@ -738,6 +738,19 @@ describe("the game's file in the drawer", () => {
     );
   });
 
+  it("names no game it doesn't know while it writes", () => {
+    const file = { via: 'file' as const, rows: [row()], file: FILE };
+    const units = reduce(ready({ gameName: '', game: file }), { type: 'apply' });
+    const none = reduce(
+      ready({ gameName: '', left: NO_UNIT, right: { ...NO_UNIT, hand: 'right' }, game: file }),
+      { type: 'apply' },
+    );
+    expect([drawerView(units).progress, drawerView(none).progress]).toEqual([
+      "Writing to your Azerons, the left one first, then the game's controls file. Keep them plugged in, and the Azeron app and the game closed.",
+      "Writing the game's controls file. Keep the game closed.",
+    ]);
+  });
+
   it('says it writes only the game file for a setup with no Azeron', () => {
     const applying = reduce(
       ready({
@@ -794,8 +807,9 @@ describe("the game's file in the drawer", () => {
     expect([
       waitingOnGame(ready({ ready: false, checks: open })),
       waitingOnGame(ready({ ready: false, checks: other })),
+      waitingOnGame(ready({ ready: false, checks: [...open, ...other] })),
       waitingOnGame(ready()),
       waitingOnGame(START),
-    ]).toEqual([true, false, false, false]);
+    ]).toEqual([true, false, true, false, false]);
   });
 });
