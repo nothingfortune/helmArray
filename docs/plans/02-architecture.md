@@ -186,12 +186,28 @@ interface Target<P> {
 | Target      | apply                                                                                  | verify                         | Refuses when                       |
 | ----------- | -------------------------------------------------------------------------------------- | ------------------------------ | ---------------------------------- |
 | Units       | write the one slot, switch to it, delete every other slot; only the units the setup uses (left only for *left Azeron + mouse*) | read every slot back           | Azeron app running; unknown unit   |
-| Game file   | back up, write the whole file: keyboard **and** controller bindings for the setup      | re-read, compare               | game running                       |
+| Game file   | back up, write the whole file: keyboard **and** controller bindings for the setup      | re-read, harvest, compare      | game running; file not found, unreadable, or can't take the bindings |
 | Bind sheet  | nothing to write; shown and printable                                                  | —                              | —                                  |
 | Helper (v2) | load the macro program                                                                 | —                              | game not opted in                  |
 
 **Apply** runs units then game file, and stops at the first failure with a plain reason.
 The units' profile button is never part of any flow: the app writes, switches, and cleans up.
+
+**The game file target** (M5, `app/main/game-file.ts`). Its preview is the write done in memory:
+the file found (the adapter's `find`, under `%LOCALAPPDATA%`), read as UTF-8 and given the plan's
+`gameBindings`, so a file that is missing, unreadable or can't take them (an action it doesn't
+have, a key it can't name) is a check that isn't ready, before any unit is written; text that
+comes out the same is not written at all. The game must be closed, told from the running
+programs; a game whose programs helmArray doesn't know can't be told running, so its file is
+never written and its bindings stay on the bind sheet. A write keeps a copy of the file first in
+the data folder (`backups/<game>/`, named by when, the newest five), then reads the file back:
+the harvest of what it holds must be the harvest of what was meant, or the copy is put back. A
+file written (or holding the bindings already) moves the game's baseline to them, so nothing is
+left to set by hand. Elite's file is only ever the player's own (`Custom.4.1.binds`, as
+`StartPreset.4.start` names it), never a preset the game ships.
+
+The presets turn `writeGameFile` on for a game that has a file format, and *game's own keys*
+puts each key it places in the ledger, so the units still send the game's own keys.
 
 ## The app (Electron main)
 

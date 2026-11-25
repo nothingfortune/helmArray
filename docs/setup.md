@@ -27,7 +27,7 @@ pin an older version of the package rather than adding an exclusion.
 | `pnpm dev`     | Starts the app with hot reload. Close the Azeron app first: helmArray waits while it runs. |
 | `pnpm check`   | The gate: typecheck, lint, format, tests with coverage, coverage drift. CI runs exactly this. |
 | `pnpm test`    | The tests on their own, without coverage.                                               |
-| `pnpm test:e2e` | Builds the app and drives it in a real window over two fake units: the M4 screens (J1, J2, the Azeron app refusal), setups (J1 and J2 as a controller, left Azeron + mouse, keyboard only, switching setups), the Editor's layout at 1440 and 1280 px wide (no window scroll, both units in view, the 10 px label floor), the bundled fonts, the keyboard and an axe scan of each. Not part of `pnpm check`. |
+| `pnpm test:e2e` | Builds the app and drives it in a real window over two fake units: the M4 screens (J1, J2, the Azeron app refusal), setups (J1 and J2 as a controller, left Azeron + mouse, keyboard only, switching setups), the game's file in Apply (Everspace 2's, a copy, in the temp folder), the Editor's layout at 1440 and 1280 px wide (no window scroll, both units in view, the 10 px label floor), the bundled fonts, the keyboard and an axe scan of each. Not part of `pnpm check`. |
 | `pnpm test:mutation` | Mutation testing over the whole scope (Stryker): does a test notice when the code is broken. Takes hours, so run it per area with the next command. Informational: never part of `pnpm check`, never blocks anything. |
 | `pnpm test:mutation:file -- <glob>` | The same over one file or glob, e.g. `pnpm test:mutation:file -- packages/azeron/src/records.ts`. Minutes for a file. The report is `reports/mutation/mutation.html`; the last results are kept in `reports/mutation/incremental.json`, so a re-run tests only what changed. |
 | `pnpm format`  | Rewrites files to the house format (`pnpm check` only reports).                          |
@@ -39,7 +39,8 @@ starts straight into play.
 No test talks to a real unit, game file or your settings, so `pnpm check` is safe with
 everything plugged in. The same goes for `pnpm test:e2e`: it sets `HELM_E2E=1` and `HELM_E2E_DIR` (a
 temp folder), which swap in fake units, a fake list of running programs, a Steam folder inside the
-temp folder and that folder for the app's files. With the switch set the real HID backend throws
+temp folder, a folder inside it for the games' files in place of `%LOCALAPPDATA%`, and that folder
+for the app's files. With the switch set the real HID backend throws
 if anything reaches it. It opens a window for a few seconds without taking the keyboard focus, and
 needs Electron's binary (`node packages/app/node_modules/electron/install.js` if it is missing).
 
@@ -51,6 +52,7 @@ How the tests are written and what the gate holds them to, and what mutation tes
 | --------------------------------- | ------------------------------------------- |
 | Which unit is which hand          | `%APPDATA%\@helmarray\app\hands.json`       |
 | The exchange log (and `.1` before it) | `%APPDATA%\@helmarray\app\logs\exchange.log` |
+| A copy of each game file, kept before Apply writes it (the newest five per game) | `%APPDATA%\@helmarray\app\backups\<game>\` |
 
 Settings → Exchange log shows the same log and opens its folder. Deleting `hands.json` makes
 the app ask which unit is which again.

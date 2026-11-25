@@ -162,6 +162,11 @@ Key mode, and the two games you fly. **This is the cutover point.**
   found none in `user_settings.config`, which may only mean none were rebound). Golden files
   come from [reference/game-files](../../reference/README.md): untouched lines stay identical and
   CRLF is kept.
+- Apply's game file target (part 2): the file previewed as its own target in the drawer, the
+  game closed, a copy kept, the write read back and put back if it doesn't hold what was meant;
+  the game's baseline moves on success. **[local]** The programs Everspace 2 and Elite run as are
+  not in `reference/`: until the owner names them (Task Manager, with each game running), both
+  games' bindings stay on the bind sheet.
 - Harvesting fills each game's defaults and the *game's own keys* preset.
 - Modes as tabs in the editor; one signal per control-press across modes (J4 on Elite).
 - Bind sheet target for games with no writable file.

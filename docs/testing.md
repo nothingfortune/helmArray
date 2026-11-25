@@ -12,7 +12,7 @@ coverage, and the coverage drift check. If it passes locally it passes in CI.
 | ------------------ | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------ | --------- |
 | Unit               | Pure modules: core, azeron, games, app's shared and renderer logic; the renderer's parts drawn to markup with `react-dom/server` (what each state shows; clicks are e2e's) | `*.test.ts(x)` beside the source, and root `test/`     | In the gate |
 | Integration        | Main-process services wired together, with a fake HID unit and temp folders                          | `test/integration/`, `*.test.ts` in `packages/app/src/main` |  In the gate |
-| End to end         | The real app: Playwright on Electron over fake units, a temp data folder and a fake Steam (the M4 journeys, the layout at 1440 and 1280 px, the fonts, the keyboard, axe) | `packages/app/e2e/*.spec.ts`, run by `pnpm test:e2e` | Outside the gate |
+| End to end         | The real app: Playwright on Electron over fake units, a temp data folder, a fake Steam and a fake game folder (the M4 journeys, the game's file in Apply, the layout at 1440 and 1280 px, the fonts, the keyboard, axe) | `packages/app/e2e/*.spec.ts`, run by `pnpm test:e2e` | Outside the gate |
 | Mutation           | Whether the tests notice when the code is broken: Stryker, over the pure logic that can do damage   | `pnpm test:mutation`, `.github/workflows/mutation.yml` | Outside the gate, informational |
 | Hardware checklist | The real units, pedals and a game, run by hand                                                       | [`hardware-checklist.md`](hardware-checklist.md)       | Manual    |
 
@@ -35,7 +35,9 @@ coordinator, Apply, the Library and the exchange log, and `index.ts` calls the s
 the edges are faked, with the fakes this document already allows: the HID bus (`FakeUnit` from
 `@helmarray/azeron` behind a fake backend that hands out hidapi-style paths), the process list,
 Steam's files, and the clock (a clock and a scheduler the test moves by hand). The store, the
-hands file and the log are real, on a temp folder.
+hands file, the log and the games' files are real, on a temp folder (a game's file is a copy of
+one in `reference/game-files`, where the game keeps it under the world's own `%LOCALAPPDATA%`);
+a test that needs the disk to fail swaps `world.gameDisk`.
 
 `support/world.ts` is the harness. A test drives the app through `window.helm` (the preload's
 `createHelmApi` over an in-memory bridge to the real `registerHelmIpc`), plays the owner at the
@@ -155,7 +157,8 @@ The pure logic that can do damage, listed in `stryker.config.mjs` (`mutate`):
 - `packages/games/src`.
 - `packages/app/src/main`: `apply-units`, `apply-service`, `gated-session`, `plan-fingerprint`,
   `scheme-plan`, `active-plans`, `sync-state`, `devices` and `devices-gate`, `hands`,
-  `hand-finder`, `store`, `hid-transport`, `processes`, `exchange-log`, `e2e-seam` and `compose`.
+  `hand-finder`, `store`, `hid-transport`, `processes`, `game-file` (the game's file written by
+  Apply), `exchange-log`, `e2e-seam` and `compose`.
 - `packages/app/src/renderer`: the pure models `editor-model`, `editor-view`, `libraryView`,
   `libraryFlow`, `applyFlow`, the checks' `fixes` and `check-groups`, `offer-work` and `offer-slices`, `recent-games` and `reveal`, the `action-picker`, and the Game screen's `game-model`, `game-editor`, `capture`
   (press-to-set), `press-listener` and `gameTile`.
