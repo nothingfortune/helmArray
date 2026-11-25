@@ -64,4 +64,13 @@ describe('OfferWork', () => {
     w.start(scheme, helldivers2, plan, () => undefined);
     expect([cut, done > 1, queue.length]).toEqual([0, true, 0]);
   });
+
+  it('gives a new book after each slice, so a draw memoised on it draws again', () => {
+    const { w, queue } = work();
+    w.start(scheme, helldivers2, plan, () => undefined);
+    queue.shift()?.();
+    const first = w.book(scheme);
+    queue.shift()?.();
+    expect([first === w.book(scheme), w.book(scheme).size]).toEqual([false, 2]);
+  });
 });

@@ -9,6 +9,8 @@ import type { Slicing } from './offer-slices';
 
 interface Kept {
   book: Map<string, OfferEntry>;
+  /** What the draw reads: a new map after each slice, so a draw that memoises on it redraws. */
+  shown: OfferBook;
   done: boolean;
 }
 
@@ -20,7 +22,7 @@ export class OfferWork {
 
   /** The offers of a scheme worked out so far: all of them once its work is done. */
   book(scheme: Scheme): OfferBook {
-    return this.kept.get(scheme)?.book ?? NONE;
+    return this.kept.get(scheme)?.shown ?? NONE;
   }
 
   /**
@@ -29,7 +31,7 @@ export class OfferWork {
    */
   start(scheme: Scheme, game: Game, plan: Plan, changed: () => void): () => void {
     if (this.kept.get(scheme)?.done === true) return () => undefined;
-    const entry: Kept = { book: new Map(), done: false };
+    const entry: Kept = { book: new Map(), shown: NONE, done: false };
     this.kept.set(scheme, entry);
     // The rows' keys don't depend on the mode shown: any mode gives them.
     const { findings } = editorView({
@@ -44,6 +46,7 @@ export class OfferWork {
       this.slicing,
       (taken, done) => {
         for (const [key, offer] of taken) entry.book.set(key, offer);
+        entry.shown = new Map(entry.book);
         entry.done = done;
         changed();
       },
