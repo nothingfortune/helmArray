@@ -22,6 +22,7 @@ export class Saves<T> {
 
   /** Main took save `n`, of `doc`. */
   took(n: number, doc: T): void {
+    // Stryker disable next-line EqualityOperator: each save is taken at most once, so n never equals takenAt
     if (n <= this.takenAt) return;
     this.takenAt = n;
     this.latest = doc;

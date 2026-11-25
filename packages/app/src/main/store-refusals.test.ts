@@ -267,3 +267,36 @@ describe("deleting a game added by hand, with one file it can't read", () => {
     });
   }
 });
+
+describe('what never refuses a change', () => {
+  it("a damaged scheme file: no helmArray can read it again, so it can't name an id later", async () => {
+    const { data } = await everyKind();
+    await writeFile(join(root, 'schemes', 'damaged.json'), '{ not json');
+    const { game, moves } = mergeHarvest(TYPED, FILE);
+    await expect(data.saveFileRead(game, moves)).resolves.toBeUndefined();
+  });
+
+  it("dropping your copy of a built-in game: its schemes stay, so they aren't checked", async () => {
+    const data = await DataStore.open({ root, builtInGames: [TYPED] });
+    data.saveGame({ ...TYPED, name: 'Mine' });
+    await data.flush();
+    await mkdir(join(root, 'schemes'), { recursive: true });
+    await writeFile(
+      join(root, 'schemes', 'es2-typed-keys-x.json'),
+      JSON.stringify({ schemaVersion: 999, id: 'es2-typed-keys-x', gameId: TYPED.id }),
+    );
+    await expect(data.deleteGame(TYPED.id)).resolves.toBeUndefined();
+  });
+});
+
+describe('a schemes folder that is not a folder', () => {
+  it('refuses the move, naming it', async () => {
+    const { data } = await everyKind();
+    await rm(join(root, 'schemes'), { recursive: true });
+    await writeFile(join(root, 'schemes'), '');
+    const { game, moves } = mergeHarvest(TYPED, FILE);
+    await expect(data.saveFileRead(game, moves)).rejects.toThrow(
+      "schemes was left as it was: The folder couldn't be read",
+    );
+  });
+});

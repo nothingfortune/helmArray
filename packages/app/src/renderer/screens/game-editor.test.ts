@@ -2,7 +2,7 @@ import type { Game, Scheme } from '@helmarray/core';
 import { blankKeysScheme } from '@helmarray/core';
 import { describe, expect, it, vi } from 'vitest';
 import type { HelmApi } from '../../shared/api';
-import { GameEditor } from './game-editor';
+import { GameEditor, NAME_FIELD } from './game-editor';
 import type { EditorApi } from './game-editor';
 import { addAction, newGame, renameGame, renameMode, updateAction } from './game-model';
 
@@ -677,6 +677,39 @@ describe('an edit main refuses', () => {
     expect(editor.game).toEqual(rover);
   });
 
+  it("makes a new game's id afresh after going back to it: main never had the one it was given", async () => {
+    let n = 0;
+    const calls = api({
+      saveGame: () => (++n === 1 ? Promise.reject(new Error('No.')) : Promise.resolve()),
+    });
+    const { editor } = open(newGame('', []), { saved: false, taken: [] }, calls);
+    editor.edit((g) => renameGame(g, 'Rover'), NAME_FIELD);
+    editor.nameDone();
+    await settle();
+    editor.edit((g) => renameGame(g, 'Skiff'), NAME_FIELD);
+    editor.nameDone();
+    await settle();
+    expect(calls.saveGame.mock.calls.map(([g]) => g.id)).toEqual(['rover', 'skiff']);
+  });
+
+  it('puts away a read of the file made while the refused edit was on its way', async () => {
+    let refuse = (): void => undefined;
+    const calls = api({
+      saveGame: () => new Promise<void>((_done, no) => (refuse = () => no(new Error('No.')))),
+      readGameFile: () => Promise.resolve({ ok: false, message: 'No file.' }),
+    });
+    const { editor } = open(rover, { readsFile: true }, calls);
+    editor.edit((g) => renameGame(g, 'Rover 2'));
+    await editor.readFile();
+    const during = editor.state.fileRead;
+    refuse();
+    await settle();
+    expect([during, editor.state.fileRead]).toEqual([
+      { kind: 'failed', message: 'No file.' },
+      null,
+    ]);
+  });
+
   it('waits while a later edit may still be saved', async () => {
     let n = 0;
     const { editor } = open(
@@ -891,6 +924,29 @@ describe("reading the game's own file into a game typed in on the Game screen", 
       [false, true],
       true,
       null,
+    ]);
+  });
+
+  it('goes back to the read once main has saved it when the next edit is refused, and takes edits again', async () => {
+    let n = 0;
+    const { editor } = open(
+      rover,
+      { readsFile: true },
+      reads({ saveGame: () => (++n === 1 ? Promise.reject(new Error('No.')) : Promise.resolve()) }),
+    );
+    await editor.readFile();
+    editor.takeFile();
+    await settle();
+    const read = editor.game;
+    editor.edit((g) => renameGame(g, 'Rover 2'));
+    await settle();
+    const back = editor.game;
+    editor.edit((g) => renameGame(g, 'Rover 3'));
+    await settle();
+    expect([back === read, read.actions[0]?.id, editor.game.name]).toEqual([
+      true,
+      'Jump',
+      'Rover 3',
     ]);
   });
 
