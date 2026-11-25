@@ -170,8 +170,33 @@ button does in this game), and the action names Play view shows.
 | Unreal games that keep defaults inside their pak files | nothing readable; taught by pressing (v2) |
 | Steam Input templates the game ships           | pad layout, where present (spike)       |
 
-Harvested data is stored as the game's **defaults**, read-only; your scheme is always a copy.
-Re-harvest after a game update shows what changed.
+A harvest goes into the game's data (`games/<id>.json`), the same data the Game screen edits:
+its modes, its actions with their default key and controller button, and `file.format`. Your
+setups are always copies, and never change when the game's data does. With it the data keeps
+what the file held at that read (`Game.fromFile`), so the next read can tell what you changed
+from what the game changed.
+
+**Reading the file again** (`mergeHarvest`, core's `harvest.ts`) never loses anything you typed.
+Per field (an action's name, mode, role, *required*, default key and default button; a mode's
+name), with what the file has now, what it had at the last read, and what the data has:
+
+- The data still has what the file had last time: it takes what the file has now (the game was
+  updated, or rebound in its own menu).
+- The data has something else: that is yours, and it stays. A game never read before counts
+  every value it has as yours; a value it doesn't have is filled from the file.
+- A binding the file has because helmArray put it there (what the game holds from the last
+  Apply, its baseline) isn't news from the game: it counts as what the file had last time. So
+  Apply then a read changes no default.
+- An action or mode in the file and not in the data is added at the end of its mode, unless its
+  id is retired (you deleted it, or its mode: the Game screen's rule, so it never comes back) or
+  its mode isn't there. One in the data and not in the file stays: added by hand, or gone from
+  the file.
+- `file.format` is the file's; the game's name, Steam id, retired ids and *the sticks must send
+  keys* are the data's.
+
+A re-read is shown before it is saved: one list of what changes (and what of yours stays though
+the file differs), and one button. The first read of a game has nothing of yours to lose and
+saves at once.
 
 ## Targets
 

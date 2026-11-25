@@ -115,6 +115,18 @@ function actionProblem(value: unknown, modes: ReadonlySet<string>): string | nul
   return null;
 }
 
+/** What the game's file held when last read (`Game.fromFile`): modes, and actions in them. */
+function isFromFile(value: unknown): boolean {
+  if (!isRecord(value) || !Array.isArray(value['modes']) || !Array.isArray(value['actions']))
+    return false;
+  const modes = new Set<string>();
+  for (const mode of value['modes']) {
+    if (!isRecord(mode) || !isDataId(mode['id']) || !isText(mode['name'])) return false;
+    modes.add(mode['id']);
+  }
+  return value['actions'].every((action) => actionProblem(action, modes) === null);
+}
+
 /**
  * The first thing wrong with a game, in one plain sentence, or null when it can be saved. Read in
  * the order a person reads the game: its name, its modes, then each action. A game may have no
@@ -140,6 +152,8 @@ export function gameProblem(game: unknown): string | null {
     !(isRecord(retired) && isIds(retired['modes']) && isIds(retired['actions']))
   )
     return "The game's deleted ids can't be read.";
+  if (game['fromFile'] !== undefined && !isFromFile(game['fromFile']))
+    return "What helmArray last read from the game's file can't be read.";
   const gone = retired as { modes: string[]; actions: string[] } | undefined;
   const retiredModes = new Set(gone?.modes ?? []);
   const retiredActions = new Set(gone?.actions ?? []);

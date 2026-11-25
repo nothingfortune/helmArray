@@ -152,8 +152,8 @@ The pure logic that can do damage, listed in `stryker.config.mjs` (`mutate`):
 - `packages/azeron/src`: the report and command protocol, the record encoding, the profile, the
   session, what is read back and what a write is verified against. Not `index.ts` or `fake.ts`.
 - `packages/core/src`: `resolve.ts`, the presets, `checks.ts` (the findings), `placed.ts` (whether
-  an action is placed, on a control or a stick), `sticks.ts`, the games and `game-data.ts` (a
-  game's data checked before it is saved).
+  an action is placed, on a control or a stick), `sticks.ts`, the games, `game-data.ts` (a
+  game's data checked before it is saved) and `harvest.ts` (a game's file merged into its data).
 - `packages/games/src`.
 - `packages/app/src/main`: `apply-units`, `apply-service`, `gated-session`, `plan-fingerprint`,
   `scheme-plan`, `active-plans`, `sync-state`, `devices` and `devices-gate`, `hands`,
