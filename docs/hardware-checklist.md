@@ -77,16 +77,18 @@ Have Helldivers 2 installed, and closed. Back up both units first (see *Before y
         itself. It lists each unit's changed buttons in the game's words ("Middle 1 · Reload")
         and says the Azeron app is closed. Click *Apply*. That is 3 clicks.
 15. [ ] Both chips stay on, the pill says *In sync*, and each unit now runs one layout named
-        *Xbox controller*. Open the Azeron app afterwards (close helmArray's writes first: the
-        pill will say *Azeron app is open*) and check each unit holds only that layout.
-16. [ ] Close the Azeron app. Start Helldivers 2 and play a minute: the left stick moves you,
+        *Xbox controller*. Open the Azeron app (helmArray's pill then says *Azeron app is
+        open*) and check each unit holds only that layout.
+16. [ ] Close the Azeron app and wait until the pill says *In sync* again. Start Helldivers 2
+        and play a minute: the left stick moves you,
         the triggers fire and aim, and both units act as one Xbox controller.
 
 ### J2: put an action on a button
 
-17. [ ] Close the game. In the Editor, drag Reload onto another left-unit button. The pill says
-        *1 change not applied*. Click *Apply 1*, then *Apply* in the drawer. The drawer listed
-        that one button, and a row "In the game's controls, set Reload to …".
+17. [ ] Close the game. In the Editor, drag Reload onto Left middle 2 (an empty button, so
+        nothing else moves). The pill says *1 change not applied*. Click *Apply 1*, then
+        *Apply* in the drawer. The drawer listed that one button, and one row "In the game's
+        controls, set Reload to …".
 18. [ ] The Library card shows "1 to set in the game". Set it in Helldivers 2's own controls
         menu, then click *Done*. Restart helmArray first once: the reminder is still there.
 
@@ -105,7 +107,8 @@ Have Helldivers 2 installed, and closed. Back up both units first (see *Before y
 
 ### A game helmArray doesn't know
 
-23. [ ] On a Steam game helmArray has no data for, click *Set up*. Add two actions by typing a
+23. [ ] Close the Azeron app and wait until both chips are ready again. On a Steam game
+        helmArray has no data for, click *Set up*. Add two actions by typing a
         name, pressing Enter, then pressing the key. With your Xbox controller plugged in,
         click a controller cell and press a button: it is taken. Unplug the controller and do
         it again: the screen says no controller is connected and offers a list.
