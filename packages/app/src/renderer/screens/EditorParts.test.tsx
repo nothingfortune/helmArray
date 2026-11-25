@@ -47,6 +47,7 @@ const panel = (scheme: Scheme, selected: string, tab?: DeviceTabId) => {
       onClose={none}
       onMode={none}
       onTarget={none}
+      onChoose={none}
       onClear={none}
       onTurbo={none}
       onLatch={none}
@@ -376,5 +377,22 @@ describe('the device area at a measured width', () => {
       narrow.includes('width:915px'),
       wide.includes('ed-kbm is-below'),
     ]).toEqual([true, true, false]);
+  });
+});
+
+describe('the side panel’s Add and Change', () => {
+  it('offers Change on a press with an action, Add on an empty one, each naming its press', () => {
+    const html = panel(keysScheme(), 'L.index_1');
+    expect([
+      html.includes('aria-label="Change tap"'),
+      html.includes('aria-label="Add long press"'),
+      html.includes('aria-label="Add double tap"'),
+      count(html, 'data-choose='),
+    ]).toEqual([true, true, true, 3]);
+  });
+
+  it('offers neither on a press the control can’t send: a controller button has a tap only', () => {
+    const html = panel(padScheme(), 'L.index_1');
+    expect([count(html, 'data-choose='), html.includes('Change tap')]).toEqual([1, true]);
   });
 });

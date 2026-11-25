@@ -22,11 +22,9 @@ import {
 import type { EditorView, FindingRow, PanelView, UnitSide } from './editor-view';
 import type { CheckGroup } from './check-groups';
 import { findingLocation } from './reveal';
+import { roleColour } from './role-words';
 import { MOUSE_WIDTH, keyboardRow, unitRow } from './editor-layout';
 import { KEYBOARD_WIDTH } from '../devices/layouts';
-
-const roleColour = (role: Role | undefined): string =>
-  role === undefined ? 'var(--color-muted)' : `var(--color-${role})`;
 
 export function BackLink({ onBack }: { onBack(): void }) {
   return (
@@ -215,11 +213,15 @@ export function Checks({
   );
 }
 
+/** A press as the side panel's buttons name it: "Add tap", "Change long press". */
+const PRESS_NAME: Record<Press, string> = { tap: 'tap', long: 'long press', double: 'double tap' };
+
 export function Panel({
   panel,
   onClose,
   onMode,
   onTarget,
+  onChoose,
   onClear,
   onTurbo,
   onLatch,
@@ -230,6 +232,8 @@ export function Panel({
   onClose(): void;
   onMode(mode: string): void;
   onTarget(press: Press): void;
+  /** "Add" or "Change" on a press: the action picker opens for it. */
+  onChoose(press: Press): void;
   onClear(press: Press): void;
   onTurbo(on: boolean): void;
   onLatch(on: boolean): void;
@@ -306,10 +310,22 @@ export function Panel({
                     <span className="ed-slot-name">{row.action.name}</span>
                   ) : (
                     <span className="ed-slot-empty">
-                      {row.available ? 'Add' : panel.unavailable}
+                      {row.available ? 'Empty' : panel.unavailable}
                     </span>
                   )}
                 </button>
+                {row.available && (
+                  <button
+                    type="button"
+                    className="ed-slot-change"
+                    data-choose={`${panel.control}|${row.press}`}
+                    // The name starts with the word seen, then says which press.
+                    aria-label={`${row.action ? 'Change' : 'Add'} ${PRESS_NAME[row.press]}`}
+                    onClick={() => onChoose(row.press)}
+                  >
+                    {row.action ? 'Change' : 'Add'}
+                  </button>
+                )}
                 {row.action && (
                   <button
                     type="button"

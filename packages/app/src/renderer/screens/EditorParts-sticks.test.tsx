@@ -71,6 +71,7 @@ describe('the stick in the side panel', () => {
         onClose={none}
         onMode={none}
         onTarget={none}
+        onChoose={none}
         onClear={none}
         onTurbo={none}
         onLatch={none}

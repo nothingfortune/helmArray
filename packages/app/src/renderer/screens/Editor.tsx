@@ -34,6 +34,9 @@ import {
 } from './editor-model';
 import type { History } from './editor-model';
 import { assignable, editorView, gainedTab, opensApply } from './editor-view';
+import { openPicker } from './action-picker';
+import type { Picking } from './action-picker';
+import { ActionPicker } from './ActionPicker';
 import { sidePanelWidth } from './editor-layout';
 import type { DeviceTabId } from './editor-view';
 import type { Fix } from './fixes';
@@ -225,6 +228,10 @@ function EditorBody({
   const [problem, setProblem] = useState<string | null>(null);
   // The side panel, shown or shut by the Inspector button; picking a control opens it again.
   const [inspector, setInspector] = useState(true);
+  // The action picker, open for one press of one control ("Add" or "Change" on it). It shows only
+  // while that control and press are still the ones selected: a fix, an undo or a tab elsewhere
+  // closes it by moving the selection.
+  const [picking, setPicking] = useState<Picking | null>(null);
   const [bodyRef, bodyWidth] = useContentWidth();
   const [mainRef, mainWidth] = useContentWidth();
 
@@ -354,6 +361,7 @@ function EditorBody({
   /** A drop: from the list it puts the action on; dragged off another control it moves it. */
   const dropOn = (control: ControlId, actionId: string, from?: DragSource) => {
     if (isStick(control) || !assignable(game, mode, actionId)) return;
+    setPicking(null);
     edit((s) => drop(s, mode, control, actionId, from, game));
     revealAt({ mode, control, press: 'tap' }, scheme);
   };
@@ -400,6 +408,16 @@ function EditorBody({
   // The press a click on an action fills: the one asked for while the button can send it (the
   // view's own reading of it, so an undo or a switch of output never leaves an unsendable one).
   const target = view?.panel?.presses.find((r) => r.target)?.press ?? 'tap';
+  const open = openPicker(picking, {
+    inspector,
+    selected,
+    panel: view?.panel?.control,
+    target,
+  });
+  const modeName =
+    view !== null && view.modes.length > 1
+      ? (view.modes.find((m) => m.active)?.name ?? null)
+      : null;
 
   return (
     <Tooltip.Provider>
@@ -480,7 +498,10 @@ function EditorBody({
             aria-label="Inspector"
             aria-pressed={inspector}
             title={inspector ? 'Hide the side panel' : 'Show the side panel'}
-            onClick={() => setInspector((open) => !open)}
+            onClick={() => {
+              setInspector((shown) => !shown);
+              setPicking(null);
+            }}
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <rect x="1.5" y="2.5" width="13" height="11" rx="2" stroke="currentColor" />
@@ -586,7 +607,21 @@ function EditorBody({
                 aria-label="Button and actions"
                 style={{ width: `${sidePanelWidth(bodyWidth ?? window.innerWidth)}px` }}
               >
-                {view.panel === null ? (
+                {open !== null ? (
+                  <ActionPicker
+                    key={`${open.control}|${open.press}`}
+                    view={view}
+                    scheme={scheme}
+                    game={game}
+                    mode={mode}
+                    modeName={modeName}
+                    onPick={(id) => {
+                      place(open.control, id, open.press);
+                      setPicking(null);
+                    }}
+                    onClose={() => setPicking(null)}
+                  />
+                ) : view.panel === null ? (
                   <div className="ed-pick">
                     <h2 className="ed-pick-title">Pick a {view.controlWord}</h2>
                     <p className="ed-hint">
@@ -601,6 +636,10 @@ function EditorBody({
                     onClose={() => setSelected(undefined)}
                     onMode={setMode}
                     onTarget={setPress}
+                    onChoose={(which) => {
+                      setPress(which);
+                      setPicking({ control: view.panel?.control ?? '', press: which });
+                    }}
                     onClear={(which) =>
                       edit((s) =>
                         clear(s, { mode, control: view.panel?.control ?? '', press: which }),
@@ -616,20 +655,20 @@ function EditorBody({
                     }
                   />
                 )}
-                <Unplaced
-                  view={view}
-                  modeName={
-                    view.modes.length > 1 ? (view.modes.find((m) => m.active)?.name ?? null) : null
-                  }
-                  prompt={
-                    canPlace && view.panel
-                      ? `Click an action to put it on ${view.panel.where}, ${PRESS_WORD[target]}.`
-                      : null
-                  }
-                  onPlace={(id) => {
-                    if (selected !== undefined && canPlace) place(selected, id, target);
-                  }}
-                />
+                {open === null && (
+                  <Unplaced
+                    view={view}
+                    modeName={modeName}
+                    prompt={
+                      canPlace && view.panel
+                        ? `Click an action to put it on ${view.panel.where}, ${PRESS_WORD[target]}.`
+                        : null
+                    }
+                    onPlace={(id) => {
+                      if (selected !== undefined && canPlace) place(selected, id, target);
+                    }}
+                  />
+                )}
               </aside>
             )}
           </div>

@@ -12,6 +12,8 @@ import {
   xboxControllerPreset,
 } from '@helmarray/core';
 import { editorView, offerSteps } from './editor-view';
+import { pickerSource, pickerView } from './action-picker';
+import type { RoleFilter } from './action-picker';
 
 const ROLES: Role[] = ['combat', 'movement', 'ability', 'travel', 'menu'];
 const PADS: PadControl[] = ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'BACK', 'START'];
@@ -61,6 +63,36 @@ describe.each(SCHEMES)('a 300-action, three-mode game, %s', (_name, scheme) => {
       editorView({ scheme, game: big, plan, mode: 'ship', offers: new Map() }),
     );
     expect(ms).toBeLessThan(100);
+  });
+
+  it('filters the action picker in well under a frame, for every search and role', () => {
+    // A keystroke in the picker's search, or a role chip: the view is drawn once, the filter runs
+    // on each. Each search as typed, letter by letter, under each role.
+    const view = editorView({
+      scheme,
+      game: big,
+      plan,
+      mode: 'ship',
+      selected: 'L.index_1',
+      offers: new Map(),
+    });
+    const source = pickerSource(view, scheme, big, 'ship');
+    if (source === null) throw new Error('no picker on L.index_1');
+    const typed = ['action 1', 'ion 29', 'act 9', 'zzz'].flatMap((q) =>
+      Array.from({ length: q.length }, (_, i) => q.slice(0, i + 1)),
+    );
+    const roles: RoleFilter[] = ['all', 'combat', 'movement', 'ability', 'travel', 'menu', 'none'];
+    let filters = 0;
+    const ms = fastest(() => {
+      filters = 0;
+      for (const role of roles)
+        for (const q of typed) {
+          pickerView(source, q, role, 'ship');
+          filters++;
+        }
+    });
+    // Every action of the mode but the one already on L index 1 is offered.
+    expect([source.candidates.length >= 99, ms / filters < 2]).toEqual([true, true]);
   });
 
   it('works out an offer for every finding still asking, one step at a time', () => {

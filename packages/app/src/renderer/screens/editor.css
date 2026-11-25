@@ -695,3 +695,83 @@
   color: var(--color-muted);
   font-size: var(--size-caption);
 }
+
+/* "Add" or "Change" at the end of a press: opens the action picker for it. */
+.ed-slot-change {
+  flex: none;
+  min-height: 30px;
+  padding: 0 var(--space-8);
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-muted);
+  font: 600 12px var(--font-read);
+  cursor: pointer;
+}
+.ed-slot-change:hover {
+  color: var(--color-text);
+  background: var(--color-raised);
+}
+
+/* The action picker, over the side panel (Editor.dc.html, the EditorPicker board). It fills the
+   panel's height; its results scroll in themselves, so the panel and the window never do. */
+.ed-choose {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+}
+.ed-choose-search {
+  gap: var(--space-8);
+  color: var(--color-muted);
+}
+.ed-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ed-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid #2a313c;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--color-secondary);
+  font: 600 12px var(--font-read);
+  cursor: pointer;
+}
+.ed-chip[aria-pressed='true'] {
+  background: #262c36;
+  color: var(--color-text);
+  box-shadow: inset 0 -2px 0 var(--color-accent);
+}
+.ed-choose-results {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.ed-choose-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ed-choose-list .ed-act {
+  cursor: pointer;
+}
+.ed-act.is-active {
+  background: var(--color-raised);
+  box-shadow: inset 2px 0 0 var(--color-accent);
+}
+.ed-act-label {
+  color: var(--color-secondary);
+  font: 500 12px var(--font-signal);
+}
+.ed-choose-count {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: var(--size-caption);
+}
