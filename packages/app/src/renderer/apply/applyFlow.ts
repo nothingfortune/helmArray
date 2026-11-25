@@ -125,6 +125,10 @@ export interface GameSection {
   title: string;
   /** One short line beside the title. */
   summary: string;
+  /** The game's file, by name, once found: only for the file helmArray writes. */
+  file?: string;
+  /** For the file: how many bindings in each mode, and that a copy is kept; or that none change. */
+  note?: string;
   /** A label only when there is more than one group. */
   groups: { label: string | null; lines: string[] }[];
 }
@@ -239,9 +243,19 @@ export function unitSection(unit: ApplyUnitChange, azeronOpen: boolean): UnitSec
   return { ...base, summary, lines };
 }
 
-/** What can fail or needs doing: the Azeron app (always), and any other check not ready. */
+/**
+ * What can fail or needs doing: the Azeron app and the game whose file is written (always: what
+ * the person may have to close), and any other check not ready.
+ */
 const shownChecks = (checks: readonly ReadyCheck[]): ReadyCheck[] =>
-  checks.filter((c) => !c.ok || c.kind === 'azeron-app');
+  checks.filter((c) => !c.ok || c.kind === 'azeron-app' || c.kind === 'game');
+
+/**
+ * The drawer waits for the game to close: it is the one thing not ready, and nothing tells the
+ * window when it closes, so the drawer looks again by itself until it has.
+ */
+export const waitingOnGame = (state: DrawerState): boolean =>
+  state.phase === 'ready' && state.preview.checks.some((c) => !c.ok && c.kind === 'game');
 
 const SET_WORD = { controller: 'Controller', keyboard: 'Keyboard and mouse' } as const;
 
@@ -253,9 +267,29 @@ function rowLine(row: ApplyGameRow): string {
     : `Take ${row.actionName} off ${signalText(row.from)}`;
 }
 
-/** The game's half, or null when no binding changes. */
+/** One binding helmArray writes into the file, as a unit's button is said: what · on what. */
+function fileLine(row: ApplyGameRow): string {
+  if (row.to !== null) return `${row.actionName} · ${signalText(row.to)}`;
+  return row.from === null
+    ? `${row.actionName} · on nothing`
+    : `${row.actionName} · off ${signalText(row.from)}`;
+}
+
+/** The file's note: the bindings in each mode, when there are several, and the copy kept. */
+function fileNote(game: ApplyGame): string {
+  if (game.file?.same === true) return 'It already holds these bindings.';
+  const modes = new Map<string, number>();
+  for (const row of game.rows) modes.set(row.modeName, (modes.get(row.modeName) ?? 0) + 1);
+  if (modes.size < 2) return 'A copy of the old file is kept.';
+  return [...[...modes].map(([mode, n]) => `${mode} ${n}`), 'a copy of the old file is kept'].join(
+    ' · ',
+  );
+}
+
+/** The game's half, or null when no binding changes and no file is written. */
 export function gameSection(game: ApplyGame, title?: string): GameSection | null {
-  if (game.rows.length === 0) return null;
+  const file = game.via === 'file' ? game.file : undefined;
+  if (game.rows.length === 0 && file === undefined) return null;
   const sets = new Set(game.rows.map((r) => r.set));
   const modes = new Set(game.rows.map((r) => r.mode));
   const groups = new Map<string, { label: string; lines: string[] }>();
@@ -267,14 +301,17 @@ export function gameSection(game: ApplyGame, title?: string): GameSection | null
       ...(modes.size > 1 ? [row.modeName] : []),
     ].join(' · ');
     const group = groups.get(key) ?? { label, lines: [] };
-    group.lines.push(rowLine(row));
+    group.lines.push(game.via === 'file' ? fileLine(row) : rowLine(row));
     groups.set(key, group);
   }
   const n = game.rows.length;
   const sheet = game.via === 'sheet';
+  const counted = n === 1 ? '1 binding' : `${n} bindings`;
   return {
     title: title ?? (sheet ? "In the game's controls" : 'Game file'),
-    summary: sheet ? `${n} to set by hand` : n === 1 ? '1 binding' : `${n} bindings`,
+    summary: sheet ? `${n} to set by hand` : file?.same === true ? 'No change' : counted,
+    ...(file === undefined || file.name === null ? {} : { file: file.name }),
+    ...(file === undefined ? {} : { note: fileNote(game) }),
     groups: [...groups.values()].map((g) => ({
       label: groups.size > 1 ? g.label : null,
       lines: g.lines,
@@ -282,13 +319,24 @@ export function gameSection(game: ApplyGame, title?: string): GameSection | null
   };
 }
 
-/** What the drawer says while Apply runs: what is being written, for the units the setup uses. */
+/**
+ * What the drawer says while Apply runs: what is being written, for the units the setup uses, and
+ * the game's file when it changes.
+ */
 function progressWords(preview: ApplyPreview): string {
   const used = [preview.left, preview.right].filter((u) => u.used).map((u) => u.hand);
-  if (used.length === 0) return 'Applying…';
-  if (used.length === 2)
-    return 'Writing to your Azerons, the left one first. Keep them plugged in and the Azeron app closed.';
-  return `Writing to your ${used[0] === 'left' ? 'left' : 'right'} Azeron. Keep it plugged in and the Azeron app closed.`;
+  const { game } = preview;
+  const name = preview.gameName === '' ? 'the game' : preview.gameName;
+  const file = game.via === 'file' && game.file !== undefined && !game.file.same;
+  const its = `${preview.gameName === '' ? "the game's" : `${preview.gameName}'s`} controls file`;
+  if (used.length === 0) return file ? `Writing ${its}. Keep ${name} closed.` : 'Applying…';
+  const units =
+    used.length === 2
+      ? 'Writing to your Azerons, the left one first'
+      : `Writing to your ${used[0] === 'left' ? 'left' : 'right'} Azeron`;
+  const keep = used.length === 2 ? 'Keep them plugged in' : 'Keep it plugged in';
+  if (file) return `${units}, then ${its}. ${keep}, and the Azeron app and ${name} closed.`;
+  return `${units}. ${keep} and the Azeron app closed.`;
 }
 
 export function drawerView(state: DrawerState): DrawerView {
@@ -369,8 +417,11 @@ export function drawerView(state: DrawerState): DrawerView {
     result: {
       ok: result.ok,
       headline: result.message,
-      // The units' own sentences, but not the one already said as the headline.
-      lines: result.units.map((u) => u.message).filter((m) => m !== result.message),
+      // The units' own sentences and the game file's, but not the one already said as the headline.
+      lines: [
+        ...result.units.map((u) => u.message),
+        ...(result.gameFile ? [result.gameFile.message] : []),
+      ].filter((m) => m !== result.message),
     },
     checks: [],
     sections: [],

@@ -140,3 +140,16 @@
   font-size: var(--size-caption);
   font-weight: 600;
 }
+
+/* The game's file: its name in the signal face, as the canvas draws it, then the muted note. */
+.apply-file {
+  margin: 0;
+  font: 500 12.5px var(--font-signal);
+  color: var(--color-secondary);
+  overflow-wrap: anywhere;
+}
+.apply-note {
+  margin: 0;
+  font-size: var(--size-label);
+  color: var(--color-muted);
+}

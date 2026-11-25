@@ -15,6 +15,7 @@ import {
   previewKey,
   reduce,
   unitSection,
+  waitingOnGame,
 } from './applyFlow';
 import type { DrawerState } from './applyFlow';
 
@@ -649,5 +650,152 @@ describe('the layouts a unit loses, said', () => {
     expect(unitSection(over, false).lines.map((l) => l.text)).toEqual([
       'Your layout “Old” is removed.',
     ]);
+  });
+});
+
+describe("the game's file in the drawer", () => {
+  const FILE = { name: 'Custom.4.1.binds', same: false };
+  const srv = row({
+    set: 'keyboard',
+    mode: 'srv',
+    modeName: 'SRV',
+    action: 'jump',
+    actionName: 'Jump',
+    to: { kind: 'key', code: 'J' },
+    from: null,
+  });
+
+  it('is its own target: the file by name, how many bindings in each mode, and that a copy is kept', () => {
+    const rows = [row(), row({ action: 'fire', actionName: 'Fire' }), srv];
+    expect(gameSection({ via: 'file', rows, file: FILE })).toEqual({
+      title: 'Game file',
+      summary: '3 bindings',
+      file: 'Custom.4.1.binds',
+      note: 'Default 2 · SRV 1 · a copy of the old file is kept',
+      groups: [
+        { label: 'Controller · Default', lines: ['Reload · Xbox Y', 'Fire · Xbox Y'] },
+        { label: 'Keyboard and mouse · SRV', lines: ['Jump · J'] },
+      ],
+    });
+  });
+
+  it('says what each binding goes on in the file, and what comes off', () => {
+    const rows = [row(), row({ to: null }), row({ to: null, from: null })];
+    expect(gameSection({ via: 'file', rows, file: FILE })?.groups[0]?.lines).toEqual([
+      'Reload · Xbox Y',
+      'Reload · off Xbox X',
+      'Reload · on nothing',
+    ]);
+  });
+
+  it('keeps the note short for a game with one mode', () => {
+    expect(gameSection({ via: 'file', rows: [row()], file: FILE })).toMatchObject({
+      summary: '1 binding',
+      note: 'A copy of the old file is kept.',
+    });
+  });
+
+  it('says it already holds the bindings, when nothing in it changes', () => {
+    expect(gameSection({ via: 'file', rows: [], file: { ...FILE, same: true } })).toEqual({
+      title: 'Game file',
+      summary: 'No change',
+      file: 'Custom.4.1.binds',
+      note: 'It already holds these bindings.',
+      groups: [],
+    });
+  });
+
+  it("names no file it hasn't found", () => {
+    expect(
+      gameSection({ via: 'file', rows: [row()], file: { name: null, same: false } }),
+    ).not.toHaveProperty('file');
+  });
+
+  it('shows the game closed with the Azeron app, always, and the file only when it is a problem', () => {
+    const checks = [
+      { ok: true, text: 'The Azeron app is closed.', kind: 'azeron-app' as const },
+      { ok: true, text: 'Skiff is closed.', kind: 'game' as const },
+      { ok: true, text: 'The left Azeron is connected.', kind: 'unit' as const },
+      {
+        ok: false,
+        text: "helmArray can't find Skiff's controls file.",
+        kind: 'game-file' as const,
+      },
+    ];
+    expect(drawerView(ready({ ready: false, checks })).checks.map((c) => c.text)).toEqual([
+      'The Azeron app is closed.',
+      'Skiff is closed.',
+      "helmArray can't find Skiff's controls file.",
+    ]);
+  });
+
+  it('says it writes the game file too, while it writes', () => {
+    const applying = reduce(ready({ game: { via: 'file', rows: [row()], file: FILE } }), {
+      type: 'apply',
+    });
+    expect(drawerView(applying).progress).toBe(
+      "Writing to your Azerons, the left one first, then Skiff's controls file. Keep them plugged in, and the Azeron app and Skiff closed.",
+    );
+  });
+
+  it('says it writes only the game file for a setup with no Azeron', () => {
+    const applying = reduce(
+      ready({
+        left: NO_UNIT,
+        right: { ...NO_UNIT, hand: 'right' },
+        game: { via: 'file', rows: [row()], file: FILE },
+      }),
+      { type: 'apply' },
+    );
+    expect(drawerView(applying).progress).toBe("Writing Skiff's controls file. Keep Skiff closed.");
+  });
+
+  it('says nothing of the file while it writes, when the file already holds the bindings', () => {
+    const applying = reduce(
+      ready({ game: { via: 'file', rows: [], file: { ...FILE, same: true } } }),
+      { type: 'apply' },
+    );
+    expect(drawerView(applying).progress).toBe(
+      'Writing to your Azerons, the left one first. Keep them plugged in and the Azeron app closed.',
+    );
+  });
+
+  it('says after Apply what became of the file, and leaves nothing to set by hand', () => {
+    const done = reduce(
+      reduce(ready({ game: { via: 'file', rows: [row()], file: FILE } }), { type: 'apply' }),
+      {
+        type: 'applied',
+        result: { ...OK, gameFile: { ok: true, message: 'Skiff now has the controls.' } },
+      },
+    );
+    const view = drawerView(done);
+    expect([view.result?.lines, view.sheet]).toEqual([
+      [
+        'The left unit runs the layout.',
+        'The right unit runs the layout.',
+        'Skiff now has the controls.',
+      ],
+      null,
+    ]);
+  });
+
+  it("doesn't say the file's sentence twice when it is the headline", () => {
+    const message = "Skiff's file couldn't be written, so it was put back as it was.";
+    const done = reduce(
+      reduce(ready({ game: { via: 'file', rows: [row()], file: FILE } }), { type: 'apply' }),
+      { type: 'applied', result: { ...OK, ok: false, message, gameFile: { ok: false, message } } },
+    );
+    expect(drawerView(done).result?.lines).not.toContain(message);
+  });
+
+  it('looks again by itself while the game is open, and not otherwise', () => {
+    const open = [{ ok: false, text: 'Close Skiff to apply.', kind: 'game' as const }];
+    const other = [{ ok: false, text: "The right Azeron isn't connected.", kind: 'unit' as const }];
+    expect([
+      waitingOnGame(ready({ ready: false, checks: open })),
+      waitingOnGame(ready({ ready: false, checks: other })),
+      waitingOnGame(ready()),
+      waitingOnGame(START),
+    ]).toEqual([true, false, false, false]);
   });
 });

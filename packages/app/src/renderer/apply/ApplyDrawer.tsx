@@ -2,7 +2,7 @@ import { useEffect, useReducer, useRef } from 'react';
 import { Dialog } from 'radix-ui';
 import type { AppState } from '../../shared/api';
 import { plainReason } from '../screens/libraryFlow';
-import { START, drawerView, previewKey, reduce } from './applyFlow';
+import { START, drawerView, previewKey, reduce, waitingOnGame } from './applyFlow';
 import type { GameSection } from './applyFlow';
 import './apply.css';
 
@@ -17,7 +17,13 @@ export interface ApplyDrawerProps {
   state: AppState | null;
 }
 
-/** The game's half: the bindings to set, by set and mode where there is more than one. */
+/** While the game is open the drawer looks again this often, to see it closed. */
+const GAME_RELOOK_MS = 2000;
+
+/**
+ * The game's half: the bindings to set, by set and mode where there is more than one; for the
+ * game's file, its name and a note first.
+ */
 function Game({ section }: { section: GameSection }) {
   return (
     <section className="apply-unit" aria-label={section.title}>
@@ -25,6 +31,8 @@ function Game({ section }: { section: GameSection }) {
         <h3 className="section-title">{section.title}</h3>
         <span className="hint">{section.summary}</span>
       </div>
+      {section.file !== undefined && <p className="apply-file">{section.file}</p>}
+      {section.note !== undefined && <p className="apply-note">{section.note}</p>}
       {section.groups.map((group) => (
         <div key={group.label ?? ''} className="apply-group">
           {group.label !== null && <span className="apply-group-label">{group.label}</span>}
@@ -81,6 +89,16 @@ export function ApplyDrawer({ schemeId, open, onClose, onApplied, state }: Apply
   useEffect(() => {
     if (open) dispatch({ type: 'open' });
   }, [open]);
+
+  // Nothing tells the window when the game closes: while the drawer waits for it, it looks again.
+  const waiting = open && waitingOnGame(drawer);
+  useEffect(() => {
+    if (!waiting) return;
+    const timer = setInterval(look, GAME_RELOOK_MS);
+    return () => clearInterval(timer);
+    // `look` is a fresh function each render; what it reads is the scheme.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [waiting, schemeId]);
 
   const view = drawerView(drawer);
 
