@@ -230,8 +230,8 @@ The units' profile button is never part of any flow: the app writes, switches, a
 
 **The game file target** (M5, `app/main/game-file.ts`). Its preview is the write done in memory:
 the file found (the adapter's `find`, under `%LOCALAPPDATA%`), read as UTF-8 and given the plan's
-`gameBindings`, so a file that is unreadable or can't take them (an action it doesn't have, a key
-it can't name) is a check that isn't ready, before any unit is written; text that comes out the
+`gameBindings`, so a file that is unreadable or can't take them (a key it can't name, more
+bindings than a line holds) is a check that isn't ready, before any unit is written; text that comes out the
 same is not written at all. A file that isn't there (Everspace 2 saves one only once a control is
 changed in its menu) doesn't stop Apply: the units are written, and the game's half is bind sheet
 rows with one sentence saying why; the game's baseline doesn't move, so the Library's reminder
