@@ -400,7 +400,8 @@ export function mergeHarvest(
 
   // A mode of yours whose actions all moved to the file's goes, unless a setup still places
   // something other than what moved in it.
-  const movedFrom = new Set(moves.filter((mv) => mv.mode !== mv.toMode).map((mv) => mv.mode));
+  // (A move within one mode leaves the moved action in it, so that mode is never empty.)
+  const movedFrom = new Set(moves.map((mv) => mv.mode));
   const movedIds = new Set(moves.map((mv) => mv.action));
   const left = modes.filter((m) => {
     if (

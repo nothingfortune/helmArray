@@ -607,6 +607,24 @@ describe("mergeHarvest: an action typed in by hand in a mode the file doesn't ha
     ]);
   });
 
+  it("puts the moved one after the file's actions before it in its mode, in the file's order", () => {
+    const fileFirst = fileGame([FIRE, BOOST, MAP], MODES);
+    const wave2 = { ...WAVE, id: 'wave2', name: 'Wave 2' };
+    expect(
+      mergeHarvest(typed([MY_BOOST, WAVE, wave2]), fileFirst).game.actions.map(
+        (a) => `${a.mode}/${a.id}`,
+      ),
+    ).toEqual(['menus/Map', 'flight/Fire', 'flight/Boost', 'default/wave', 'default/wave2']);
+  });
+
+  it('keeps a mode whose only use by a setup is in another mode out of it', () => {
+    const uses = [{ mode: 'flight', action: 'Fire' }];
+    expect(mergeHarvest(typed([MY_BOOST]), FILE2, null, uses).game.modes.map((m) => m.id)).toEqual([
+      'flight',
+      'menus',
+    ]);
+  });
+
   it('lets one of yours in the same mode take it first', () => {
     const mine: Game = {
       ...typed([MY_BOOST]),
@@ -616,8 +634,10 @@ describe("mergeHarvest: an action typed in by hand in a mode the file doesn't ha
       ],
       actions: [MY_BOOST, { ...MY_BOOST, id: 'flight_boost', mode: 'flight' }],
     };
-    expect(mergeHarvest(mine, FILE2).moves).toEqual([
-      { action: 'flight_boost', mode: 'flight', to: 'Boost', toMode: 'flight' },
+    const { game, moves } = mergeHarvest(mine, FILE2);
+    expect([moves, game.actions.filter((a) => a.name === 'Boost').map((a) => a.id)]).toEqual([
+      [{ action: 'flight_boost', mode: 'flight', to: 'Boost', toMode: 'flight' }],
+      ['boost', 'Boost'],
     ]);
   });
 
@@ -666,8 +686,9 @@ describe("mergeHarvest: the sticks must send keys, from the game's head start", 
     ]);
   });
 
-  it('is set on a first read with no data', () => {
-    expect(mergeHarvest(null, keysOnly).game.needsKeyStick).toBe(true);
+  it('is set on a first read with no data, and listed', () => {
+    const { game, changes } = mergeHarvest(null, keysOnly);
+    expect([game.needsKeyStick, changes.at(-1)]).toEqual([true, { kind: 'key-stick' }]);
   });
 
   it("is yours once the game was read: a later read doesn't set it", () => {

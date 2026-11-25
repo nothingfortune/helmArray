@@ -822,6 +822,29 @@ describe("reading the game's own file into a game typed in on the Game screen", 
     expect([before, editor.state.modesShown]).toEqual([false, true]);
   });
 
+  it('makes a built-in game your copy once that save is done, and clears an earlier error', async () => {
+    let fail = true;
+    const { editor } = open(
+      rover,
+      { readsFile: true, builtIn: true },
+      reads({
+        saveGame: () => (fail ? Promise.reject(new Error('disk full')) : Promise.resolve()),
+      }),
+    );
+    editor.edit((g) => renameGame(g, 'Rover 2'));
+    await settle();
+    const before = [editor.state.edited, editor.state.saveError !== null];
+    fail = false;
+    await editor.readFile();
+    editor.takeFile();
+    await settle();
+    expect([before, editor.state.edited, editor.state.saveError]).toEqual([
+      [false, true],
+      true,
+      null,
+    ]);
+  });
+
   it("can't be undone: the setups already follow the file's ids", async () => {
     const { editor } = open(rover, { readsFile: true }, reads());
     editor.edit((g) => renameGame(g, 'Rover 2'));

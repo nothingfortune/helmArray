@@ -314,7 +314,11 @@ describe('the words for what a read of the file changes', () => {
   );
 
   it('says it stays not required, when that is yours', () => {
-    expect(readLines([moved(['required'])], FIRST)).toEqual([
+    const after: Game = {
+      ...FIRST,
+      actions: [...FIRST.actions].reverse().map((a) => ({ ...a, required: a.id !== 'Boost' })),
+    };
+    expect(readLines([moved(['required'])], after)).toEqual([
       "Boost moves to Flight, where the game's file has it; it stays not required.",
     ]);
   });

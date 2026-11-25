@@ -17,7 +17,7 @@ import type { Plan } from './plan';
 import type { Baselines } from './sheets';
 
 const moveOf = (moves: readonly ActionMove[], action: ActionId | undefined) =>
-  action === undefined ? undefined : moves.find((m) => m.action === action);
+  moves.find((m) => m.action === action);
 
 /** A row naming an action, in a mode or none: its new id, and its new mode when it was the old one. */
 function moveRow<T extends { action?: ActionId; mode?: ModeId }>(
@@ -82,7 +82,8 @@ export function moveInScheme(scheme: Scheme, moves: readonly ActionMove[]): Sche
           continue;
         }
         changed = true;
-        if (mode === move.mode && move.toMode !== mode)
+        // Under its own mode it goes to the new one (the same press, which may be taken there).
+        if (mode === move.mode)
           leaving.push({ mode, to: move.toMode, control, press, action: move.to });
         else set(mode, control, press, move.to);
       }

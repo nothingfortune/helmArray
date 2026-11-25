@@ -124,6 +124,15 @@ describe('moveInScheme', () => {
     ]);
   });
 
+  it('gives back the very scheme when it keeps no finding and no move names it', () => {
+    const s = scheme({ accepted: [] });
+    expect(moveInScheme(s, [{ ...BOOST, action: 'nope' }])).toBe(s);
+  });
+
+  it('adds no key labels to a scheme that has none', () => {
+    expect('keyLabels' in moveInScheme(scheme(), [BOOST])).toBe(false);
+  });
+
   it('changes nothing more the second time', () => {
     const once = moveInScheme(scheme({ keyLabels: { default: { 'L.2': 'B' } } }), [BOOST, FIRE]);
     expect(moveInScheme(once, [BOOST, FIRE])).toBe(once);
@@ -175,6 +184,19 @@ describe('moveInPlan', () => {
     expect(moveInPlan(p, [BOOST]).gameBindings).toEqual([binding('controller', 'spare', 'Boost')]);
   });
 
+  it('moves a finding alone, when nothing else of the plan names the action', () => {
+    const p: Plan = {
+      ...plan(),
+      bindings: [],
+      gameBindings: [],
+      bindSheet: [],
+      findings: [{ rule: 'r', severity: 'warning', action: 'boost', message: 'm' }],
+    };
+    expect(moveInPlan(p, [BOOST]).findings).toEqual([
+      { rule: 'r', severity: 'warning', action: 'Boost', message: 'm' },
+    ]);
+  });
+
   it('gives back the very plan when no move names anything in it', () => {
     const p = plan();
     expect(moveInPlan(p, [{ action: 'x', mode: 'm', to: 'X', toMode: 'm' }])).toBe(p);
@@ -199,6 +221,9 @@ describe('moveInBaselines', () => {
   });
 
   it('gives back the very baselines when the game holds nothing a move names', () => {
-    expect(moveInBaselines(baselines, 'none', [BOOST])).toBe(baselines);
+    expect([
+      moveInBaselines(baselines, 'none', [BOOST]) === baselines,
+      moveInBaselines(baselines, 'es2', [FIRE]) === baselines,
+    ]).toEqual([true, true]);
   });
 });
