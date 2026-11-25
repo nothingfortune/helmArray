@@ -113,7 +113,8 @@ function actionOf(id: ActionId, get: (field: HarvestField) => unknown): Action {
 }
 
 /** A name as it is compared with another: in any case, and with any spaces. */
-const nameKey = (name: string): string => name.toLowerCase().replace(/\s+/g, '');
+// Stryker disable next-line MethodExpression: both names are folded the same way, so upper or lower case makes the same match
+const nameKey = (name: string): string => name.toLowerCase().replace(/\s/g, '');
 
 /** In the order a person reads an action. */
 const FIELDS: readonly HarvestField[] = ['name', 'mode', 'role', 'required', 'key', 'pad'];

@@ -1651,6 +1651,20 @@ describe("Apply with the game's file written", () => {
     ]);
   });
 
+  it("says so when a setup with no Azeron, its file gone by Apply, couldn't be noted", async () => {
+    r = await rig({
+      scheme: keyboardOnly,
+      gameFile: fileTarget(READY, GONE),
+      saveApplied: () => Promise.reject(new Error('disk full')),
+    });
+    const result = await r.service.apply(keyboardOnly.id, fp(keyboardOnly));
+    expect([result.ok, result.message, result.game?.via]).toEqual([
+      false,
+      expect.stringContaining("couldn't keep a note of it (disk full)"),
+      'sheet',
+    ]);
+  });
+
   it('remembers nothing for a setup with no Azeron whose file failed', async () => {
     const failed = { ok: false, written: false, message: 'It failed.' };
     r = await rig({ scheme: keyboardOnly, gameFile: fileTarget(READY, failed) });

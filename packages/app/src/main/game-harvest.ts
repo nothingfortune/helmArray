@@ -100,7 +100,7 @@ export interface GameHarvester {
    */
   found(
     known: readonly Pick<Game, 'id' | 'steamAppId'>[],
-    dismissed?: readonly string[],
+    dismissed: readonly string[],
   ): Promise<Found>;
   /** The id of the game with a file format that this game is (by its id or Steam id), or null. */
   fileGameOf(game: Pick<Game, 'id' | 'steamAppId'>): string | null;
@@ -184,7 +184,7 @@ export function createGameHarvester(deps: HarvestDeps): GameHarvester {
     return { ok: true, game: harvested };
   };
 
-  const found: GameHarvester['found'] = async (have, dismissed = []) => {
+  const found: GameHarvester['found'] = async (have, dismissed) => {
     const out: Found = { games: [], unreadable: [], restorable: [], missing: [] };
     for (const game of games) {
       const taken = have.some((g) => g.id === game.id || g.steamAppId === game.steamAppId);

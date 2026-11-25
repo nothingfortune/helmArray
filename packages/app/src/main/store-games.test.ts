@@ -437,6 +437,31 @@ describe('the games read from their file that were deleted', () => {
     expect([data.dismissedFiles(), problems.map((p) => p.file)]).toEqual([[], ['settings.json']]);
   });
 
+  it('make a settings file whose list has one id that could never be a game one the store reports', async () => {
+    await writeFile(
+      join(root, 'settings.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        activeGameId: null,
+        activeScheme: {},
+        dismissed: ['everspace2', '../x'],
+      }),
+    );
+    const { data, problems } = await openStore();
+    expect([data.dismissedFiles(), problems.map((p) => p.file)]).toEqual([[], ['settings.json']]);
+  });
+
+  it('are left as they were, and the change refused, when a newer helmArray wrote the settings', async () => {
+    const text = JSON.stringify({ schemaVersion: 99, activeGameId: null, activeScheme: {} });
+    await writeFile(join(root, 'settings.json'), text);
+    const { data } = await openStore();
+    await expect(data.dismissFile('everspace2')).rejects.toThrow('newer helmArray');
+    expect([data.dismissedFiles(), await readFile(join(root, 'settings.json'), 'utf8')]).toEqual([
+      [],
+      text,
+    ]);
+  });
+
   it('refuse an id that could never be a game', async () => {
     const { data } = await openStore();
     await expect(data.dismissFile('../x')).rejects.toThrow('There is no such game.');

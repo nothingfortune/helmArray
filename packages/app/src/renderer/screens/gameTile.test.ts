@@ -58,6 +58,18 @@ describe('gameTarget', () => {
     ).toEqual({ kind: 'restore', gameId: 'everspace2', name: 'EVERSPACE™ 2', steamAppId: 1128920 });
   });
 
+  it('leaves the app id out of a set up afresh when Steam’s is not a positive whole number', () => {
+    expect(
+      ['0', '1.5', '-7'].map((appId) =>
+        gameTarget(entry({ gameId: null, name: 'Odd', appId, restores: 'everspace2' })),
+      ),
+    ).toEqual([
+      { kind: 'restore', gameId: 'everspace2', name: 'Odd' },
+      { kind: 'restore', gameId: 'everspace2', name: 'Odd' },
+      { kind: 'restore', gameId: 'everspace2', name: 'Odd' },
+    ]);
+  });
+
   it('opens the game helmArray knows', () => {
     expect(gameTarget(entry({ gameId: 'helldivers2' }))).toEqual({
       kind: 'edit',
