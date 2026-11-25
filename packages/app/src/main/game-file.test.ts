@@ -113,6 +113,7 @@ describe('the game-file target: what it says before Apply', () => {
       note: null,
       name: null,
       same: false,
+      byHand: [],
       checks: [],
     });
   });
@@ -136,6 +137,7 @@ describe('the game-file target: what it says before Apply', () => {
       note: null,
       name: 'Input.ini',
       same: false,
+      byHand: [],
       checks: [{ ok: true, kind: 'game', text: 'Everspace 2 is closed.' }],
     });
   });
@@ -171,12 +173,13 @@ describe('the game-file target: what it says before Apply', () => {
       note: "helmArray can't find Everspace 2's controls file, so set these in the game's own menu (changing any control there makes the game save one).",
       name: null,
       same: false,
+      byHand: [],
       checks: [],
     });
   });
 
   it('names the file and never says it holds the bindings, when it cannot take them', async () => {
-    const look = await target().look(ES2_GAME, planOf(ES2_GAME, [row('NoSuchAction', key('B'))]));
+    const look = await target().look(ES2_GAME, planOf(ES2_GAME, [row('Boost', key('F14'))]));
     expect([look.name, look.same]).toEqual(['Input.ini', false]);
   });
 
@@ -186,10 +189,30 @@ describe('the game-file target: what it says before Apply', () => {
   });
 
   it('says the one thing the file can not take, with no count of more', async () => {
-    const plan = planOf(ES2_GAME, [row('NoSuchAction', key('B'))]);
+    const plan = planOf(ES2_GAME, [row('Boost', key('F14'))]);
     expect((await target().look(ES2_GAME, plan)).checks[1]?.text).toBe(
-      `Everspace 2's controls file can't take this scheme: The file has no action "NoSuchAction".`,
+      `Everspace 2's controls file can't take this scheme: Boost [HOLD]: Unreal has no name for F14.`,
     );
+  });
+
+  it("isn't refused for an action the file doesn't have: its bindings are set by hand, the rest written", async () => {
+    const plan = planOf(ES2_GAME, [...MOVED.gameBindings, row('wave', key('C'))]);
+    const look = await target().look(ES2_GAME, plan);
+    const outcome = await target().write(ES2_GAME, plan);
+    const after = harvestUnrealIni((await ini()).toString('utf8'), ES2_GAME).game;
+    expect({
+      byHand: look.byHand,
+      checks: look.checks.map((c) => c.ok),
+      written: outcome.written,
+      boost: after.actions.find((a) => a.id === 'Boost')?.native?.key,
+      file: (await ini()).toString('utf8'),
+    }).toEqual({
+      byHand: ['wave'],
+      checks: [true],
+      written: true,
+      boost: key('B'),
+      file: writeUnrealIni(ES2_BYTES.toString('utf8'), MOVED.gameBindings),
+    });
   });
 
   it('says what went wrong when the adapter fails some other way', async () => {
@@ -226,9 +249,9 @@ describe('the game-file target: what it says before Apply', () => {
   });
 
   it("says what the file can't take, the first reason and how many more", async () => {
-    const plan = planOf(ES2_GAME, [row('NoSuchAction', key('B')), row('Gone', key('C'))]);
+    const plan = planOf(ES2_GAME, [row('Boost', key('F14')), row('Boost', key('F15'))]);
     expect((await target().look(ES2_GAME, plan)).checks[1]?.text).toBe(
-      `Everspace 2's controls file can't take this scheme: The file has no action "NoSuchAction" (and 1 more).`,
+      `Everspace 2's controls file can't take this scheme: Boost [HOLD]: Unreal has no name for F14 (and 1 more).`,
     );
   });
 });

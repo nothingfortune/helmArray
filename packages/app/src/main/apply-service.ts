@@ -309,11 +309,15 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
       const note = look?.note ?? null;
       return { game: { via: 'sheet', rows, ...(note === null ? {} : { note }) }, checks: [] };
     }
+    // An action the file doesn't have is set by hand: its rows are listed apart.
+    const byHand = rows.filter((r) => look.byHand.includes(r.action));
+    const inFile = rows.filter((r) => !look.byHand.includes(r.action));
     return {
       game: {
         via: 'file',
-        rows: look.same ? [] : rows,
+        rows: look.same ? [] : inFile,
         file: { name: look.name, same: look.same },
+        ...(byHand.length === 0 ? {} : { byHand }),
       },
       checks: look.checks,
     };
@@ -418,17 +422,22 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
 
   /**
    * Writes the game's file. Once it holds the bindings (written, or already), the game's baseline
-   * moves to them; a baseline that can't be moved is the problem said.
+   * moves to them, but for the actions the file doesn't have (`byHand`): those are still to set by
+   * hand. A baseline that can't be moved is the problem said.
    */
   const writeFile = async (
     target: GameFileTarget,
     game: Game,
     plan: Plan,
+    byHand: readonly string[],
   ): Promise<{ outcome: FileOutcome; problem: string | null }> => {
     const outcome = await target.write(game, plan);
     if (!outcome.ok) return { outcome, problem: null };
     try {
-      await deps.settleBaseline?.(game.id, plan.gameBindings);
+      await deps.settleBaseline?.(
+        game.id,
+        plan.gameBindings.filter((r) => !byHand.includes(r.action)),
+      );
     } catch (error) {
       trace(`couldn't move what ${game.id} holds: ${messageOf(error)}`);
       return {
@@ -516,7 +525,7 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
         const blocked = findingChecks(plan).find((c) => !c.ok) ?? fileBlocked;
         if (blocked) return refused(blocked.text);
         if (target !== undefined) {
-          const file = await writeFile(target, game, plan);
+          const file = await writeFile(target, game, plan, look?.byHand ?? []);
           const gameFile = { ok: file.outcome.ok, message: file.outcome.message };
           if (!file.outcome.ok)
             return { ok: false, message: file.outcome.message, units: [], gameFile };
@@ -595,7 +604,7 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
       let gameFile: ApplyResult['gameFile'];
       let fileProblem: string | null = null;
       if (outcome.result.ok && target !== undefined) {
-        const file = await writeFile(target, game, plan);
+        const file = await writeFile(target, game, plan, look?.byHand ?? []);
         gameFile = { ok: file.outcome.ok, message: file.outcome.message };
         fileProblem = file.outcome.ok ? file.problem : file.outcome.message;
       }

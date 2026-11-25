@@ -198,6 +198,16 @@ A re-read is shown before it is saved: one list of what changes (and what of you
 the file differs), and one button. The first read of a game has nothing of yours to lose and
 saves at once.
 
+**Where it is read** (`app/main/game-harvest.ts`, read only: the game's file is never written by
+a read). The games helmArray has a file format for are known by their Steam app id (Everspace 2,
+1128920; Elite Dangerous, 359320). A game whose file is found and whose data the app doesn't have
+yet is listed as a game helmArray knows (its Steam tile, *Game's own keys* offered) and is saved
+the first time it is used: a scheme made from it, or an edit on the Game screen. So setting one up
+from its tile is a click on the tile, one on the preset, and Apply, as for a game that ships with
+helmArray. A game with a file format (or known by its id or Steam id) has *Read from the game's file*
+on the Game screen. Deleting a game read this way brings it back from its file, fresh, the next
+time the Library looks.
+
 ## Targets
 
 ```ts
@@ -225,7 +235,9 @@ it can't name) is a check that isn't ready, before any unit is written; text tha
 same is not written at all. A file that isn't there (Everspace 2 saves one only once a control is
 changed in its menu) doesn't stop Apply: the units are written, and the game's half is bind sheet
 rows with one sentence saying why; the game's baseline doesn't move, so the Library's reminder
-keeps them until *Done*. The game must be closed, told from the running
+keeps them until *Done*. An action the file doesn't have (one added by hand on the Game screen)
+has no line to write: its rows are bind sheet rows, listed apart in the drawer, the rest is
+written, and the baseline moves for the rest only. The game must be closed, told from the running
 programs; a game whose programs helmArray doesn't know can't be told running, so its file is
 never written and its bindings stay on the bind sheet. A write keeps a copy of the file first in
 the data folder (`backups/<game>/`, named by when, the newest five), then reads the file back:

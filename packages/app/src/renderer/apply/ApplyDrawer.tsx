@@ -202,6 +202,7 @@ export function ApplyDrawer({ schemeId, open, onClose, onApplied, state }: Apply
             ))}
 
             {view.game !== null && <Game section={view.game} />}
+            {view.byHand !== null && <Game section={view.byHand} />}
 
             {view.progress !== null && (
               <div className="apply-progress">

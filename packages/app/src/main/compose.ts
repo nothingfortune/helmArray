@@ -10,7 +10,7 @@
 import { join } from 'node:path';
 import type { Game } from '@helmarray/core';
 import { heldPlan } from '@helmarray/core';
-import type { AppState } from '../shared/api';
+import type { AppState, GameEntry, GameFileRead } from '../shared/api';
 import { createActivePlans } from './active-plans';
 import { createApplyService } from './apply-service';
 import type { ApplyService } from './apply-service';
@@ -24,6 +24,7 @@ import { createExchangeLog, diskLogFiles } from './exchange-log';
 import { createGameFileTarget } from './game-file';
 import type { GameFilesOptions } from './game-file';
 import { nodeGameFileDisk } from './game-file-disk';
+import { createGameHarvester } from './game-harvest';
 import type { ExchangeLog } from './exchange-log';
 import { jsonFileStorage, openHandStore } from './hands';
 import type { HandStore } from './hands';
@@ -133,10 +134,56 @@ export async function composeServices(options: ComposeOptions): Promise<Services
     getGame: async (gameId: string) =>
       (await data.listGames()).find((entry) => entry.game.id === gameId)?.game,
   };
+  // A game's own file read into its data: the games whose file is found and that the app has no
+  // data for yet are listed as games it knows (saved the first time one is used), and the Game
+  // screen reads the file of a game that has one. Read only.
+  const files = options.gameFiles;
+  const harvester =
+    files === undefined
+      ? undefined
+      : createGameHarvester({
+          disk: files.disk ?? nodeGameFileDisk,
+          localAppData: files.localAppData,
+          ...(files.kinds === undefined ? {} : { kinds: files.kinds }),
+          trace: (line) => log.write('(game file)', line),
+        });
+  /** The store's games, each marked when its file can be read, then the ones found. */
+  const games = async (): Promise<GameEntry[]> => {
+    const entries = await data.listGames();
+    if (harvester === undefined) return entries;
+    let found: Game[] = [];
+    try {
+      found = await harvester.found(entries.map((e) => e.game));
+    } catch (error) {
+      log.write('(game file)', `couldn't look for games' files: ${String(error)}`);
+    }
+    return [
+      ...entries.map((e) =>
+        harvester.formatOf(e.game) === null ? e : { ...e, readsFile: true as const },
+      ),
+      ...found.map((game): GameEntry => ({ game, builtIn: false, found: true, readsFile: true })),
+    ];
+  };
+  /** A game found by its file is saved the first time it is used: a scheme is made from it. */
+  const keepFound = async (gameId: string): Promise<void> => {
+    if ((await data.listGames()).some((e) => e.game.id === gameId)) return;
+    const found = (await games()).find((e) => e.found === true && e.game.id === gameId);
+    if (found !== undefined) data.saveGame(found.game);
+  };
+  const readGameFile = async (gameId: string): Promise<GameFileRead> => {
+    const entry = (await games()).find((e) => e.game.id === gameId);
+    if (entry === undefined) return { ok: false, message: 'There is no such game.' };
+    if (harvester === undefined || entry.readsFile !== true)
+      return { ok: false, message: `helmArray can't read ${entry.game.name}'s controls file.` };
+    const read = await harvester.read(entry.game);
+    if (!read.ok) return read;
+    return { ok: true, file: read.game, held: await data.heldBindings(gameId) };
+  };
+
   // Steam's games and covers. The protocol serves only the files the Steam read returned.
   const library = createLibraryService({
     readSteam: () => readSteamLibrary(options.steam),
-    games: () => data.listGames(),
+    games,
     listSchemes: (gameId) => data.listSchemes(gameId),
     activeSchemeOf: (gameId) => data.activeSchemeOf(gameId),
     lastApplied: (gameId) => data.lastApplied(gameId),
@@ -180,7 +227,6 @@ export async function composeServices(options: ComposeOptions): Promise<Services
   });
   helm.onState(options.broadcast);
   // A game's file, written after the units. Its backups are kept in the data folder.
-  const files = options.gameFiles;
   const gameFile =
     files === undefined
       ? undefined
@@ -227,11 +273,14 @@ export async function composeServices(options: ComposeOptions): Promise<Services
       chooseHand: (unitId, hand) => helm.chooseHand(unitId, hand),
       recentLog: (lines) => helm.recentLog(lines),
       openLogFolder,
-      listGames: () => data.listGames(),
+      listGames: games,
       listLibrary: (refresh) => library.list(refresh),
       getScheme: (id) => data.getScheme(id),
       listSchemes: (gameId) => data.listSchemes(gameId),
-      createScheme: (gameId, preset) => data.createSchemeFromPreset(gameId, preset),
+      createScheme: async (gameId, preset) => {
+        await keepFound(gameId);
+        return data.createSchemeFromPreset(gameId, preset);
+      },
       copyScheme: (schemeId) => data.copyScheme(schemeId),
       deleteScheme: async (schemeId) => {
         await data.deleteScheme(schemeId);
@@ -261,6 +310,14 @@ export async function composeServices(options: ComposeOptions): Promise<Services
       dismissSheet: async (gameId) => {
         await settleReminder(data, gameId);
         await helm.plansChanged();
+      },
+      readGameFile: async (gameId) => {
+        try {
+          return await readGameFile(gameId);
+        } catch (error) {
+          log.write('(game file)', `reading ${gameId}'s file failed: ${String(error)}`);
+          return { ok: false, message: "helmArray couldn't read the game's controls file." };
+        }
       },
     }),
     start: () => {

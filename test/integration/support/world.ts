@@ -141,12 +141,25 @@ export class FakeProcesses {
 
 const bytes = (text: string) => new TextEncoder().encode(text);
 
-/** Steam with Helldivers 2 installed, in an in-memory disk. */
-function fakeSteam(): SteamReaders {
+/** A game Steam lists as installed: its app id, Steam's name for it and its folder. */
+export interface SteamApp {
+  appId: string;
+  name: string;
+  installDir: string;
+}
+
+const manifest = (app: SteamApp) =>
+  `"AppState"\n{\n\t"appid"\t"${app.appId}"\n\t"name"\t"${app.name}"\n\t"installdir"\t"${app.installDir}"\n}\n`;
+
+/** Steam with Helldivers 2 installed, and any other games given, in an in-memory disk. */
+function fakeSteam(others: readonly SteamApp[] = []): SteamReaders {
   const steam = 'c:/steam';
-  const files: Record<string, string> = {
-    [`${steam}/steamapps/appmanifest_${HELLDIVERS2_APP_ID}.acf`]: `"AppState"\n{\n\t"appid"\t"${HELLDIVERS2_APP_ID}"\n\t"name"\t"HELLDIVERS 2"\n\t"installdir"\t"Helldivers 2"\n}\n`,
-  };
+  const files: Record<string, string> = {};
+  for (const app of [
+    { appId: HELLDIVERS2_APP_ID, name: 'HELLDIVERS 2', installDir: 'Helldivers 2' },
+    ...others,
+  ])
+    files[`${steam}/steamapps/appmanifest_${app.appId}.acf`] = manifest(app);
   return {
     readRegistrySteamPath: () => Promise.resolve(steam),
     readFile: (path) => {
@@ -176,6 +189,8 @@ export interface WorldOptions {
   hands?: Record<number, Hand> | null | 'unreadable';
   /** What the unit with RIGHT_ID holds and runs when it is plugged in. Default: stock. */
   right?: Pick<FakeUnitOptions, 'slots' | 'running'>;
+  /** Games Steam lists besides Helldivers 2. */
+  steam?: readonly SteamApp[];
 }
 
 export class World {
@@ -206,6 +221,7 @@ export class World {
     /** The folder everything of this world is in. */
     readonly root: string,
     right: WorldOptions['right'] = {},
+    private readonly steamApps: readonly SteamApp[] = [],
   ) {
     this.left = this.hid.plugUnit({ serial: '8&2a1b3c4d&0&0000', deviceId: LEFT_ID });
     this.right = this.hid.plugUnit({ serial: '8&1f2e3d4c&0&0000', deviceId: RIGHT_ID, ...right });
@@ -219,7 +235,11 @@ export class World {
   }
 
   static async create(options: WorldOptions = {}): Promise<World> {
-    const world = new World(await mkdtemp(join(tmpdir(), 'helm-integration-')), options.right);
+    const world = new World(
+      await mkdtemp(join(tmpdir(), 'helm-integration-')),
+      options.right,
+      options.steam,
+    );
     const hands =
       options.hands === undefined ? { [LEFT_ID]: 'left', [RIGHT_ID]: 'right' } : options.hands;
     await mkdir(world.dataDir, { recursive: true });
@@ -273,7 +293,7 @@ export class World {
       logDir: this.logDir,
       hid: this.hid,
       listProcesses: () => this.processes.list(),
-      steam: fakeSteam(),
+      steam: fakeSteam(this.steamApps),
       builtInGames: BUILT_IN_GAMES,
       gameFiles: {
         localAppData: [this.localAppData],

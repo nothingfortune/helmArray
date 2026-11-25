@@ -7,9 +7,11 @@
 //      file that isn't there is not refused: the units are written, and the game's bindings are
 //      set by hand (the bind sheet), with one sentence saying why. One that can't be read, or isn't
 //      UTF-8 text, is refused, in a sentence.
-//   2. Writes the plan's bindings into the text in memory. A file that can't take them (an action
-//      it doesn't have, a key it can't name) is refused, with the adapter's reasons. Text that
-//      comes out the same is not written at all: the game already holds the bindings.
+//   2. Writes the plan's bindings into the text in memory. An action the file doesn't have (one
+//      added by hand on the Game screen) has no line to write: its bindings are set by hand, and
+//      only those (`byHand`). A file that can't take the rest (a key it can't name) is refused,
+//      with the adapter's reasons. Text that comes out the same is not written at all: the game
+//      already holds the bindings.
 //   3. Refuses while the game runs: it rewrites its file when it quits. A game whose programs
 //      helmArray doesn't know can't be told running, so its file is never written: its bindings
 //      are set by hand (the bind sheet).
@@ -20,7 +22,7 @@
 // Steps 1 to 3 are also the preview (`look`), so the drawer says before Apply what Apply says.
 
 import { isDeepStrictEqual } from 'node:util';
-import type { Game, GameBinding, GameFileFormat, Plan } from '@helmarray/core';
+import type { ActionId, Game, GameBinding, GameFileFormat, Plan } from '@helmarray/core';
 import type { FolderReader, Harvest } from '@helmarray/games';
 import {
   GameFileError,
@@ -117,6 +119,11 @@ export interface FileLook {
   name: string | null;
   /** The file already holds these bindings: nothing is written. */
   same: boolean;
+  /**
+   * The actions the file doesn't have (added by hand on the Game screen): their bindings aren't
+   * written, and are set by hand. Empty unless the file is written.
+   */
+  byHand: ActionId[];
   /** The game closed, and the file found, read and able to take the bindings: one check each. */
   checks: ReadyCheck[];
 }
@@ -142,8 +149,9 @@ const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 const clause = (text: string): string => text.replace(/[.\s]+$/, '');
 /** The file's text, a byte order mark kept as its first character; throws if it isn't UTF-8. */
-const decode = (bytes: Uint8Array): string =>
+export const decodeText = (bytes: Uint8Array): string =>
   new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
+const decode = decodeText;
 const encoder = new TextEncoder();
 const sameBytes = (a: Uint8Array, b: Uint8Array): boolean =>
   a.length === b.length && a.every((byte, i) => byte === b[i]);
@@ -173,6 +181,7 @@ type Prepared =
       before: Uint8Array;
       after: string;
       same: boolean;
+      byHand: ActionId[];
     };
 
 export function createGameFileTarget(deps: GameFileDeps): GameFileTarget {
@@ -224,8 +233,16 @@ export function createGameFileTarget(deps: GameFileDeps): GameFileTarget {
       return blocked(name, `${game.name}'s controls file isn't text helmArray can read.`);
     }
     let after: string;
+    let byHand: ActionId[];
     try {
-      after = kind.write(text, plan.gameBindings);
+      const has = new Set(
+        kind.harvest(text, { id: game.id, name: game.name }).game.actions.map((a) => a.id),
+      );
+      byHand = [...new Set(plan.gameBindings.map((r) => r.action))].filter((id) => !has.has(id));
+      after = kind.write(
+        text,
+        plan.gameBindings.filter((r) => has.has(r.action)),
+      );
     } catch (error) {
       const problems = error instanceof GameFileError ? error.problems : [messageOf(error)];
       const more = problems.length > 1 ? ` (and ${problems.length - 1} more)` : '';
@@ -233,7 +250,17 @@ export function createGameFileTarget(deps: GameFileDeps): GameFileTarget {
       const first = clause(problems[0] ?? '');
       return blocked(name, `${game.name}'s controls file can't take this scheme: ${first}${more}.`);
     }
-    return { status: 'ready', kind, processNames, path, name, before, after, same: after === text };
+    return {
+      status: 'ready',
+      kind,
+      processNames,
+      path,
+      name,
+      before,
+      after,
+      same: after === text,
+      byHand,
+    };
   };
 
   /** Step 3: whether the game is closed, as a check. */
@@ -317,7 +344,7 @@ export function createGameFileTarget(deps: GameFileDeps): GameFileTarget {
   const look = async (game: Game, plan: Plan): Promise<FileLook> => {
     const ready = await prepare(game, plan);
     if (ready.status === 'sheet')
-      return { via: 'sheet', note: ready.note, name: null, same: false, checks: [] };
+      return { via: 'sheet', note: ready.note, name: null, same: false, byHand: [], checks: [] };
     const check = await closed(game, ready.processNames);
     if (ready.status === 'blocked') {
       return {
@@ -325,10 +352,18 @@ export function createGameFileTarget(deps: GameFileDeps): GameFileTarget {
         note: null,
         name: ready.name,
         same: false,
+        byHand: [],
         checks: [check, { ok: false, kind: 'game-file', text: ready.problem }],
       };
     }
-    return { via: 'file', note: null, name: ready.name, same: ready.same, checks: [check] };
+    return {
+      via: 'file',
+      note: null,
+      name: ready.name,
+      same: ready.same,
+      byHand: ready.byHand,
+      checks: [check],
+    };
   };
 
   const write = async (game: Game, plan: Plan): Promise<FileOutcome> => {

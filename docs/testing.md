@@ -158,7 +158,7 @@ The pure logic that can do damage, listed in `stryker.config.mjs` (`mutate`):
 - `packages/app/src/main`: `apply-units`, `apply-service`, `gated-session`, `plan-fingerprint`,
   `scheme-plan`, `active-plans`, `sync-state`, `devices` and `devices-gate`, `hands`,
   `hand-finder`, `store`, `hid-transport`, `processes`, `game-file` (the game's file written by
-  Apply), `exchange-log`, `e2e-seam` and `compose`.
+  Apply), `game-harvest` (the game's file read into its data), `exchange-log`, `e2e-seam` and `compose`.
 - `packages/app/src/renderer`: the pure models `editor-model`, `editor-view`, `libraryView`,
   `libraryFlow`, `applyFlow`, the checks' `fixes` and `check-groups`, `offer-work` and `offer-slices`, `recent-games` and `reveal`, the `action-picker`, and the Game screen's `game-model`, `game-editor`, `capture`
   (press-to-set), `press-listener` and `gameTile`.

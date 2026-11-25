@@ -1,7 +1,15 @@
 // What the main process tells the windows, and what a window may ask of it. Plain data only:
 // it crosses IPC by structured clone. The preload exposes `HelmApi` as `window.helm`.
 
-import type { Game, KeptSheet, Scheme, SheetRow, Signal, StickBehaviour } from '@helmarray/core';
+import type {
+  Game,
+  GameBinding,
+  KeptSheet,
+  Scheme,
+  SheetRow,
+  Signal,
+  StickBehaviour,
+} from '@helmarray/core';
 
 export type Hand = 'left' | 'right';
 
@@ -15,7 +23,23 @@ export interface GameEntry {
    * *back to helmArray's* drops it.
    */
   edited?: true;
+  /**
+   * Read from the game's own file just now, and not saved: helmArray has a file format for the
+   * game, its file is there, and the app has no data for it yet. Saved the first time it is used
+   * (a scheme made from it, or an edit).
+   */
+  found?: true;
+  /** helmArray can read the game's own file into its data (*Read from the game's file*). */
+  readsFile?: true;
 }
+
+/**
+ * The game's own file, read for the Game screen to merge into the game's data and show before it
+ * is saved: the game as the file has it, and what the game holds from helmArray's last Apply
+ * (null: what it ships), so a binding helmArray put in the file isn't read as a default.
+ */
+export type GameFileRead =
+  { ok: true; file: Game; held: GameBinding[] | null } | { ok: false; message: string };
 
 /** One scheme of a game, as the Library lists it. */
 export interface LibrarySchemeRef {
@@ -270,6 +294,11 @@ export interface ApplyGame {
    * can't find it: the units are still written.
    */
   note?: string;
+  /**
+   * With the file: the rows of actions it doesn't have (added by hand on the Game screen), which
+   * aren't written and are set by hand in the game's own menu.
+   */
+  byHand?: ApplyGameRow[];
 }
 
 /** What the Apply drawer shows before anything is written. */
@@ -378,6 +407,8 @@ export interface HelmApi {
   deleteGame(gameId: string): Promise<void>;
   /** *Done*: the game's bindings still to set by hand are set; its reminder goes. */
   dismissSheet(gameId: string): Promise<void>;
+  /** Reads the game's own file (never writes it), for the Game screen to merge. Never rejects. */
+  readGameFile(gameId: string): Promise<GameFileRead>;
 }
 
 /** IPC channel names, shared by main and preload. */
@@ -401,4 +432,5 @@ export const CHANNELS = {
   saveGame: 'helm:save-game',
   deleteGame: 'helm:delete-game',
   dismissSheet: 'helm:dismiss-sheet',
+  readGameFile: 'helm:read-game-file',
 } as const;
