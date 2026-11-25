@@ -11,7 +11,8 @@ export function tabKeyTarget(key: string, from: number, count: number): number |
   if (count <= 0) return null;
   switch (key) {
     case 'ArrowRight':
-      return from < 0 ? 0 : (from + 1) % count;
+      // From none of them (-1), the first.
+      return (from + 1) % count;
     case 'ArrowLeft':
       return from <= 0 ? count - 1 : from - 1;
     case 'Home':
