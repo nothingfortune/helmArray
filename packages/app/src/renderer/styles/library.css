@@ -27,9 +27,17 @@
   padding: 0 var(--space-12);
   align-self: flex-start;
 }
-.btn:disabled {
+.btn:disabled,
+.btn[aria-disabled='true'] {
   opacity: 0.6;
   cursor: default;
+}
+/* Why a preset is off, beside it: one plain sentence. */
+.preset-why {
+  color: var(--color-muted);
+  font-size: var(--size-label);
+  white-space: normal;
+  max-width: 260px;
 }
 
 .notice.tone-error {

@@ -119,6 +119,7 @@ describe('window.helm', () => {
       actions: [],
     };
     const scheme = blankKeysScheme(game);
+    const MOVES = [{ action: 'hop', mode: 'ship', to: 'boost', toMode: 'ship' }];
 
     it('asks each question over its own channel, with its arguments', async () => {
       const b = bridge();
@@ -135,6 +136,7 @@ describe('window.helm', () => {
       await api.previewApply('skiff-own-keys');
       await api.apply('skiff-own-keys', 'abc');
       await api.saveGame(game);
+      await api.saveFileRead(game, MOVES);
       await api.deleteGame('skiff');
       await api.dismissSheet('skiff');
       await api.readGameFile('skiff');
@@ -152,6 +154,7 @@ describe('window.helm', () => {
         [CHANNELS.previewApply, ['skiff-own-keys']],
         [CHANNELS.apply, ['skiff-own-keys', 'abc']],
         [CHANNELS.saveGame, [game]],
+        [CHANNELS.saveFileRead, [game, MOVES]],
         [CHANNELS.deleteGame, ['skiff']],
         [CHANNELS.dismissSheet, ['skiff']],
         [CHANNELS.readGameFile, ['skiff']],
@@ -181,10 +184,11 @@ describe('window.helm', () => {
       expect(await api.setActive('skiff', null)).toBeUndefined();
       expect([
         await api.saveGame(game),
+        await api.saveFileRead(game, MOVES),
         await api.deleteGame('skiff'),
         await api.dismissSheet('skiff'),
         await api.restoreGame('everspace2'),
-      ]).toEqual([undefined, undefined, undefined, undefined]);
+      ]).toEqual([undefined, undefined, undefined, undefined, undefined]);
     });
   });
 });

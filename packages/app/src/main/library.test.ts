@@ -177,6 +177,19 @@ describe('the merged library', () => {
     expect(entries.find((e) => e.gameId === 'skiff')?.nativeKeys).toBe(false);
   });
 
+  it('marks a game whose sticks must send keys, and no other', () => {
+    const entries = mergeLibrary({
+      steam: [],
+      games: [HD2, { game: { ...SKIFF, needsKeyStick: true }, builtIn: false }],
+      schemes: none,
+      activeSchemeOf: () => null,
+    });
+    expect(entries.map((e) => [e.gameId, e.needsKeyStick])).toEqual([
+      ['helldivers2', undefined],
+      ['skiff', true],
+    ]);
+  });
+
   it('says defaults are found for a game shipping a key or an Xbox control, not otherwise', () => {
     // Skiff ships its boost on Xbox A and on no key.
     const bare: Game = {

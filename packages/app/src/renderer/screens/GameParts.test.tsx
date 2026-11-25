@@ -23,8 +23,11 @@ import {
   titleNote,
 } from './GameParts';
 import type { ActionRowProps, TitleBarProps } from './GameParts';
+import { PresetButtons } from './PresetButtons';
+import { presetChoices } from './libraryView';
 
 const PARTS = new Set<unknown>([
+  PresetButtons,
   ActionRow,
   ActionTable,
   AddAction,
@@ -497,7 +500,7 @@ describe('the title bar', () => {
       canUndo: true,
       confirming: false,
       busy: false,
-      starts: ['xbox', 'keys'],
+      starts: presetChoices({ name: 'Rover', nativeKeys: true, needsKeyStick: false }),
       canRedo: false,
       edit: spy.edit,
       onBack: vi.fn(),
@@ -530,6 +533,24 @@ describe('the title bar', () => {
       String(e.props['className']).split(' ').includes('primary'),
     );
     expect(primary.map(textOf)).toEqual(['Xbox controller']);
+  });
+
+  it('shows Xbox controller off for a game that plays on keys, says why, and makes its own keys the primary', () => {
+    const { node } = bar({
+      starts: presetChoices({ name: 'Rover', nativeKeys: true, needsKeyStick: true }),
+    });
+    const buttons = elements(node).filter((e) => e.type === 'button');
+    const primary = buttons.filter((e) =>
+      String(e.props['className']).split(' ').includes('primary'),
+    );
+    expect([
+      named(node, 'Xbox controller').props['aria-disabled'],
+      named(node, 'Xbox controller').props['onClick'],
+      primary.map(textOf),
+      renderToStaticMarkup(node).includes(
+        'Rover plays on keys: it stutters when a controller and keys are mixed.',
+      ),
+    ]).toEqual(['true', undefined, ["Game's own keys"], true]);
   });
 
   it('turns Redo on when there is something to redo, and redoes', () => {
@@ -685,6 +706,7 @@ describe("what reading the game's file found", () => {
       kind: 'changes',
       game,
       lines: ['Map: default key M → N.', 'New mode: Menus.'],
+      moves: [],
     });
     take.mockClear();
     drop.mockClear();
