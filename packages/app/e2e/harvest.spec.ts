@@ -9,7 +9,14 @@ import { join } from 'node:path';
 import type { Page } from '@playwright/test';
 import { expect, test } from './helm';
 import type { Seed } from './helm';
-import { applyInDrawer, countInput, drawer, eliteSeed, seriousViolations } from './screens';
+import {
+  applyInDrawer,
+  countInput,
+  drawer,
+  eliteSeed,
+  schemePicker,
+  seriousViolations,
+} from './screens';
 
 const REFERENCE = new URL(
   '../../../reference/game-files/everspace2-Input.before.ini',
@@ -451,6 +458,21 @@ test.describe('Everspace 2 typed in on the Game screen, then read from its file'
           ?.includes('Key1=G,'),
       )
       .toBe(true);
+
+    // The Editor's scheme picker says the same: Xbox controller off, with why.
+    await drawer(page).getByRole('button', { name: 'Close' }).click();
+    await schemePicker(page).click();
+    const picker = page
+      .getByRole('dialog', { name: 'Schemes' })
+      .getByRole('group', { name: 'New from' });
+    await expect(picker.getByRole('button', { name: 'Xbox controller' })).toBeDisabled();
+    await expect(
+      picker.getByRole('button', { name: 'Xbox controller' }),
+    ).toHaveAccessibleDescription(
+      'EVERSPACE™ 2 plays on keys: it stutters when a controller and keys are mixed.',
+    );
+    await expect(picker.getByRole('button', { name: "Game's own keys" })).toBeEnabled();
+    expect(await seriousViolations(page)).toEqual([]);
   });
 });
 

@@ -26,7 +26,7 @@
 //   on quit. A game is checked (core's `gameProblem`) before it is taken, and again when read.
 
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rename, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import type {
   ActionMove,
@@ -615,6 +615,15 @@ export class DataStore {
     }
     const copy = structuredClone(game);
     const list = structuredClone([...moves]);
+    // A waiting write of the game or of one of its schemes would write what it holds after this,
+    // naming the old ids: called off now, and its edit taken into this.
+    this.gameTimers.get(copy.id)?.();
+    this.gameTimers.delete(copy.id);
+    for (const [id, scheme] of this.unsaved) {
+      if (scheme.gameId !== copy.id) continue;
+      this.timers.get(id)?.();
+      this.timers.delete(id);
+    }
     // In the baselines' turn as well as the write queue: a change to what a game holds asked for
     // before this reads the file after it.
     const run = this.sheetsTurn.then(() => this.enqueue(() => this.moveActions(copy, list)));
@@ -624,6 +633,9 @@ export class DataStore {
 
   /** `saveFileRead`'s work, in the write queue's turn. */
   private async moveActions(game: Game, moves: readonly ActionMove[]): Promise<void> {
+    // The waiting edits this takes in: only these are dropped once it is written, never a newer one.
+    const waiting = new Map([...this.unsaved].filter(([, s]) => s.gameId === game.id));
+    const waitingGame = this.unsavedGames.get(game.id);
     const docs: { kind: StoredKind; file: string; doc: StoredKinds[StoredKind] }[] = [];
     const schemes = await this.listSchemes(game.id);
     for (const scheme of schemes) {
@@ -665,32 +677,37 @@ export class DataStore {
       if (refused !== null) throw refused;
     }
     const before = await Promise.all(
-      docs.map(({ file }) => readFile(join(this.root, file), 'utf8').catch(() => null)),
+      docs.map(async ({ kind, file }) => {
+        const path = join(this.root, file);
+        const text = await readFile(path, 'utf8').catch(() => null);
+        // An applied plan's time is when it was applied (`lastApplied`): a rewrite keeps it.
+        const times = kind === 'applied' ? await stat(path).catch(() => null) : null;
+        return { path, text, times };
+      }),
     );
+    const keepTime = async ({ path, times }: (typeof before)[number]) => {
+      if (times !== null) await utimes(path, times.atimeMs / 1000, times.mtimeMs / 1000);
+    };
     for (const [i, { kind, file }] of docs.entries()) {
       try {
         await this.writeText(kind, file, texts[i] as string);
+        await keepTime(before[i] as (typeof before)[number]);
       } catch (error) {
         // Put back what was written before it, so nothing names an id the game doesn't have.
-        for (let j = i - 1; j >= 0; j--) {
-          const path = join(this.root, (docs[j] as (typeof docs)[number]).file);
-          const was = before[j];
+        for (const was of before.slice(0, i).reverse()) {
           await (
-            was === null || was === undefined ? rm(path, { force: true }) : writeAtomic(path, was)
-          ).catch(() => undefined);
+            was.text === null ? rm(was.path, { force: true }) : writeAtomic(was.path, was.text)
+          )
+            .then(() => keepTime(was))
+            .catch(() => undefined);
         }
         throw error;
       }
     }
-    // The waiting edits are on disk, moved: none is written again over them.
-    for (const scheme of schemes) {
-      this.timers.get(scheme.id)?.();
-      this.timers.delete(scheme.id);
-      this.unsaved.delete(scheme.id);
-    }
-    this.gameTimers.get(game.id)?.();
-    this.gameTimers.delete(game.id);
-    this.unsavedGames.delete(game.id);
+    // The waiting edits taken in are on disk, moved: none is written again over them.
+    for (const [id, scheme] of waiting)
+      if (this.unsaved.get(id) === scheme) this.unsaved.delete(id);
+    if (this.unsavedGames.get(game.id) === waitingGame) this.unsavedGames.delete(game.id);
   }
 
   /**

@@ -5,7 +5,7 @@
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { BUILT_IN_DEVICES, MIGRATIONS, mergeHarvest, resolve } from '@helmarray/core';
+import { BUILT_IN_DEVICES, MIGRATIONS, mergeHarvest, moveInScheme, resolve } from '@helmarray/core';
 import type { Action, Game, Scheme } from '@helmarray/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DataStore, ON_ACTION_MOVED } from './store';
@@ -55,13 +55,32 @@ afterEach(async () => {
 });
 
 let counter = 0;
-async function openStore() {
+/** A name for a file set aside that the disk can't make: from when a test says so. */
+let badIds = false;
+beforeEach(() => {
+  badIds = false;
+});
+/** The timers of waiting writes, run by hand: a job called off is never run. */
+const timers: { job: () => Promise<void>; off: boolean }[] = [];
+const runTimers = () =>
+  Promise.all(timers.filter((t) => !t.off).map((t) => ((t.off = true), t.job())));
+async function openStore(byHand = false) {
   const problems: StoreProblem[] = [];
+  timers.length = 0;
   const data = await DataStore.open({
     root,
     builtInGames: [],
     onProblem: (problem) => problems.push(problem),
-    newId: () => `id${++counter}`,
+    newId: () => (badIds ? 'no/such/folder' : `id${++counter}`),
+    ...(byHand
+      ? {
+          schedule: (job: () => Promise<void>) => {
+            const timer = { job, off: false };
+            timers.push(timer);
+            return () => void (timer.off = true);
+          },
+        }
+      : {}),
   });
   return { data, problems };
 }
@@ -201,6 +220,92 @@ describe("a read of the game's file in which your actions took the file's ids", 
       'sheets.json was left as it was: This list of bindings to set in the game was saved by a newer helmArray. Update helmArray to open it.',
     );
     expect([await files(), problems.map((p) => p.file)]).toEqual([before, ['sheets.json']]);
+  });
+
+  it('puts back every file it wrote when one fails part way, so nothing names an id the game lacks', async () => {
+    const { data } = await openStore();
+    await used(data);
+    // The game's own file is damaged, and keeping it aside fails: the game, written last, fails.
+    await writeFile(join(root, 'games', 'es2-typed.json'), '{ not json');
+    badIds = true;
+    const before = await files();
+    const { game, moves } = merged();
+    await expect(data.saveFileRead(game, moves)).rejects.toThrow(
+      "games/es2-typed.json is damaged and couldn't be set aside",
+    );
+    expect(await files()).toEqual(before);
+  });
+
+  it('keeps which scheme was applied last, and when: the plans are rewritten, not applied', async () => {
+    const { data } = await openStore();
+    data.saveGame(TYPED);
+    await data.flush();
+    // Applied in the other order than their names: the rewrite goes by name.
+    const first = await data.createSchemeFromPreset(TYPED.id, 'keys');
+    const second = await data.createSchemeFromPreset(TYPED.id, 'keys');
+    await data.saveApplied(second.id, resolve(second, TYPED, BUILT_IN_DEVICES));
+    await new Promise((done) => setTimeout(done, 20));
+    await data.saveApplied(first.id, resolve(first, TYPED, BUILT_IN_DEVICES));
+    const last = await data.lastApplied(TYPED.id);
+    await new Promise((done) => setTimeout(done, 20));
+    const { game, moves } = merged();
+    await data.saveFileRead(game, moves);
+    const now = await data.lastApplied(TYPED.id);
+    // The time as the disk keeps it: to the millisecond.
+    expect([last?.schemeId, now?.schemeId, Math.abs((now?.at ?? 0) - (last?.at ?? 0)) < 1]).toEqual(
+      [first.id, first.id, true],
+    );
+  });
+
+  it("calls off a scheme's waiting write, so it can't put the old id back once the read is written", async () => {
+    const { data } = await openStore(true);
+    const { kept } = await used(data);
+    data.saveScheme({ ...kept, name: 'Renamed' });
+    const { game, moves } = merged();
+    const saving = data.saveFileRead(game, moves);
+    // The waiting write's moment comes while the read is being written.
+    await new Promise((done) => setImmediate(done));
+    await runTimers();
+    await saving;
+    await data.flush();
+    const onDisk = JSON.parse(
+      await readFile(join(root, 'schemes', `${kept.id}.json`), 'utf8'),
+    ) as Scheme;
+    expect([onDisk.name, JSON.stringify(onDisk.map).includes('"boost"')]).toEqual([
+      'Renamed',
+      false,
+    ]);
+  });
+
+  it("calls off the game's waiting write too", async () => {
+    const { data } = await openStore(true);
+    await used(data);
+    data.saveGame({ ...TYPED, name: 'Typed' });
+    const { game, moves } = merged();
+    const saving = data.saveFileRead(game, moves);
+    await new Promise((done) => setImmediate(done));
+    await runTimers();
+    await saving;
+    await data.flush();
+    const saved = JSON.parse(await readFile(join(root, 'games', 'es2-typed.json'), 'utf8')) as Game;
+    expect(saved.actions.some((a) => a.id === 'boost')).toBe(false);
+  });
+
+  it('takes an edit of a scheme whose write was waiting its turn, and writes it once, moved', async () => {
+    const { data } = await openStore();
+    const { kept } = await used(data);
+    data.saveScheme({ ...kept, name: 'Renamed' });
+    const { game, moves } = merged();
+    const saving = data.saveFileRead(game, moves);
+    // An edit made after the read was asked for is the newer one: it stays waiting, and is written.
+    const later = { ...moveInScheme(kept, moves), name: 'Later' };
+    data.saveScheme(later);
+    await saving;
+    await data.flush();
+    const onDisk = JSON.parse(
+      await readFile(join(root, 'schemes', `${kept.id}.json`), 'utf8'),
+    ) as Scheme;
+    expect([onDisk.name, JSON.stringify(onDisk.map).includes('"boost"')]).toEqual(['Later', false]);
   });
 
   it('refuses a game core refuses, writing nothing', async () => {

@@ -9,8 +9,13 @@
 // - nothing anywhere names an action the game doesn't have, or places one in a mode it isn't in;
 // - the result is a game that can be saved;
 // - reading the same file once more changes nothing.
+// And the same through the store itself (`saveFileRead`), over a temp folder: no file it keeps
+// names an action the game lacks.
 
 import { readFileSync } from 'node:fs';
+import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type {
   Action,
   ActionId,
@@ -39,6 +44,7 @@ import {
 } from '@helmarray/core';
 import { harvestEliteBinds, harvestUnrealIni } from '@helmarray/games';
 import { describe, expect, it } from 'vitest';
+import { DataStore } from '../packages/app/src/main/store';
 
 const read = (name: string): string =>
   readFileSync(new URL(`../reference/game-files/${name}`, import.meta.url), 'utf8');
@@ -282,5 +288,77 @@ describe.each(FILES)('a game typed in by hand, then $name read into it', ({ harv
     let moved = 0;
     for (let seed = 1; seed <= RUNS; seed++) moved += run(file, seed).merged.moves.length;
     expect(moved).toBeGreaterThan(RUNS / 2);
+  });
+});
+
+describe('a game typed in by hand, then the file of Everspace 2 read into it, through the store', () => {
+  const file = (FILES[0] as (typeof FILES)[number]).harvest();
+  const STORE_RUNS = 8;
+
+  /** Every action id each file in the data folder names, with the mode it names it in. */
+  async function named(root: string): Promise<{ file: string; action: string; mode?: string }[]> {
+    const out: { file: string; action: string; mode?: string }[] = [];
+    const json = async (path: string) =>
+      JSON.parse(await readFile(join(root, path), 'utf8')) as unknown;
+    const list = async (dir: string) =>
+      (await readdir(join(root, dir)).catch(() => [] as string[])).map((f) => `${dir}/${f}`);
+    for (const path of await list('schemes')) {
+      const s = (await json(path)) as Scheme;
+      for (const [mode, controls] of Object.entries(s.map))
+        for (const presses of Object.values(controls))
+          for (const action of Object.values(presses))
+            if (action !== undefined) out.push({ file: path, action, mode });
+      for (const a of s.accepted)
+        if (a.action !== undefined) out.push({ file: path, action: a.action });
+    }
+    for (const path of await list('applied')) {
+      const p = (await json(path)) as Plan;
+      for (const b of [...p.bindings, ...p.gameBindings, ...p.bindSheet])
+        out.push({ file: path, action: b.action, mode: b.mode });
+      for (const f of p.findings)
+        if (f.action !== undefined)
+          out.push({
+            file: path,
+            action: f.action,
+            ...(f.mode === undefined ? {} : { mode: f.mode }),
+          });
+    }
+    const sheets = (await json('sheets.json').catch(() => ({ games: [] }))) as Baselines;
+    for (const g of sheets.games)
+      for (const r of g.held) out.push({ file: 'sheets.json', action: r.action, mode: r.mode });
+    return out;
+  }
+
+  it('leaves no file naming an action the game lacks, or placing one outside its mode', async () => {
+    const faults: string[] = [];
+    for (let seed = 1; seed <= STORE_RUNS; seed++) {
+      const root = await mkdtemp(join(tmpdir(), 'helm-typed-store-'));
+      try {
+        const next = random(seed);
+        const mine = typedGame(file, next);
+        const schemes = setups(mine, next);
+        const data = await DataStore.open({ root, builtInGames: [] });
+        data.saveGame(mine);
+        for (const s of schemes) data.saveScheme(s);
+        await data.flush();
+        for (const s of schemes) await data.saveApplied(s.id, applied(s, mine, next));
+        await data.settleBaseline(mine.id, rows(mine, next));
+        const merged = mergeHarvest(mine, file, null, usesOf(schemes));
+        await data.saveFileRead(merged.game, merged.moves);
+        await data.flush();
+        const modeOf = new Map(merged.game.actions.map((a) => [a.id, a.mode]));
+        for (const n of await named(root)) {
+          if (!modeOf.has(n.action)) faults.push(`seed ${seed}: ${n.file} names ${n.action}`);
+          else if (n.mode !== undefined && modeOf.get(n.action) !== n.mode)
+            faults.push(`seed ${seed}: ${n.file} has ${n.action} in ${n.mode}`);
+        }
+        const saved = (await readFile(join(root, 'games', 'g.json'), 'utf8')).includes('"typed_');
+        const typedLeft = merged.game.actions.some((a) => a.id.startsWith('typed_'));
+        if (saved !== typedLeft) faults.push(`seed ${seed}: the game saved isn't the read`);
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    }
+    expect(faults).toEqual([]);
   });
 });
