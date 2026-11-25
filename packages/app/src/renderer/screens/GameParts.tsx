@@ -6,6 +6,7 @@ import type { RefObject } from 'react';
 import { Popover } from 'radix-ui';
 import type { Action, Game, ModeId, PadControl, Role, Signal } from '@helmarray/core';
 import { PAD_CONTROLS, ROLES } from '@helmarray/core';
+import { ROLE_WORDS } from './role-words';
 import type { Preset } from '../../shared/api';
 import { CANT_PRESS, mouseSignalOf } from './capture';
 import { padWord, signalText } from './editor-view';
@@ -25,14 +26,6 @@ import {
 
 /** An edit of the game, and the text field it was typed in (so typing is one step to undo). */
 export type Edit = (fn: (game: Game) => Game, field?: string | null) => void;
-
-export const ROLE_WORDS: Record<Role, string> = {
-  combat: 'Combat',
-  movement: 'Movement',
-  ability: 'Ability',
-  travel: 'Travel',
-  menu: 'Menu',
-};
 
 export const PRESET_WORDS: Record<Preset, string> = {
   xbox: 'Xbox controller',

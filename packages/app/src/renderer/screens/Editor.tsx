@@ -34,10 +34,12 @@ import {
 } from './editor-model';
 import type { History } from './editor-model';
 import { assignable, editorView, gainedTab, opensApply } from './editor-view';
+import { openPicker } from './action-picker';
+import { ActionPicker } from './ActionPicker';
 import { sidePanelWidth } from './editor-layout';
 import type { DeviceTabId } from './editor-view';
 import type { Fix } from './fixes';
-import { editedLocation, findingLocation, reveal } from './reveal';
+import { editedLocation, findingLocation, navigate, reveal } from './reveal';
 import { useOffers } from './useOffers';
 import type { EditorPlace, Location } from './reveal';
 import type { DragSource } from '../devices/drag';
@@ -217,14 +219,19 @@ function EditorBody({
 }: BodyProps) {
   const [history, setHistory] = useState<History<Scheme>>(() => startHistory(loaded));
   const historyRef = useRef(history);
-  const [mode, setMode] = useState(() => game.modes[0]?.id ?? 'default');
-  const [selected, setSelected] = useState<ControlId | undefined>(undefined);
-  const [press, setPress] = useState<Press>('tap');
-  const [tab, setTab] = useState<DeviceTabId | undefined>(undefined);
+  // Where the Editor is, and what it shows there for now (reveal.ts): every move goes through
+  // `navigate` or `reveal`, so what belongs to one location never outlives it.
+  const [here, setPlace] = useState<EditorPlace>(() => ({
+    mode: game.modes[0]?.id ?? 'default',
+    selected: undefined,
+    press: 'tap',
+    tab: undefined,
+    inspector: true,
+    picking: null,
+  }));
+  const { mode, selected, press, tab, inspector, picking } = here;
   const [saveFailed, setSaveFailed] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
-  // The side panel, shown or shut by the Inspector button; picking a control opens it again.
-  const [inspector, setInspector] = useState(true);
   const [bodyRef, bodyWidth] = useContentWidth();
   const [mainRef, mainWidth] = useContentWidth();
 
@@ -246,33 +253,23 @@ function EditorBody({
     [change],
   );
 
-  // Where the Editor is, and THE ONE way it goes somewhere after an action (reveal.ts): the mode,
-  // the tab, the control and its press, all at once. A ref, so a key handler set up once sees now.
-  const placeRef = useRef<EditorPlace>({
-    mode: game.modes[0]?.id ?? 'default',
-    selected: undefined,
-    press: 'tap',
-    tab: undefined,
-    inspector: true,
-  });
+  // THE ONE way it goes somewhere after an action (reveal.ts): the mode, the tab, the control and
+  // its press, all at once. An updater, so a key handler set up once moves from where it is now.
   const revealAt = useCallback((location: Location | undefined, on: Scheme) => {
-    if (location === undefined) return;
-    const next = reveal(placeRef.current, location, on);
-    setMode(next.mode);
-    setSelected(next.selected);
-    setPress(next.press);
-    setTab(next.tab);
-    setInspector(next.inspector);
+    if (location !== undefined) setPlace((p) => reveal(p, location, on));
   }, []);
+  /** A move the player makes: through `navigate`, from where the Editor is now. */
+  const move = (to: (p: EditorPlace) => EditorPlace) => setPlace(to);
   /** Undo or redo, and back to where the edit it undid or redid was made. */
   const travel = useCallback(
     (step: typeof undo) => {
       const before = historyRef.current.present;
       change(step);
       const after = historyRef.current.present;
-      revealAt(editedLocation(before, after), after);
+      const location = editedLocation(before, after);
+      setPlace((p) => navigate.travel(p, location, after));
     },
-    [change, revealAt],
+    [change],
   );
 
   useEffect(() => {
@@ -336,15 +333,7 @@ function EditorBody({
     if (opensApply(view)) onApply?.();
   }, [applyWhenReady, view, onApply]);
 
-  useEffect(() => {
-    placeRef.current = { mode, selected, press, tab, inspector };
-  }, [mode, selected, press, tab, inspector]);
-
-  const select = (id: ControlId) => {
-    setSelected(selected === id ? undefined : id);
-    setPress('tap');
-    if (selected !== id) setInspector(true);
-  };
+  const select = (id: ControlId) => move((p) => navigate.select(p, id));
   /** A click on an action (from the list, or moved from another button): on the selected press. */
   const place = (control: ControlId, actionId: string, which: Press) => {
     if (isStick(control) || !assignable(game, mode, actionId)) return;
@@ -354,6 +343,7 @@ function EditorBody({
   /** A drop: from the list it puts the action on; dragged off another control it moves it. */
   const dropOn = (control: ControlId, actionId: string, from?: DragSource) => {
     if (isStick(control) || !assignable(game, mode, actionId)) return;
+    move(navigate.pickDone);
     edit((s) => drop(s, mode, control, actionId, from, game));
     revealAt({ mode, control, press: 'tap' }, scheme);
   };
@@ -380,9 +370,7 @@ function EditorBody({
     // A device just added is shown at once: no second click on its tab.
     const added = gainedTab(scheme.devices, next);
     edit((s) => setDevices(s, next, game));
-    if (added !== undefined) setTab(added);
-    setSelected(undefined);
-    setPress('tap');
+    move((p) => navigate.devices(p, added));
   };
   /** A fix, applied, and where it put something revealed: its mode, its control, its press. */
   const applyFix = (fix: Fix) => {
@@ -391,15 +379,22 @@ function EditorBody({
     edit(fix.apply);
     revealAt(where, historyRef.current.present);
   };
-  const showTab = (id: DeviceTabId) => {
-    setTab(id);
-    setSelected(undefined);
-  };
+  const showTab = (id: DeviceTabId) => move((p) => navigate.tab(p, id));
 
   const canPlace = selected !== undefined && !isStick(selected);
   // The press a click on an action fills: the one asked for while the button can send it (the
   // view's own reading of it, so an undo or a switch of output never leaves an unsendable one).
   const target = view?.panel?.presses.find((r) => r.target)?.press ?? 'tap';
+  const open = openPicker(picking, {
+    inspector,
+    selected,
+    panel: view?.panel?.control,
+    target,
+  });
+  const modeName =
+    view !== null && view.modes.length > 1
+      ? (view.modes.find((m) => m.active)?.name ?? null)
+      : null;
 
   return (
     <Tooltip.Provider>
@@ -448,7 +443,7 @@ function EditorBody({
                     aria-pressed={view.output === output}
                     onClick={() => {
                       edit((s) => setOutput(s, output, game));
-                      setPress('tap');
+                      move(navigate.output);
                     }}
                   >
                     {output === 'keys' ? 'Keys' : 'Controller'}
@@ -466,7 +461,7 @@ function EditorBody({
                   role="tab"
                   aria-selected={m.active}
                   className="ed-seg-btn"
-                  onClick={() => setMode(m.id)}
+                  onClick={() => move((p) => navigate.mode(p, m.id))}
                 >
                   {m.name}
                 </button>
@@ -480,7 +475,7 @@ function EditorBody({
             aria-label="Inspector"
             aria-pressed={inspector}
             title={inspector ? 'Hide the side panel' : 'Show the side panel'}
-            onClick={() => setInspector((open) => !open)}
+            onClick={() => move(navigate.inspector)}
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <rect x="1.5" y="2.5" width="13" height="11" rx="2" stroke="currentColor" />
@@ -586,7 +581,21 @@ function EditorBody({
                 aria-label="Button and actions"
                 style={{ width: `${sidePanelWidth(bodyWidth ?? window.innerWidth)}px` }}
               >
-                {view.panel === null ? (
+                {open !== null ? (
+                  <ActionPicker
+                    key={`${open.control}|${open.press}`}
+                    view={view}
+                    scheme={scheme}
+                    game={game}
+                    mode={mode}
+                    modeName={modeName}
+                    onPick={(id) => {
+                      place(open.control, id, open.press);
+                      move(navigate.pickDone);
+                    }}
+                    onClose={() => move(navigate.pickDone)}
+                  />
+                ) : view.panel === null ? (
                   <div className="ed-pick">
                     <h2 className="ed-pick-title">Pick a {view.controlWord}</h2>
                     <p className="ed-hint">
@@ -598,9 +607,10 @@ function EditorBody({
                 ) : (
                   <Panel
                     panel={view.panel}
-                    onClose={() => setSelected(undefined)}
-                    onMode={setMode}
-                    onTarget={setPress}
+                    onClose={() => move(navigate.close)}
+                    onMode={(m) => move((p) => navigate.mode(p, m))}
+                    onTarget={(which) => move((p) => navigate.target(p, which))}
+                    onChoose={(which) => move((p) => navigate.choose(p, which))}
                     onClear={(which) =>
                       edit((s) =>
                         clear(s, { mode, control: view.panel?.control ?? '', press: which }),
@@ -616,20 +626,20 @@ function EditorBody({
                     }
                   />
                 )}
-                <Unplaced
-                  view={view}
-                  modeName={
-                    view.modes.length > 1 ? (view.modes.find((m) => m.active)?.name ?? null) : null
-                  }
-                  prompt={
-                    canPlace && view.panel
-                      ? `Click an action to put it on ${view.panel.where}, ${PRESS_WORD[target]}.`
-                      : null
-                  }
-                  onPlace={(id) => {
-                    if (selected !== undefined && canPlace) place(selected, id, target);
-                  }}
-                />
+                {open === null && (
+                  <Unplaced
+                    view={view}
+                    modeName={modeName}
+                    prompt={
+                      canPlace && view.panel
+                        ? `Click an action to put it on ${view.panel.where}, ${PRESS_WORD[target]}.`
+                        : null
+                    }
+                    onPlace={(id) => {
+                      if (selected !== undefined && canPlace) place(selected, id, target);
+                    }}
+                  />
+                )}
               </aside>
             )}
           </div>
