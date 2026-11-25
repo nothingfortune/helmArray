@@ -1363,6 +1363,53 @@ describe("Apply with the game's file written", () => {
     });
   });
 
+  const GONE: FileOutcome = {
+    ok: false,
+    written: false,
+    missing: true,
+    message: "helmArray can't find Skiff's controls file, so set these in the game's own menu.",
+  };
+
+  it('falls back to the bind sheet, as at the start, when the file is gone by the time the units are written', async () => {
+    const settleBaseline = settler();
+    r = await rig({ scheme: writing, gameFile: fileTarget(READY, GONE), settleBaseline });
+    const preview = await r.service.preview(writing.id);
+    const result = await r.service.apply(writing.id, preview.fingerprint);
+    expect({
+      via: preview.game.via,
+      result: { ...result, units: result.units.map((u) => u.status) },
+      settled: settleBaseline.mock.calls.length,
+      remembered: r.saveApplied.mock.calls.length,
+    }).toEqual({
+      via: 'file',
+      result: {
+        ok: true,
+        message: 'Both units now run the layout.',
+        units: ['applied', 'applied'],
+        game: { via: 'sheet', rows: preview.game.rows, note: GONE.message },
+      },
+      settled: 0,
+      remembered: 1,
+    });
+  });
+
+  it('lists every binding to set by hand when the file goes, those of actions it never had too', async () => {
+    const byHand = { ...READY, byHand: ['fire'] };
+    r = await rig({ scheme: writing, gameFile: fileTarget(byHand, GONE) });
+    const preview = await r.service.preview(writing.id);
+    const result = await r.service.apply(writing.id, preview.fingerprint);
+    expect(result.game?.rows.map((row) => row.action).sort()).toEqual(
+      [...preview.game.rows, ...(preview.game.byHand ?? [])].map((row) => row.action).sort(),
+    );
+  });
+
+  it('lists the bindings to set by hand when the file goes, though the drawer found it holding them', async () => {
+    r = await rig({ scheme: writing, gameFile: fileTarget({ ...READY, same: true }, GONE) });
+    const preview = await r.service.preview(writing.id);
+    const result = await r.service.apply(writing.id, preview.fingerprint);
+    expect([preview.game.rows.length, (result.game?.rows.length ?? 0) > 0]).toEqual([0, true]);
+  });
+
   it("doesn't ask the target about a scheme that doesn't write the file", async () => {
     const target = fileTarget();
     r = await rig({ scheme, gameFile: target });
@@ -1582,6 +1629,26 @@ describe("Apply with the game's file written", () => {
       settled: 1,
       remembered: 1,
     });
+  });
+
+  it('remembers a setup with no Azeron whose file is gone by Apply, its bindings to set by hand', async () => {
+    const settleBaseline = settler();
+    r = await rig({ scheme: keyboardOnly, gameFile: fileTarget(READY, GONE), settleBaseline });
+    const preview = await r.service.preview(keyboardOnly.id);
+    const result = await r.service.apply(keyboardOnly.id, preview.fingerprint);
+    expect([
+      result.ok,
+      result.gameFile,
+      result.game,
+      r.saveApplied.mock.calls.length,
+      settleBaseline.mock.calls.length,
+    ]).toEqual([
+      true,
+      undefined,
+      { via: 'sheet', rows: preview.game.rows, note: GONE.message },
+      1,
+      0,
+    ]);
   });
 
   it('remembers nothing for a setup with no Azeron whose file failed', async () => {

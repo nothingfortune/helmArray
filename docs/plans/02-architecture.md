@@ -255,7 +255,10 @@ bindings than a line holds) is a check that isn't ready, before any unit is writ
 same is not written at all. A file that isn't there (Everspace 2 saves one only once a control is
 changed in its menu) doesn't stop Apply: the units are written, and the game's half is bind sheet
 rows with one sentence saying why; the game's baseline doesn't move, so the Library's reminder
-keeps them until *Done*. An action the file doesn't have (one added by hand on the Game screen)
+keeps them until *Done*. A file that goes between the drawer and the write, once the units are
+written, is the same: Apply sends back the game's half as bind sheet rows (every binding that
+changes) with that sentence, and is done, with no *Try again*. Any other failure to write the file
+after the units is a failure, said in a sentence. An action the file doesn't have (one added by hand on the Game screen)
 has no line to write: its rows are bind sheet rows, listed apart in the drawer, the rest is
 written, and the baseline moves for the rest only. The game must be closed, told from the running
 programs; a game whose programs helmArray doesn't know can't be told running, so its file is

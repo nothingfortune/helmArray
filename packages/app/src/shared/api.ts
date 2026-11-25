@@ -361,6 +361,11 @@ export interface ApplyResult {
   units: ApplyUnitResult[];
   /** The game's file, when Apply went on to write it: how that ended, in one sentence. */
   gameFile?: { ok: boolean; message: string };
+  /**
+   * The game's half, when it ended other than the preview said: the file gone between the drawer
+   * and the write, so every binding that changes is set by hand, with the sentence saying why.
+   */
+  game?: ApplyGame;
 }
 
 export interface HelmApi {

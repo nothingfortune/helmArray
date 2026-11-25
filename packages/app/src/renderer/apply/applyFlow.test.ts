@@ -750,6 +750,27 @@ describe("the game's file in the drawer", () => {
     });
   });
 
+  it('shows the bind sheet Apply sends back when the file went before it could be written: every row, why, and no Try again', () => {
+    const note =
+      "helmArray can't find Skiff's controls file, so set these in the game's own menu (changing any control there makes the game save one).";
+    const wave = row({ action: 'wave', actionName: 'Wave', to: { kind: 'key', code: 'C' } });
+    const game = { via: 'file' as const, rows: [], file: { ...FILE, same: true }, byHand: [wave] };
+    const result = { ...OK, game: { via: 'sheet' as const, rows: [row(), wave], note } };
+    const view = drawerView(
+      reduce(reduce(ready({ game }), { type: 'apply' }), { type: 'applied', result }),
+    );
+    expect({ sheet: view.sheet, apply: view.apply, ok: view.result?.ok }).toEqual({
+      sheet: {
+        title: "Now, in Skiff's controls",
+        summary: '2 to set by hand',
+        note,
+        groups: [{ label: null, lines: ['Set Reload to Xbox Y', 'Set Wave to C'] }],
+      },
+      apply: null,
+      ok: true,
+    });
+  });
+
   it("says 'these actions' for more than one the file doesn't have, and nothing for none", () => {
     const wave = row({ action: 'wave', actionName: 'Wave' });
     const bow = row({ action: 'bow', actionName: 'Bow' });

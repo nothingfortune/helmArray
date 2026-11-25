@@ -13,6 +13,8 @@
 //     must be closed and its file found and able to take the bindings, before any unit is written.
 //   - The game's file written (or found holding the bindings already) moves the game's baseline
 //     to them (`settleBaseline`): nothing is left to set by hand. A file not written leaves it.
+//     A file gone between the drawer and the write is no failure: as for one missing from the
+//     start, the game's bindings are all set by hand (`ApplyResult.game`), and the apply is done.
 //   - One apply at a time. A second is refused, in a sentence, and never queued behind the first.
 //   - While it runs the devices service is held (`Devices.exclusive`): it neither polls nor opens
 //     nor reads a unit, so nothing else talks to a unit mid-write; afterwards it reads both units
@@ -293,17 +295,22 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
    * The game's bindings that change, the plan's against what the game holds now, and how they
    * reach it, with the file's own checks (the game closed, the file able to take them).
    */
-  const gameHalf = async (
-    plan: Plan,
-    game: Game,
-  ): Promise<{ game: ApplyGame; checks: ReadyCheck[] }> => {
+  /** The game's bindings the plan changes, against what the game holds now. */
+  const changingRows = async (plan: Plan, game: Game): Promise<ApplyGameRow[]> => {
     let holds: Pick<Plan, 'gameBindings'> | null = null;
     try {
       holds = (await deps.gameHolds?.(game.id)) ?? null;
     } catch (error) {
       trace(`couldn't read what ${game.id} holds: ${messageOf(error)}`);
     }
-    const rows = changedRows(plan, game, holds);
+    return changedRows(plan, game, holds);
+  };
+
+  const gameHalf = async (
+    plan: Plan,
+    game: Game,
+  ): Promise<{ game: ApplyGame; checks: ReadyCheck[] }> => {
+    const rows = await changingRows(plan, game);
     const look = await fileLook(plan, game);
     if (look === null || look.via === 'sheet') {
       const note = look?.note ?? null;
@@ -421,6 +428,16 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
   const refused = (message: string): ApplyResult => ({ ok: false, message, units: [] });
 
   /**
+   * The game's half when its file is gone by the time it is written: every binding that changes is
+   * set by hand, with the sentence saying why, as when the file was missing from the start.
+   */
+  const bySheet = async (plan: Plan, game: Game, note: string): Promise<ApplyGame> => ({
+    via: 'sheet',
+    rows: await changingRows(plan, game),
+    note,
+  });
+
+  /**
    * Writes the game's file. Once it holds the bindings (written, or already), the game's baseline
    * moves to them, but for the actions the file doesn't have (`byHand`): those are still to set by
    * hand. A baseline that can't be moved is the problem said.
@@ -526,6 +543,16 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
         if (blocked) return refused(blocked.text);
         if (target !== undefined) {
           const file = await writeFile(target, game, plan, look?.byHand ?? []);
+          if (file.outcome.missing === true) {
+            const sheet = await bySheet(plan, game, file.outcome.message);
+            const problem = await remember(schemeId, game.id, plan, fingerprint);
+            return {
+              ok: problem === null,
+              message: problem ?? NO_UNIT_SENTENCE,
+              units: [],
+              game: sheet,
+            };
+          }
           const gameFile = { ok: file.outcome.ok, message: file.outcome.message };
           if (!file.outcome.ok)
             return { ok: false, message: file.outcome.message, units: [], gameFile };
@@ -602,13 +629,21 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
       }));
       // Then the game's file, once every unit holds the layout: the first failure stops Apply.
       let gameFile: ApplyResult['gameFile'];
+      let sheet: ApplyGame | undefined;
       let fileProblem: string | null = null;
       if (outcome.result.ok && target !== undefined) {
         const file = await writeFile(target, game, plan, look?.byHand ?? []);
-        gameFile = { ok: file.outcome.ok, message: file.outcome.message };
-        fileProblem = file.outcome.ok ? file.problem : file.outcome.message;
+        if (file.outcome.missing === true) {
+          sheet = await bySheet(plan, game, file.outcome.message);
+        } else {
+          gameFile = { ok: file.outcome.ok, message: file.outcome.message };
+          fileProblem = file.outcome.ok ? file.problem : file.outcome.message;
+        }
       }
-      const withFile = gameFile === undefined ? {} : { gameFile };
+      const withFile = {
+        ...(gameFile === undefined ? {} : { gameFile }),
+        ...(sheet === undefined ? {} : { game: sheet }),
+      };
       const problem = outcome.problem ?? fileProblem;
       if (problem !== null) return { ok: false, message: problem, units, ...withFile };
       return { ok: outcome.result.ok, message: outcome.result.message, units, ...withFile };
