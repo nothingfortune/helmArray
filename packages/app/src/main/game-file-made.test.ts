@@ -561,3 +561,28 @@ describe('Elite with no file of its own: what the log says, and the edges of put
     });
   });
 });
+
+describe("Elite with no file of its own, when the game's preset can't be read", () => {
+  it('names the new file, lists nothing to set by hand, and says why it is not ready', async () => {
+    const disk: GameFileDisk = {
+      ...nodeGameFileDisk,
+      read: (path) =>
+        path === shippedPath ? Promise.reject(new Error('locked')) : nodeGameFileDisk.read(path),
+    };
+    expect(await target({ disk }).look(GAME, MOVED)).toEqual({
+      via: 'file',
+      note: null,
+      name: 'Custom.4.1.binds',
+      same: false,
+      byHand: [],
+      checks: [
+        { ok: true, kind: 'game', text: 'Elite Dangerous is closed.' },
+        {
+          ok: false,
+          kind: 'game-file',
+          text: "helmArray couldn't read the game's keyboard and mouse preset (locked).",
+        },
+      ],
+    });
+  });
+});
