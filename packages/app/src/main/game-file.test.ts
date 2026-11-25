@@ -287,10 +287,11 @@ describe('the game-file target: a write', () => {
     });
     await failing.look(ES2_GAME, MOVED);
     await writeFile(iniPath, ES2_BYTES);
-    await target({ disk: failingWrites(() => Promise.reject(new Error('EPERM'))) }).write(
-      ES2_GAME,
-      MOVED,
-    );
+    const damaging = failingWrites(async (path, bytes) => {
+      await writeFile(path, bytes.slice(0, 10));
+      throw new Error('EPERM');
+    });
+    await target({ disk: damaging }).write(ES2_GAME, MOVED);
     const at = (text: string) => lines.some((line) => line.includes(text));
     expect({
       kept: at(`everspace2: kept a copy of ${iniPath} as 2026-11-24 09.30.01.250 Input.ini`),
@@ -410,9 +411,10 @@ describe('the game-file target: a write', () => {
   it("puts the file back when it doesn't read back as written", async () => {
     let writes = 0;
     const disk = failingWrites(async (path, bytes) => {
-      // The first write goes wrong (the old file stays); putting it back goes through.
+      // The first write puts Boost on C, not B; putting the file back goes through.
       writes++;
-      await nodeGameFileDisk.write(path, writes === 1 ? ES2_BYTES : bytes);
+      const wrong = writeUnrealIni(ES2_BYTES.toString('utf8'), [row('Boost', key('C'))]);
+      await nodeGameFileDisk.write(path, writes === 1 ? new TextEncoder().encode(wrong) : bytes);
     });
     expect({ outcome: await target({ disk }).write(ES2_GAME, MOVED), file: await ini() }).toEqual({
       outcome: {
@@ -470,17 +472,47 @@ describe('the game-file target: a write', () => {
   ])("doesn't say the file was put back when it reads back %s", async (_how, spoil) => {
     let writes = 0;
     const disk = failingWrites(async (path, bytes) => {
+      // The first write stops half way through the file; putting it back goes wrong.
       writes++;
-      if (writes === 1) throw new Error('EIO');
-      await nodeGameFileDisk.write(path, spoil(bytes));
+      if (writes > 1) return nodeGameFileDisk.write(path, spoil(bytes));
+      await writeFile(path, bytes.slice(0, bytes.length / 2));
+      throw new Error('EIO');
     });
     expect((await target({ disk }).write(ES2_GAME, MOVED)).message).toBe(
       "Everspace 2's controls file couldn't be written (EIO), and couldn't be put back: a copy of the old one is in helmArray's backups folder, as “2026-11-24 09.30.01.250 Input.ini”.",
     );
   });
 
+  it('says the file is as it was when the write was refused before it touched it', async () => {
+    let writes = 0;
+    const disk = failingWrites(() => {
+      writes++;
+      return Promise.reject(new Error('EPERM: operation not permitted'));
+    });
+    expect({
+      outcome: await target({ disk }).write(ES2_GAME, MOVED),
+      file: await ini(),
+      writes,
+    }).toEqual({
+      outcome: {
+        ok: false,
+        written: false,
+        message:
+          "Everspace 2's controls file couldn't be written (EPERM: operation not permitted), and it is as it was.",
+      },
+      file: ES2_BYTES,
+      writes: 1,
+    });
+  });
+
   it("says where the copy is when the file can't even be put back", async () => {
-    const disk = failingWrites(() => Promise.reject(new Error('EPERM: operation not permitted')));
+    let writes = 0;
+    const disk = failingWrites(async (path, bytes) => {
+      // The first write stops half way through the file; every write after it is refused.
+      if (++writes > 1) throw new Error('EPERM: operation not permitted');
+      await writeFile(path, bytes.slice(0, bytes.length / 2));
+      throw new Error('EPERM: operation not permitted');
+    });
     expect(await target({ disk }).write(ES2_GAME, MOVED)).toEqual({
       ok: false,
       written: false,

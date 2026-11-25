@@ -266,16 +266,26 @@ export function createGameFileTarget(deps: GameFileDeps): GameFileTarget {
     return copy;
   };
 
-  /** Puts the file back as it was. True when it reads back so. */
-  const restore = async (path: string, before: Uint8Array): Promise<boolean> => {
-    try {
-      await deps.disk.write(path, before);
+  /**
+   * Puts the file back as it was: `untouched` when it reads as it was without (a write refused
+   * before it touched the file), `restored` when it reads so once put back, else `lost`.
+   */
+  const restore = async (
+    path: string,
+    before: Uint8Array,
+  ): Promise<'untouched' | 'restored' | 'lost'> => {
+    const reads = async () => {
       const back = await deps.disk.read(path);
       return back !== null && sameBytes(back, before);
+    };
+    try {
+      if (await reads()) return 'untouched';
+      await deps.disk.write(path, before);
+      if (await reads()) return 'restored';
     } catch (error) {
       trace(`putting the file back failed: ${messageOf(error)}`);
-      return false;
     }
+    return 'lost';
   };
 
   /** Step 5's check: the file read back holds what was meant, as the game will read it. */
@@ -347,9 +357,11 @@ export function createGameFileTarget(deps: GameFileDeps): GameFileTarget {
       failure = `${file} couldn't be written (${clause(messageOf(error))})`;
     }
     trace(`${game.id}: ${failure}`);
-    if (await restore(ready.path, ready.before)) {
+    const back = await restore(ready.path, ready.before);
+    if (back === 'untouched')
+      return { ok: false, written: false, message: `${failure}, and it is as it was.` };
+    if (back === 'restored')
       return { ok: false, written: false, message: `${failure}, so it was put back as it was.` };
-    }
     return {
       ok: false,
       written: false,
