@@ -122,7 +122,8 @@ const backupsOf = async () => readdir(join(backups, 'elite-dangerous')).catch(()
 function failing(fail: {
   write?: (path: string, nth: number) => boolean;
   read?: (path: string, nth: number) => Uint8Array | null | 'real';
-  remove?: (path: string) => boolean;
+  /** True: the remove fails; `stays`: it succeeds, and the file is still there. */
+  remove?: (path: string) => boolean | 'stays';
 }): GameFileDisk {
   const writes = new Map<string, number>();
   const reads = new Map<string, number>();
@@ -141,10 +142,13 @@ function failing(fail: {
       const got = fail.read === undefined ? 'real' : fail.read(path, nth);
       return got === 'real' ? nodeGameFileDisk.read(path) : Promise.resolve(got);
     },
-    remove: (path) =>
-      fail.remove?.(path) === true
+    remove: (path) => {
+      const how = fail.remove?.(path);
+      if (how === 'stays') return Promise.resolve();
+      return how === true
         ? Promise.reject(new Error('the file is in use'))
-        : nodeGameFileDisk.remove(path),
+        : nodeGameFileDisk.remove(path);
+    },
   };
 }
 
@@ -431,6 +435,129 @@ describe('Elite with no file of its own: a failure at any step leaves StartPrese
         message: `StartPreset.4.start didn't read back as it was written, and couldn't be put back: a copy of it is in helmArray's backups folder, as “${copies.at(-1) ?? ''}”.`,
       },
       custom: null,
+    });
+  });
+});
+
+describe('Elite with no file of its own: what the log says, and the edges of putting things back', () => {
+  it('notes the copy kept and the file made', async () => {
+    await target().write(GAME, MOVED);
+    const [copy] = await backupsOf();
+    expect(lines).toEqual([
+      `elite-dangerous: kept a copy of ${startPath} as ${copy ?? ''}`,
+      `elite-dangerous: made ${customPath} from ${shippedPath}, and pointed ${startPath} at it`,
+    ]);
+  });
+
+  it('notes why no copy could be kept', async () => {
+    await target({ disk: failing({ write: (path) => path.startsWith(backups) }) }).write(
+      GAME,
+      MOVED,
+    );
+    expect(lines).toEqual([
+      `elite-dangerous: no copy of ${startPath} could be kept: the disk is full`,
+    ]);
+  });
+
+  it('notes what failed, and why the new file could not be removed', async () => {
+    await target({
+      disk: failing({
+        write: (path, nth) => path === customPath && nth === 2,
+        remove: (path) => path === customPath,
+      }),
+    }).write(GAME, MOVED);
+    expect(lines.slice(1)).toEqual([
+      "elite-dangerous: Elite Dangerous's controls file couldn't be written (the disk is full)",
+      `elite-dangerous: couldn't remove ${customPath}: the file is in use`,
+    ]);
+  });
+
+  it('never touches StartPreset to put it back when it failed before pointing it', async () => {
+    // StartPreset can't be read once the write began: putting it back would say it is lost.
+    const outcome = await target({
+      disk: failing({
+        write: (path, nth) => path === customPath && nth === 2,
+        read: (path, nth) => {
+          if (path === startPath && nth >= 2) throw new Error('locked');
+          return 'real';
+        },
+      }),
+    }).write(GAME, MOVED);
+    expect(outcome.message).toBe(
+      "Elite Dangerous's controls file couldn't be written (the disk is full), so the game was left as it was.",
+    );
+  });
+
+  it('says so when the new file is still there after it was removed', async () => {
+    const outcome = await target({
+      disk: failing({
+        write: (path, nth) => path === customPath && nth === 2,
+        remove: (path) => (path === customPath ? 'stays' : false),
+      }),
+    }).write(GAME, MOVED);
+    expect(outcome.message).toBe(
+      "Elite Dangerous's controls file couldn't be written (the disk is full), and helmArray couldn't remove the Custom.4.1.binds it began, though the game doesn't read it.",
+    );
+  });
+
+  it("refuses to write when the game's preset can't be read, and says why", async () => {
+    const disk: GameFileDisk = {
+      ...nodeGameFileDisk,
+      read: (path) =>
+        path === shippedPath
+          ? Promise.reject(new Error('access denied'))
+          : nodeGameFileDisk.read(path),
+    };
+    expect(await target({ disk }).write(GAME, MOVED)).toEqual({
+      ok: false,
+      written: false,
+      message: "helmArray couldn't read the game's keyboard and mouse preset (access denied).",
+    });
+  });
+
+  it('says why when the new file can’t be made for a reason of its own', async () => {
+    const elite = KINDS['elite-binds'];
+    const kinds = {
+      ...KINDS,
+      'elite-binds': {
+        ...elite,
+        make: (
+          where: Parameters<NonNullable<GameFileKind['make']>>[0],
+          folders: Parameters<NonNullable<GameFileKind['make']>>[1],
+        ) => {
+          const made = elite.make?.(where, folders) ?? null;
+          return made === null
+            ? null
+            : {
+                ...made,
+                build: () => {
+                  throw new Error('The preset is broken.');
+                },
+              };
+        },
+      },
+    };
+    expect((await target({ kinds }).look(GAME, MOVED)).checks[1]?.text).toBe(
+      "Elite Dangerous's controls file can't be made: the preset is broken.",
+    );
+  });
+
+  it("never asks to make a file when the game's own is found", async () => {
+    await writeFile(customPath, MADE_TEXT);
+    await writeFile(startPath, POINTED);
+    const kinds = {
+      ...KINDS,
+      'elite-binds': {
+        ...KINDS['elite-binds'],
+        make: () => {
+          throw new Error('asked to make a file');
+        },
+      },
+    };
+    expect(await target({ kinds }).look(GAME, MOVED)).toMatchObject({
+      via: 'file',
+      note: null,
+      same: true,
     });
   });
 });

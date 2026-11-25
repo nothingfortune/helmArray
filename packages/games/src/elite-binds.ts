@@ -467,7 +467,7 @@ export function writeStartPreset(text: string, preset: string): string {
   return joinLines(
     linesOf(text).map((line, i) => {
       const bom = i === 0 && line.text.startsWith(BOM) ? BOM : '';
-      const name = line.text.slice(bom.length).trim();
+      const name = line.text.trim();
       return name === '' || name === preset ? line : { text: bom + preset, end: line.end };
     }),
   );

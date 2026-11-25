@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { GameFileDisk } from './game-file-disk';
 import { nodeGameFileDisk } from './game-file-disk';
 import type { HarvestDeps } from './game-harvest';
+import { GAME_FILE_KINDS } from './game-file';
 import { FILE_GAMES, createGameHarvester } from './game-harvest';
 
 const REFERENCE = new URL('../../../../reference/game-files/', import.meta.url);
@@ -251,6 +252,21 @@ describe('Elite with no file of its own: the preset it ships is the head start, 
       installDir: (format) => Promise.resolve(format === 'elite-binds' ? install : null),
       ...over,
     });
+
+  it("never asks to make a file when the game's own is found", async () => {
+    await writeFile(join(bindsDir, 'Custom.4.1.binds'), ELITE_BYTES);
+    await writeFile(join(bindsDir, 'StartPreset.4.start'), 'Custom\r\n');
+    const kinds = {
+      ...GAME_FILE_KINDS,
+      'elite-binds': {
+        ...GAME_FILE_KINDS['elite-binds'],
+        make: () => {
+          throw new Error('asked to make a file');
+        },
+      },
+    };
+    expect(await withInstall({ kinds }).read(ELITE)).toEqual({ ok: true, game: ELITE_HARVEST });
+  });
 
   it('reads the game as the preset has it, and notes the file it read', async () => {
     expect({ read: await withInstall().read(ELITE), said: lines }).toEqual({

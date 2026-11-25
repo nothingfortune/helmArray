@@ -31,6 +31,12 @@ describe("Elite: the new file's root", () => {
     );
   });
 
+  it('takes no line for the root that has something before it', () => {
+    expect(newEliteBinds('<X /><Root PresetName="Y">\r\n<Root>\r\n')).toBe(
+      '<X /><Root PresetName="Y">\r\n<Root PresetName="Custom" MajorVersion="4" MinorVersion="1">\r\n',
+    );
+  });
+
   it('refuses a file with no root, in a sentence', () => {
     expect(
       errorOf(() => newEliteBinds('<?xml version="1.0"?>\r\n<Rooted />\r\n'))?.problems,
@@ -47,6 +53,10 @@ describe('Elite: StartPreset pointed at the new file', () => {
 
   it('keeps a line that names the preset already as it was, spaces and all', () => {
     expect(writeStartPreset(' Custom \r\nKeyboardMouseOnly', 'Custom')).toBe(' Custom \r\nCustom');
+  });
+
+  it('keeps no mark but the one that starts the file: a later line is named whole', () => {
+    expect(writeStartPreset('A\r\n\uFEFFB\r\n', 'Custom')).toBe('Custom\r\nCustom\r\n');
   });
 
   it('keeps a line of nothing but a byte order mark as it was', () => {

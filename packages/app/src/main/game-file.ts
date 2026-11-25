@@ -579,7 +579,7 @@ export function createGameFileTarget(deps: GameFileDeps): GameFileTarget {
       failure = `${file} couldn't be written (${clause(messageOf(error))})`;
     }
     trace(`${game.id}: ${failure}`);
-    const back = pointed ? await restore(making.file.pointer, making.pointerBefore) : 'untouched';
+    const lost = pointed && (await restore(making.file.pointer, making.pointerBefore)) === 'lost';
     let removed: boolean;
     try {
       await deps.disk.remove(ready.path);
@@ -588,7 +588,7 @@ export function createGameFileTarget(deps: GameFileDeps): GameFileTarget {
       trace(`${game.id}: couldn't remove ${ready.path}: ${messageOf(error)}`);
       removed = false;
     }
-    if (back === 'lost')
+    if (lost)
       return {
         ok: false,
         written: false,
