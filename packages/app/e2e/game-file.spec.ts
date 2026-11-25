@@ -1,8 +1,8 @@
 // M5's game-file target in the real window: Everspace 2's Input.ini (a copy of
 // reference/game-files, in the run folder standing for %LOCALAPPDATA%) written by Apply after the
 // units. The game's data is the reviewed harvest of that file
-// (packages/games/src/__fixtures__/everspace2.harvest.json), saved where the app keeps games:
-// putting a harvest into the app is a later part of M5. The game "runs" when the fake list of
+// (packages/games/src/__fixtures__/everspace2.harvest.json), saved where the app keeps games, so
+// these tests start from data the app has; reading the file into the app is harvest.spec.ts. The game "runs" when the fake list of
 // running programs says its test program does (E2E_GAME_PROGRAMS). Input is Playwright's own.
 import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';

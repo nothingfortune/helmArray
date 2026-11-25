@@ -264,6 +264,8 @@ export function loadedOf(
   builtIn: boolean;
   edited: boolean;
   saved: boolean;
+  found?: boolean;
+  readsFile?: boolean;
   taken?: string[];
   reserved?: Reserved;
 } | null {
@@ -278,7 +280,10 @@ export function loadedOf(
     game: entry.game,
     builtIn: entry.builtIn,
     edited: entry.edited === true,
-    saved: true,
+    // A game read from its file just now is saved at its first edit, under the id it has.
+    saved: entry.found !== true,
+    ...(entry.found === true ? { found: true } : {}),
+    ...(entry.readsFile === true ? { readsFile: true } : {}),
     reserved: referencedIds(schemes),
   };
 }

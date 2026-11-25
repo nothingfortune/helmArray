@@ -22,6 +22,7 @@ import {
   ActionTable,
   AddAction,
   BackLink,
+  FileRead,
   ModeHead,
   ModeTabs,
   Notices,
@@ -246,7 +247,14 @@ function GameBody({
             if (schemeId !== null) onOpenEditor(schemeId);
           });
         }}
+        found={loaded.found === true && !state.saved}
+        readsFile={editor.readsFile}
+        reading={state.fileRead === 'reading'}
+        onReadFile={() => void editor.readFile()}
       />
+      {state.fileRead !== null && state.fileRead !== 'reading' && (
+        <FileRead read={state.fileRead} onTake={editor.takeFile} onDrop={editor.dropFile} />
+      )}
       <Notices
         lines={[
           // Not while a new game has no name yet: there is nothing to say until it is typed.

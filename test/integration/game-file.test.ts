@@ -1,7 +1,7 @@
 // Apply writes the game's file: Everspace 2's Input.ini (a copy of reference/game-files, in a temp
 // folder standing for %LOCALAPPDATA%), after the units, through the services as index.ts wires
-// them. The game's data is the harvest of that file, saved as the Game screen saves a game (putting
-// a harvest into the app is a later part of M5).
+// them. The game's data is the harvest of that file, saved as the Game screen saves a game, so these
+// tests start from data the app has; reading the file into the app is harvest.test.ts.
 //
 // What a journey leaves is read by the tests after it: the file, its copies in the backups folder,
 // the game's baseline and the reminder, the units.

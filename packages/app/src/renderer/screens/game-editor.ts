@@ -4,7 +4,9 @@
 
 import type { Action, ActionId, Game, ModeId, PadControl, Signal } from '@helmarray/core';
 import { gameProblem } from '@helmarray/core';
-import type { HelmApi, Preset } from '../../shared/api';
+import type { GameFileRead, HelmApi, Preset } from '../../shared/api';
+import { fileReadView } from './file-read';
+import type { FileReadView } from './file-read';
 import { canRedo, canUndo, redo, startHistory, undo } from './editor-model';
 import type { History } from './editor-model';
 import {
@@ -35,7 +37,10 @@ export const NAME_FIELD = 'game-name';
 export const modeNameField = (mode: ModeId): string => `mode-name:${mode}`;
 const isModeNameField = (field: string | null) => field?.startsWith('mode-name:') === true;
 
-export type EditorApi = Pick<HelmApi, 'saveGame' | 'deleteGame' | 'createScheme' | 'setActive'>;
+export type EditorApi = Pick<
+  HelmApi,
+  'saveGame' | 'deleteGame' | 'createScheme' | 'setActive' | 'readGameFile'
+>;
 
 export interface Loaded {
   game: Game;
@@ -45,6 +50,13 @@ export interface Loaded {
   edited: boolean;
   /** Main has it: a game set up from Steam is not saved until its first edit. */
   saved: boolean;
+  /**
+   * Read from the game's own file and not saved yet (`GameEntry.found`): its id is the one helmArray
+   * knows the game by, and it is saved as it is at the first edit.
+   */
+  found?: boolean;
+  /** helmArray can read the game's own file into it (*Read from the game's file*). */
+  readsFile?: boolean;
   /** The other games' ids, which a new game's id must not be. */
   taken?: readonly string[];
   /** The ids the game's saved schemes name: never given to a new mode or action. */
@@ -73,6 +85,11 @@ export interface GameEditorState {
   notice: string | null;
   /** What is typed in the new-action field. */
   draft: string;
+  /**
+   * *Read from the game's file*: being read, or what it found (why it couldn't, nothing to save,
+   * or the list of what saving it changes), until it is saved or put away; null otherwise.
+   */
+  fileRead: 'reading' | FileReadView | null;
 }
 
 export class GameEditor {
@@ -88,6 +105,8 @@ export class GameEditor {
   private fresh: boolean;
   private readonly taken: readonly string[];
   private readonly reserved: Reserved;
+  /** Whether *Read from the game's file* is offered. */
+  readonly readsFile: boolean;
 
   constructor(
     loaded: Loaded,
@@ -105,9 +124,11 @@ export class GameEditor {
       saveError: null,
       notice: null,
       draft: '',
+      fileRead: null,
     };
     this.builtIn = loaded.builtIn;
-    this.fresh = !loaded.saved;
+    this.fresh = !loaded.saved && loaded.found !== true;
+    this.readsFile = loaded.readsFile === true;
     this.taken = loaded.taken ?? [];
     this.reserved = loaded.reserved ?? { modes: [], actions: [] };
   }
@@ -214,6 +235,8 @@ export class GameEditor {
     const before = this.current.history;
     const next = fn(before.present);
     if (next === before.present) return;
+    // A list of what the file changes was worked out from the game before this edit: it goes.
+    this.dropStaleRead();
     const history = record(before, next, field, this.lastField);
     this.lastField = field;
     this.set(
@@ -225,6 +248,7 @@ export class GameEditor {
   private travel(step: (h: History<Game>) => History<Game>): void {
     const history = step(this.current.history);
     if (history === this.current.history) return;
+    this.dropStaleRead();
     this.lastField = null;
     this.move({ history, modesShown: showsModes(history.present) });
     this.save(this.game, null);
@@ -314,6 +338,41 @@ export class GameEditor {
     const outcome = await runMake(this.api, this.game.id, preset);
     this.set({ busy: false, notice: outcome.ok ? null : outcome.message });
     return outcome.ok ? outcome.schemeId : null;
+  };
+
+  /**
+   * *Read from the game's file*: reads it (main never writes it), and merges what it has into the
+   * game as it is here, to show before anything is saved.
+   */
+  readonly readFile = async (): Promise<void> => {
+    if (this.current.fileRead === 'reading') return;
+    this.set({ fileRead: 'reading', notice: null });
+    let read: GameFileRead;
+    try {
+      read = await this.api.readGameFile(this.game.id);
+    } catch (error) {
+      read = { ok: false, message: `Couldn't read the game's file. ${plainReason(error)}`.trim() };
+    }
+    this.set({ fileRead: fileReadView(this.game, read) });
+  };
+
+  /** The one button under the list: the merged game is the next edit (undo takes it back). */
+  readonly takeFile = (): void => {
+    const read = this.current.fileRead;
+    if (read === null || read === 'reading' || read.kind !== 'changes') return;
+    this.set({ fileRead: null });
+    this.edit(() => read.game);
+  };
+
+  /** A read's list, made from the game as it was, once the game is no longer that. */
+  private dropStaleRead(): void {
+    const read = this.current.fileRead;
+    if (read !== null && read !== 'reading') this.current = { ...this.current, fileRead: null };
+  }
+
+  /** The list put away: nothing is saved. */
+  readonly dropFile = (): void => {
+    if (this.current.fileRead !== null) this.set({ fileRead: null });
   };
 
   /** Deletes the game you added, or drops your copy of a built-in one. Whether it was done. */

@@ -101,6 +101,7 @@ export default {
     // The Game screen: its edits, its state, press-to-set and what it listens to while waiting.
     'packages/app/src/renderer/screens/game-model.ts',
     'packages/app/src/renderer/screens/game-editor.ts',
+    'packages/app/src/renderer/screens/file-read.ts', // what reading the game's file changes, in words
     'packages/app/src/renderer/screens/capture.ts',
     'packages/app/src/renderer/screens/press-listener.ts',
     'packages/app/src/renderer/screens/gameTile.ts',
