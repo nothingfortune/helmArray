@@ -16,7 +16,7 @@ export interface LibraryInput {
   activeSchemeOf(gameId: string): string | null;
   /** The scheme of the game applied last, when, and its changes since; null when none was. */
   appliedOf?(gameId: string): { schemeId: string; at: number; changes: number } | null;
-  /** By Steam app id: why a game's own file, there, can't be used, in a sentence. */
+  /** By Steam app id: why a game's own file can't be used, or isn't there yet, in a sentence. */
   fileNotes?: ReadonlyMap<string, string>;
   /** By Steam app id: the game read from its file and deleted, set up afresh from its tile. */
   restorable?: ReadonlyMap<string, string>;
@@ -130,7 +130,7 @@ export interface LibraryDeps {
   lastApplied(gameId: string): Promise<{ schemeId: string; at: number } | null>;
   /** How many changes a scheme has had since it was last applied (the sync pill's count). */
   changesOf?(schemeId: string): Promise<number>;
-  /** By Steam app id: why a game's own file, there, can't be used. */
+  /** By Steam app id: why a game's own file can't be used, or isn't there yet. */
   fileNotes?(): Promise<ReadonlyMap<string, string>>;
   /** By Steam app id: the game read from its file and deleted, set up afresh from its tile. */
   restorable?(): Promise<ReadonlyMap<string, string>>;

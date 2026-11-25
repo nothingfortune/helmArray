@@ -72,6 +72,11 @@ export interface Found {
    * not found, but set up afresh from its Steam tile.
    */
   restorable: { steamAppId: number; gameId: string }[];
+  /**
+   * Each game whose file isn't there (Everspace 2 saves its Input.ini only once a control is changed
+   * in its menu), by its Steam id, with why in a sentence: its tile stays *Set up*.
+   */
+  missing: { steamAppId: number; message: string }[];
 }
 
 export interface HarvestDeps {
@@ -100,6 +105,13 @@ export interface GameHarvester {
   /** The id of the game with a file format that this game is (by its id or Steam id), or null. */
   fileGameOf(game: Pick<Game, 'id' | 'steamAppId'>): string | null;
 }
+
+/**
+ * Why a game helmArray reads the file of isn't found from it, when the game has saved no file yet:
+ * Apply's sentence for the same (game-file.ts), as the Game screen of its *Set up* tile says it.
+ */
+const missingNote = (name: string): string =>
+  `helmArray can't find ${name}'s controls file yet: changing any control in the game's own menu makes the game save one.`;
 
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
@@ -173,7 +185,7 @@ export function createGameHarvester(deps: HarvestDeps): GameHarvester {
   };
 
   const found: GameHarvester['found'] = async (have, dismissed = []) => {
-    const out: Found = { games: [], unreadable: [], restorable: [] };
+    const out: Found = { games: [], unreadable: [], restorable: [], missing: [] };
     for (const game of games) {
       const taken = have.some((g) => g.id === game.id || g.steamAppId === game.steamAppId);
       if (taken) continue;
@@ -188,6 +200,7 @@ export function createGameHarvester(deps: HarvestDeps): GameHarvester {
         });
       else if (got.reason === 'unreadable')
         out.unreadable.push({ steamAppId: game.steamAppId, message: got.message });
+      else out.missing.push({ steamAppId: game.steamAppId, message: missingNote(game.name) });
     }
     return out;
   };

@@ -150,7 +150,8 @@ export async function composeServices(options: ComposeOptions): Promise<Services
         });
   /**
    * The store's games, each marked when its file can be read, then the ones found; and, by Steam
-   * app id, why a game's file that is there can't be used (its tile stays *Set up*).
+   * app id, why a game's file can't be used or isn't there yet (its tile stays *Set up*), and the
+   * games read from their file and deleted, set up afresh from their tile.
    */
   const scan = async (): Promise<{
     entries: GameEntry[];
@@ -161,7 +162,7 @@ export async function composeServices(options: ComposeOptions): Promise<Services
     const notes = new Map<string, string>();
     const restorable = new Map<string, string>();
     if (harvester === undefined) return { entries, notes, restorable };
-    let found: Found = { games: [], unreadable: [], restorable: [] };
+    let found: Found = { games: [], unreadable: [], restorable: [], missing: [] };
     try {
       found = await harvester.found(
         entries.map((e) => e.game),
@@ -170,7 +171,8 @@ export async function composeServices(options: ComposeOptions): Promise<Services
     } catch (error) {
       log.write('(game file)', `couldn't look for games' files: ${String(error)}`);
     }
-    for (const { steamAppId, message } of found.unreadable) notes.set(String(steamAppId), message);
+    for (const { steamAppId, message } of [...found.unreadable, ...found.missing])
+      notes.set(String(steamAppId), message);
     for (const { steamAppId, gameId } of found.restorable)
       restorable.set(String(steamAppId), gameId);
     return {

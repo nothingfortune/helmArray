@@ -218,7 +218,11 @@ a read). The games helmArray has a file format for are known by their Steam app 
 yet is listed as a game helmArray knows (its Steam tile, *Game's own keys* offered) and is saved
 the first time it is used: a scheme made from it, or an edit on the Game screen. So setting one up
 from its tile is a click on the tile, one on the preset, and Apply, as for a game that ships with
-helmArray. A game with a file format (or known by its id or Steam id) has *Read from the game's file*
+helmArray. One whose file isn't there yet (Everspace 2 saves its `Input.ini` only once a control
+is changed in its menu) keeps its tile on *Set up*, and the Game screen says why in one sentence,
+in Apply's words: "helmArray can't find Everspace 2's controls file yet: changing any control in
+the game's own menu makes the game save one." Elite's tile says the same of its file. A game with
+a file format (or known by its id or Steam id) has *Read from the game's file*
 on the Game screen. A game read this way and deleted stays deleted: the settings keep its id
 (`dismissed`; deleting any game helmArray knows by that id or Steam id does the same), and the
 Library no longer finds it from its file. Its Steam tile says *Set up* under Steam's name, and that

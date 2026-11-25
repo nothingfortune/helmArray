@@ -17,6 +17,9 @@ const REFERENCE = new URL('../../../../reference/game-files/', import.meta.url);
 const ES2_BYTES = await readFile(new URL('everspace2-Input.before.ini', REFERENCE));
 const ELITE_BYTES = await readFile(new URL('elite-Custom.4.1.binds', REFERENCE));
 const ES2 = { id: 'everspace2', name: 'Everspace 2' };
+/** Why Everspace 2 isn't found when it has saved no Input.ini yet, as its Game screen says it. */
+const MISSING_ES2 =
+  "helmArray can't find Everspace 2's controls file yet: changing any control in the game's own menu makes the game save one.";
 const ELITE = { id: 'elite-dangerous', name: 'Elite Dangerous' };
 const ES2_HARVEST = harvestUnrealIni(ES2_BYTES.toString('utf8'), ES2).game;
 const ELITE_HARVEST = harvestEliteBinds(ELITE_BYTES.toString('utf8'), ELITE).game;
@@ -230,6 +233,7 @@ describe('the games found by their file', () => {
       ],
       unreadable: [],
       restorable: [],
+      missing: [],
     });
   });
 
@@ -253,7 +257,7 @@ describe('the games found by their file', () => {
       { id: 'everspace2' },
       { id: 'my-elite', steamAppId: 359320 },
     ]);
-    expect(found).toEqual({ games: [], unreadable: [], restorable: [] });
+    expect(found).toEqual({ games: [], unreadable: [], restorable: [], missing: [] });
   });
 
   it('start Everspace 2 with its sticks sending keys, and Elite with no such rule', async () => {
@@ -274,6 +278,14 @@ describe('the games found by their file', () => {
       games: [],
       unreadable: [],
       restorable: [],
+      missing: [
+        { steamAppId: 1128920, message: MISSING_ES2 },
+        {
+          steamAppId: 359320,
+          message:
+            "helmArray can't find Elite Dangerous's controls file yet: changing any control in the game's own menu makes the game save one.",
+        },
+      ],
     });
   });
 });
@@ -423,9 +435,25 @@ describe('a file with nothing helmArray can read', () => {
     });
   });
 
-  it('says nothing of a game whose file is not there: it is not found, and that is all', async () => {
+  it('says why a game whose file is not there yet is not found: the game saves one later', async () => {
     await rm(iniPath);
-    expect((await harvester().found([])).unreadable).toEqual([]);
+    const found = await harvester().found([]);
+    expect([found.unreadable, found.missing]).toEqual([
+      [],
+      [{ steamAppId: 1128920, message: MISSING_ES2 }],
+    ]);
+  });
+
+  it('says so of a game read from its file and deleted, whose file is gone since', async () => {
+    await rm(iniPath);
+    expect((await harvester().found([], ['everspace2'])).missing).toEqual([
+      { steamAppId: 1128920, message: MISSING_ES2 },
+    ]);
+  });
+
+  it('says nothing of a missing file for a game the app has data for already', async () => {
+    await rm(iniPath);
+    expect((await harvester().found([{ id: 'everspace2' }])).missing).toEqual([]);
   });
 
   it('says nothing of a game the app has data for already, whatever its file holds', async () => {

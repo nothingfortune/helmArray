@@ -93,8 +93,8 @@ export interface LibraryEntry {
    */
   actionCount: number;
   /**
-   * For a game helmArray has a file format for and no data: why its own file, which is there,
-   * can't be used, in one sentence. Its tile is *Set up*, and the Game screen says it.
+   * For a game helmArray has a file format for and no data: why its own file can't be used, or
+   * isn't there yet, in one sentence. Its tile is *Set up*, and the Game screen says it.
    */
   fileNote?: string;
   /**

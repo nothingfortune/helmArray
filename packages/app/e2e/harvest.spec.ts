@@ -372,3 +372,34 @@ test.describe('Everspace 2 typed in by hand, then read from its file', () => {
     ).toHaveCount(0);
   });
 });
+
+/** Steam lists Everspace 2, which hasn't saved an Input.ini yet: no control changed in its menu. */
+const noIniYet: Seed = {
+  files: async (dataDir) => {
+    await writeFile(
+      join(dataDir, 'steam', 'steamapps', `appmanifest_${ES2_APP_ID}.acf`),
+      `"AppState"
+{
+	"appid"		"${ES2_APP_ID}"
+	"name"		"EVERSPACE™ 2"
+	"installdir"		"EVERSPACE 2"
+}
+`,
+    );
+  },
+};
+
+test.describe('Everspace 2 with no Input.ini yet', () => {
+  test.use({ helmSeed: noIniYet });
+
+  test('its tile says Set up, and the Game screen says why in one sentence', async ({ helm }) => {
+    const { page } = helm;
+    await page.getByRole('button', { name: 'Set up EVERSPACE™ 2' }).click();
+    await expect(page.getByRole('textbox', { name: 'Game name' })).toHaveValue('EVERSPACE™ 2');
+    await expect(
+      page.getByText(
+        "helmArray can't find Everspace 2's controls file yet: changing any control in the game's own menu makes the game save one.",
+      ),
+    ).toBeVisible();
+  });
+});

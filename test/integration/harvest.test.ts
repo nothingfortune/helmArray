@@ -614,6 +614,42 @@ describe('Everspace 2 typed in by hand before its file was read', () => {
   });
 });
 
+describe('Everspace 2 installed, with no Input.ini saved yet', () => {
+  let world: World;
+  let library: LibraryEntry[];
+  let listed: GameEntry[];
+
+  beforeAll(async () => {
+    world = await World.create({ steam: STEAM });
+    const { ini } = await placeFiles(world);
+    await rm(ini);
+    await world.boot();
+    library = await world.helm.listLibrary();
+    listed = await world.helm.listGames();
+  });
+
+  afterAll(async () => {
+    await world.dispose();
+  });
+
+  it('leaves its tile on Set up, saying why in one sentence; Elite, whose file is there, is found', () => {
+    expect([
+      [tileOf(library, '1128920')?.gameId, tileOf(library, '1128920')?.fileNote],
+      [tileOf(library, '359320')?.gameId, tileOf(library, '359320')?.fileNote],
+    ]).toEqual([
+      [
+        null,
+        "helmArray can't find Everspace 2's controls file yet: changing any control in the game's own menu makes the game save one.",
+      ],
+      ['elite-dangerous', undefined],
+    ]);
+  });
+
+  it('lists it as no game found, and saves nothing', async () => {
+    expect([entryOf(listed, ES2), await savedGames(world)]).toEqual([undefined, []]);
+  });
+});
+
 describe('games whose file has nothing helmArray can read', () => {
   let world: World;
   let ini: string;
