@@ -559,3 +559,59 @@ describe('the ids the game’s saved schemes name', () => {
     expect(editor.addMode()).toBe('mode_2_2');
   });
 });
+
+describe('the wait and the question belong to the mode shown: every move ends them', () => {
+  /** Two modes, Jump in Default: an edit to undo first, then the transient state. */
+  const twoModes: Game = { ...rover, modes: [...rover.modes, { id: 'drive', name: 'Driving' }] };
+  const STATES: [string, (e: GameEditor) => void][] = [
+    ['waiting for Jump’s key', (e) => e.wait({ action: 'jump', part: 'key' })],
+    ['waiting for Jump’s controller button', (e) => e.wait({ action: 'jump', part: 'pad' })],
+    ['asking before Delete game', (e) => e.confirm(true)],
+  ];
+  const MOVES: [string, (e: GameEditor) => void][] = [
+    ['another mode shown', (e) => e.setMode('drive')],
+    ['a mode added, and shown', (e) => void e.addMode()],
+    ['undo', (e) => e.undo()],
+    [
+      'redo',
+      (e) => {
+        e.undo();
+        e.wait({ action: 'jump', part: 'key' });
+        e.confirm(true);
+        e.redo();
+      },
+    ],
+  ];
+
+  it('each state is there before the move', () => {
+    const faults: string[] = [];
+    for (const [state, start] of STATES) {
+      const { editor } = open(twoModes);
+      editor.edit((g) => renameGame(g, 'Rover 2'));
+      start(editor);
+      if (editor.state.waiting === null && !editor.state.confirming) faults.push(state);
+    }
+    expect(faults).toEqual([]);
+  });
+
+  it('after each move, nothing is waited for and nothing asked', () => {
+    const faults: string[] = [];
+    for (const [state, start] of STATES)
+      for (const [move, by] of MOVES) {
+        const { editor } = open(twoModes);
+        editor.edit((g) => renameGame(g, 'Rover 2'));
+        start(editor);
+        by(editor);
+        if (editor.state.waiting !== null || editor.state.confirming)
+          faults.push(`${state}, then ${move}`);
+      }
+    expect(faults).toEqual([]);
+  });
+
+  it('a mode picked again, the one shown, ends nothing', () => {
+    const { editor } = open(twoModes);
+    editor.wait({ action: 'jump', part: 'key' });
+    editor.setMode('default');
+    expect(editor.state.waiting).toEqual({ action: 'jump', part: 'key' });
+  });
+});

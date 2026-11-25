@@ -7,6 +7,7 @@ import {
   contentSize,
   countInput,
   leftUnit,
+  schemePicker,
   seriousViolations,
   startBlankKeys,
   startFrom,
@@ -141,6 +142,35 @@ test.describe('the action picker', () => {
     await expect(picker(page)).toHaveCount(0);
     await expect(trigger(page, /^Add tap$/)).toBeFocused();
     await expect(leftUnit(page).getByRole('button', { name: 'Empty, index 2' })).toBeVisible();
+  });
+
+  test('another button selected, then the first again: the picker stays closed (Codex, #111)', async ({
+    helm,
+  }) => {
+    const { page } = helm;
+    await openOnIndex2(page);
+    await leftUnit(page).getByRole('button', { name: 'Empty, index 3' }).click();
+    await expect(picker(page)).toHaveCount(0);
+    await leftUnit(page).getByRole('button', { name: 'Empty, index 2' }).click();
+    await expect(page.locator('.ed-panel')).toBeVisible();
+    await expect(picker(page)).toHaveCount(0);
+    // The press settings and the list are there, not the picker.
+    await expect(trigger(page, /^Add tap$/)).toBeVisible();
+    await expect(page.locator('.ed-actions').first()).toBeVisible();
+  });
+
+  test('a device tab, then the button again: the picker stays closed', async ({ helm }) => {
+    const { page } = helm;
+    await openOnIndex2(page);
+    // Helldivers 2 has one mode: the device tab is the move here. It drops the selection.
+    await page
+      .getByRole('group', { name: 'Device' })
+      .getByRole('button', { name: 'Azerons' })
+      .click();
+    await expect(page.locator('.ed-panel')).toHaveCount(0);
+    await leftUnit(page).getByRole('button', { name: 'Empty, index 2' }).click();
+    await expect(page.locator('.ed-panel')).toBeVisible();
+    await expect(picker(page)).toHaveCount(0);
   });
 
   test('Close closes it too', async ({ helm }) => {
@@ -306,5 +336,38 @@ test.describe('the action picker: the keyboard and axe', () => {
     await page.keyboard.press('Enter');
     await expect(leftUnit(page).getByRole('button', { name: 'Reload, index 2' })).toBeVisible();
     expect(await counted()).toEqual({ clicks: 2, drags: 0 });
+  });
+});
+
+test.describe('what is open for one place doesn’t outlive it', () => {
+  test('the scheme picker’s question: asked, a button clicked, the picker opened again: not asked', async ({
+    helm,
+  }) => {
+    const { page } = helm;
+    await startBlankKeys(page);
+    await schemePicker(page).click();
+    await page.getByRole('button', { name: 'Delete this scheme' }).click();
+    await expect(page.getByRole('group', { name: /^Delete the scheme/ })).toBeVisible();
+    // A button of the right unit: the picker's popover lies over the left one.
+    await page
+      .locator('.unit[data-hand="right"]')
+      .getByRole('button', { name: 'Empty, index 1' })
+      .click();
+    await expect(page.getByRole('dialog', { name: 'Schemes' })).toHaveCount(0);
+    await schemePicker(page).click();
+    await expect(page.getByRole('button', { name: 'Delete this scheme' })).toBeVisible();
+    await expect(page.getByRole('group', { name: /^Delete the scheme/ })).toHaveCount(0);
+  });
+
+  test('the long press targeted, another button and back: the tap again', async ({ helm }) => {
+    const { page } = helm;
+    await startBlankKeys(page);
+    await leftUnit(page).getByRole('button', { name: 'Empty, index 2' }).click();
+    const long = page.locator('.ed-panel').getByRole('button', { name: /^Long/ });
+    await long.click();
+    await expect(long).toHaveAttribute('aria-pressed', 'true');
+    await leftUnit(page).getByRole('button', { name: 'Empty, index 3' }).click();
+    await leftUnit(page).getByRole('button', { name: 'Empty, index 2' }).click();
+    await expect(long).toHaveAttribute('aria-pressed', 'false');
   });
 });

@@ -7,6 +7,7 @@ import type { ActionId, ControlId, Game, ModeId, Press, Role, Scheme } from '@he
 import { ROLES, own } from '@helmarray/core';
 import { shownAction } from './editor-model';
 import type { ActionRef, ControlWord, EditorView } from './editor-view';
+import type { Picking } from './reveal';
 import { ROLE_WORDS } from './role-words';
 
 /** A role, actions with none (#98), or every action. */
@@ -264,12 +265,6 @@ export function pickerKey(
 /** The filter after a chip is pressed: its role, or every role when it was the one in use. */
 export const nextRole = (current: RoleFilter, chip: RoleFilter): RoleFilter =>
   chip === current ? 'all' : chip;
-
-/** Which press of which control the picker was opened for. */
-export interface Picking {
-  control: ControlId;
-  press: Press;
-}
 
 /**
  * The picker asked for, while it still stands: its control selected with the side panel shown on

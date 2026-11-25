@@ -8,7 +8,7 @@ import { editorView } from './editor-view';
 import { game, keysScheme, plan } from './editor-fixture';
 import { offerFor } from './fixes';
 import type { EditorPlace } from './reveal';
-import { editedLocation, findingLocation, reveal, tabOf } from './reveal';
+import { editedLocation, findingLocation, navigate, reveal, tabOf } from './reveal';
 
 /** The Editor, as it stands: in Ship, nothing selected, on the Azerons. */
 const SHIP: EditorPlace = {
@@ -17,6 +17,7 @@ const SHIP: EditorPlace = {
   press: 'tap',
   tab: 'azerons',
   inspector: false,
+  picking: null,
 };
 
 /** A key scheme with Landing gear required and on no button: a finding in SRV's neighbour, Ship. */
@@ -47,6 +48,7 @@ describe('reveal', () => {
       press: 'tap',
       tab: 'keyboard',
       inspector: true,
+      picking: null,
     });
   });
 
@@ -170,5 +172,112 @@ describe('undo and redo', () => {
 
   it('reveal nothing for an edit outside the map: the next edit stays where the player is', () => {
     expect(editedLocation(before, { ...before, name: 'Renamed' })).toBeUndefined();
+  });
+});
+
+describe('transient state belongs to one location: every way of moving clears it', () => {
+  // On L index 1 in Ship, the side panel open.
+  const ON: EditorPlace = { ...SHIP, selected: 'L.index_1', inspector: true };
+  /** The transient states the Editor keeps for the place it shows. */
+  const STATES: [string, EditorPlace][] = [
+    ['the picker open on the tap', navigate.choose(ON, 'tap')],
+    ['the picker open on the long press', navigate.choose(ON, 'long')],
+    ['the long press targeted', navigate.target(ON, 'long')],
+  ];
+  const scheme = keysScheme();
+  /** Every kind of move: of control, mode, tab, devices, output, the side panel, undo and redo. */
+  const MOVES: [string, (p: EditorPlace) => EditorPlace][] = [
+    ['another control selected', (p) => navigate.select(p, 'L.index_2')],
+    ['the control clicked again, deselected', (p) => navigate.select(p, 'L.index_1')],
+    ['the side panel closed', (p) => navigate.close(p)],
+    ['another mode', (p) => navigate.mode(p, 'srv')],
+    ['another device tab', (p) => navigate.tab(p, 'keyboard')],
+    ['the devices changed', (p) => navigate.devices(p, 'keyboard')],
+    [
+      'a fix or a finding revealing another control',
+      (p) => reveal(p, { control: 'R.index_1' }, scheme),
+    ],
+    ['a fix revealing another mode', (p) => reveal(p, { mode: 'srv' }, scheme)],
+    [
+      'undo or redo showing where its edit was',
+      (p) => navigate.travel(p, { mode: 'ship', control: 'L.middle_1', press: 'tap' }, scheme),
+    ],
+  ];
+  /** Moves that keep the control but still end the picker: it was for that output, panel, edit. */
+  const STAYS: [string, (p: EditorPlace) => EditorPlace][] = [
+    ['the Azerons switched to send the controller', (p) => navigate.output(p)],
+    ['the side panel hidden', (p) => navigate.inspector(p)],
+    [
+      'undo or redo of an edit with no control to show',
+      (p) => navigate.travel(p, undefined, scheme),
+    ],
+  ];
+
+  it('each state is there before the move: the table starts from it', () => {
+    expect(STATES.map(([, p]) => [p.picking, p.press])).toEqual([
+      [{ control: 'L.index_1', press: 'tap' }, 'tap'],
+      [{ control: 'L.index_1', press: 'long' }, 'long'],
+      [null, 'long'],
+    ]);
+  });
+
+  it('a move of location clears the picker and the press targeted', () => {
+    const faults: string[] = [];
+    for (const [state, start] of STATES)
+      for (const [move, by] of MOVES) {
+        const after = by(start);
+        if (after.picking !== null || after.press !== 'tap')
+          faults.push(`${state}, then ${move}: ${JSON.stringify([after.picking, after.press])}`);
+      }
+    expect(faults).toEqual([]);
+  });
+
+  it('a move that keeps the control still closes the picker', () => {
+    const faults: string[] = [];
+    for (const [state, start] of STATES)
+      for (const [move, by] of STAYS) {
+        const after = by(start);
+        if (after.picking !== null) faults.push(`${state}, then ${move}`);
+      }
+    expect(faults).toEqual([]);
+  });
+
+  it('Codex’s sequence: the picker on one control, another selected, the first again: no picker', () => {
+    const open = navigate.choose(ON, 'tap');
+    const back = navigate.select(navigate.select(open, 'L.index_2'), 'L.index_1');
+    expect([back.selected, back.picking, back.press]).toEqual(['L.index_1', null, 'tap']);
+  });
+
+  it('a pick reveals the same control and press: the picker is closed by the pick, not the move', () => {
+    const open = navigate.choose(ON, 'long');
+    const after = reveal(open, { mode: 'ship', control: 'L.index_1', press: 'long' }, scheme);
+    expect([after.picking, navigate.pickDone(after).picking]).toEqual([
+      { control: 'L.index_1', press: 'long' },
+      null,
+    ]);
+  });
+
+  it('choosing a press with nothing selected does nothing', () => {
+    expect(navigate.choose(SHIP, 'tap')).toBe(SHIP);
+  });
+
+  it('a control selected opens the side panel; clicked again, it is deselected', () => {
+    const shut = { ...SHIP, inspector: false };
+    const on = navigate.select(shut, 'L.index_1');
+    expect([on.inspector, navigate.select(on, 'L.index_1').selected]).toEqual([true, undefined]);
+  });
+
+  it('a device tab gained is shown; none gained keeps the tab', () => {
+    expect([navigate.devices(ON, 'keyboard').tab, navigate.devices(ON, undefined).tab]).toEqual([
+      'keyboard',
+      'azerons',
+    ]);
+  });
+
+  it('the side panel toggled shows and hides', () => {
+    expect([navigate.inspector(ON).inspector, navigate.inspector(SHIP).inspector]).toEqual([
+      false,
+      true,
+    ]);
   });
 });

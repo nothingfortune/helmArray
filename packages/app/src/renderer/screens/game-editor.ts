@@ -157,6 +157,14 @@ export class GameEditor {
     return () => void this.listeners.delete(listener);
   };
 
+  /**
+   * A move to another mode, or through the history: the wait for a press and the question before a
+   * delete were for what was shown, so they end with it (as the Editor's picker does, reveal.ts).
+   */
+  private move(patch: Partial<GameEditorState>): void {
+    this.set({ ...patch, waiting: null, confirming: false });
+  }
+
   private set(patch: Partial<GameEditorState>): void {
     this.current = { ...this.current, ...patch };
     // A wait for an action that is gone (undone) ends.
@@ -218,7 +226,7 @@ export class GameEditor {
     const history = step(this.current.history);
     if (history === this.current.history) return;
     this.lastField = null;
-    this.set({ history, modesShown: showsModes(history.present) });
+    this.move({ history, modesShown: showsModes(history.present) });
     this.save(this.game, null);
   }
 
@@ -237,14 +245,14 @@ export class GameEditor {
   };
 
   readonly setMode = (mode: ModeId): void => {
-    this.set({ mode });
+    if (mode !== this.current.mode) this.move({ mode });
   };
 
   /** Adds a mode named for its place (*Mode 2*) and shows it. Gives its id back. */
   readonly addMode = (): ModeId => {
     const added = addNextMode(this.game, this.reserved);
     this.edit(() => added.game);
-    this.set({ mode: added.id });
+    this.move({ mode: added.id });
     return added.id;
   };
 
