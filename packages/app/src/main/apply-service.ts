@@ -323,7 +323,9 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
       game: {
         via: 'file',
         rows: look.same ? [] : inFile,
-        file: { name: look.name, same: look.same },
+        // A file the target makes (the game has none of its own) says so, in one sentence.
+        file: { name: look.name, same: look.same, ...(look.note === null ? {} : { made: true }) },
+        ...(look.note === null ? {} : { note: look.note }),
         ...(byHand.length === 0 ? {} : { byHand }),
       },
       checks: look.checks,

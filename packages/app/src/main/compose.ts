@@ -8,7 +8,7 @@
 // the tray, the `helm-cover://` protocol, the IPC registration, opening a folder in Explorer).
 
 import { join } from 'node:path';
-import type { Game } from '@helmarray/core';
+import type { Game, GameFileFormat } from '@helmarray/core';
 import { heldPlan } from '@helmarray/core';
 import type { AppState, GameEntry, GameFileRead } from '../shared/api';
 import { createActivePlans } from './active-plans';
@@ -24,7 +24,7 @@ import { createExchangeLog, diskLogFiles } from './exchange-log';
 import { createGameFileTarget } from './game-file';
 import type { GameFilesOptions } from './game-file';
 import { nodeGameFileDisk } from './game-file-disk';
-import { createGameHarvester } from './game-harvest';
+import { FILE_GAMES, createGameHarvester } from './game-harvest';
 import type { Found } from './game-harvest';
 import type { ExchangeLog } from './exchange-log';
 import { jsonFileStorage, openHandStore } from './hands';
@@ -36,7 +36,7 @@ import { createLibraryService } from './library';
 import type { LibraryService } from './library';
 import { azeronAppRunning, watchProcesses } from './processes';
 import type { ProcessWatcher } from './processes';
-import { readSteamLibrary } from './steam-library';
+import { readSteamLibrary, steamInstallDir } from './steam-library';
 import type { SteamReaders } from './steam-library';
 import { planFor } from './scheme-plan';
 import { DataStore } from './store';
@@ -139,12 +139,19 @@ export async function composeServices(options: ComposeOptions): Promise<Services
   // data for yet are listed as games it knows (saved the first time one is used), and the Game
   // screen reads the file of a game that has one. Read only.
   const files = options.gameFiles;
+  // A game's install folder, as Steam has it for the game helmArray knows the format by: where
+  // Elite's shipped preset is, for a player with no file of their own. Looked up afresh each time.
+  const installDir = async (format: GameFileFormat): Promise<string | null> => {
+    const game = FILE_GAMES.find((g) => g.format === format);
+    return game === undefined ? null : steamInstallDir(options.steam, game.steamAppId);
+  };
   const harvester =
     files === undefined
       ? undefined
       : createGameHarvester({
           disk: files.disk ?? nodeGameFileDisk,
           localAppData: files.localAppData,
+          installDir,
           ...(files.kinds === undefined ? {} : { kinds: files.kinds }),
           trace: (line) => log.write('(game file)', line),
         });
@@ -263,6 +270,7 @@ export async function composeServices(options: ComposeOptions): Promise<Services
       : createGameFileTarget({
           disk: files.disk ?? nodeGameFileDisk,
           localAppData: files.localAppData,
+          installDir,
           backupsDir: join(options.dataDir, 'backups'),
           listProcesses: options.listProcesses,
           now: tuning?.gameFiles?.now ?? Date.now,

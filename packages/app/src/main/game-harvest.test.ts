@@ -2,7 +2,8 @@
 // (reference/game-files, read only) where each game keeps its file, the real disk, and a disk
 // wrapped to fail or to count what is asked of it.
 
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gameProblem, mergeHarvest } from '@helmarray/core';
@@ -11,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { GameFileDisk } from './game-file-disk';
 import { nodeGameFileDisk } from './game-file-disk';
 import type { HarvestDeps } from './game-harvest';
+import { GAME_FILE_KINDS } from './game-file';
 import { FILE_GAMES, createGameHarvester } from './game-harvest';
 
 const REFERENCE = new URL('../../../../reference/game-files/', import.meta.url);
@@ -236,9 +238,133 @@ describe('reading a game file', () => {
     });
   });
 
-  it('never reads a preset Elite ships: only the player’s own file', async () => {
+  it('never reads a preset Elite ships without its install folder: only the player’s own file', async () => {
     await rm(join(bindsDir, 'Custom.4.1.binds'));
     expect((await harvester().read(ELITE)).ok).toBe(false);
+  });
+});
+
+describe('Elite with no file of its own: the preset it ships is the head start, read only', () => {
+  const SHIPPED_BYTES = readFileSync(new URL('elite-KeyboardMouseOnly.binds', REFERENCE));
+  const SHIPPED_HARVEST = harvestEliteBinds(
+    new TextDecoder('utf-8', { ignoreBOM: true }).decode(SHIPPED_BYTES),
+    ELITE,
+  ).game;
+  let install: string;
+  let shipped: string;
+
+  beforeEach(async () => {
+    await rm(join(bindsDir, 'Custom.4.1.binds'));
+    await writeFile(
+      join(bindsDir, 'StartPreset.4.start'),
+      'KeyboardMouseOnly\r\nKeyboardMouseOnly\r\n',
+    );
+    install = join(root, 'steam', 'steamapps', 'common', 'Elite Dangerous');
+    const schemes = join(install, 'Products', 'elite-dangerous-odyssey-64', 'ControlSchemes');
+    await mkdir(schemes, { recursive: true });
+    shipped = join(schemes, 'KeyboardMouseOnly.binds');
+    await writeFile(shipped, SHIPPED_BYTES);
+  });
+
+  const withInstall = (over: Partial<HarvestDeps> = {}) =>
+    harvester({
+      installDir: (format) => Promise.resolve(format === 'elite-binds' ? install : null),
+      ...over,
+    });
+
+  it("never asks to make a file when the game's own is found", async () => {
+    await writeFile(join(bindsDir, 'Custom.4.1.binds'), ELITE_BYTES);
+    await writeFile(join(bindsDir, 'StartPreset.4.start'), 'Custom\r\n');
+    const kinds = {
+      ...GAME_FILE_KINDS,
+      'elite-binds': {
+        ...GAME_FILE_KINDS['elite-binds'],
+        make: () => {
+          throw new Error('asked to make a file');
+        },
+      },
+    };
+    expect(await withInstall({ kinds }).read(ELITE)).toEqual({ ok: true, game: ELITE_HARVEST });
+  });
+
+  it('reads the game as the preset has it, and notes the file it read', async () => {
+    expect({ read: await withInstall().read(ELITE), said: lines }).toEqual({
+      read: { ok: true, game: SHIPPED_HARVEST },
+      said: [`elite-dangerous: read ${shipped}`],
+    });
+  });
+
+  it('writes, removes and makes nothing, and leaves the preset and StartPreset as they were', async () => {
+    const { disk, touched } = watched();
+    await withInstall({ disk }).read(ELITE);
+    expect({
+      touched,
+      shipped: (await readFile(shipped)).equals(SHIPPED_BYTES),
+      start: await readFile(join(bindsDir, 'StartPreset.4.start'), 'utf8'),
+      folder: await readdir(bindsDir),
+    }).toEqual({
+      touched: [],
+      shipped: true,
+      start: 'KeyboardMouseOnly\r\nKeyboardMouseOnly\r\n',
+      folder: ['StartPreset.4.start'],
+    });
+  });
+
+  it('makes Elite a game helmArray knows, from its tile', async () => {
+    const found = await withInstall().found([], []);
+    expect({
+      elite: found.games.find((g) => g.id === 'elite-dangerous'),
+      missing: found.missing,
+    }).toEqual({
+      elite: { ...mergeHarvest(null, SHIPPED_HARVEST).game, steamAppId: 359320 },
+      missing: [],
+    });
+  });
+
+  it('says the file is missing, as before, without the install folder or the preset in it', async () => {
+    const noInstall = await withInstall({ installDir: () => Promise.resolve(null) }).read(ELITE);
+    const throws = await withInstall({
+      installDir: () => Promise.reject(new Error('Steam is gone')),
+    }).read(ELITE);
+    await rm(shipped);
+    const noPreset = await withInstall().read(ELITE);
+    const missing = {
+      ok: false,
+      reason: 'missing',
+      message:
+        "helmArray can't find Elite Dangerous's controls file: change any control in the game's own menu once, then read it again.",
+    };
+    expect({ noInstall, throws, noPreset, said: lines }).toEqual({
+      noInstall: missing,
+      throws: missing,
+      noPreset: missing,
+      said: ["couldn't find elite-dangerous's install folder: Steam is gone"],
+    });
+  });
+
+  it("says why when the preset can't be read, or isn't text", async () => {
+    const said = async (bytes: Uint8Array | Error) => {
+      const disk: GameFileDisk = {
+        ...nodeGameFileDisk,
+        read: (path) =>
+          path === shipped
+            ? bytes instanceof Error
+              ? Promise.reject(bytes)
+              : Promise.resolve(bytes)
+            : nodeGameFileDisk.read(path),
+      };
+      const read = await withInstall({ disk }).read(ELITE);
+      return read.ok ? null : read.message;
+    };
+    expect([
+      await said(new Error('access denied.')),
+      await said(Uint8Array.from([0xff, 0xfe, 0x00])),
+      await said(new TextEncoder().encode('<?xml?>\r\n<Rooted />\r\n')),
+    ]).toEqual([
+      "helmArray couldn't read the game's keyboard and mouse preset (access denied).",
+      "The game's keyboard and mouse preset isn't text helmArray can read.",
+      "The game's keyboard and mouse preset isn't one helmArray can read.",
+    ]);
   });
 });
 

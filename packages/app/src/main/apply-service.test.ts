@@ -1295,6 +1295,17 @@ describe("Apply with the game's file written", () => {
     }).toEqual({ ready: false, failing: ['Close Skiff to apply.', "Skiff's file can't take it."] });
   });
 
+  it("passes on the file's sentence, when it is a file the target makes", async () => {
+    const note = 'Skiff has no controls file of its own yet, so helmArray makes one.';
+    r = await rig({ scheme: writing, gameFile: fileTarget({ ...READY, note }) });
+    const { game } = await r.service.preview(writing.id);
+    expect({ via: game.via, file: game.file, note: game.note }).toEqual({
+      via: 'file',
+      file: { name: 'Custom.4.1.binds', same: false, made: true },
+      note,
+    });
+  });
+
   it('lists no binding when the file holds them already', async () => {
     r = await rig({ scheme: writing, gameFile: fileTarget({ ...READY, same: true }) });
     const preview = await r.service.preview(writing.id);

@@ -25,6 +25,23 @@
 // controls; the shipped presets under `<install>/Products/elite-dangerous-odyssey-64/
 // ControlSchemes/<name>.binds`. The game reads `Custom.4.1.binds` only when StartPreset names
 // `Custom`, and rewrites its files on exit: it must be closed before either is written.
+//
+// A player who has only ever used a preset the game ships has no file of their own: StartPreset
+// names that preset, and the game reads it from its install folder. helmArray then makes one, as
+// the legacy app did (its game.yaml: "applying writes that file from the installed
+// KeyboardMouseOnly preset ..., sets the presets to Custom, and keeps both previous files beside
+// them"; legacy CLAUDE.md, *Elite Dangerous's .binds*: "Writing starts from `ingame_preset`, a
+// preset the game ships (KeyboardMouseOnly)"):
+// - from `KeyboardMouseOnly.binds` under the install folder's ControlSchemes, whichever preset
+//   StartPreset names (legacy game.yaml `ingame_preset`; src/lib/tasks.ts `applyElite` reads it
+//   whatever StartPreset says);
+// - as `Custom.4.1.binds` beside StartPreset (game.yaml `ingame_config`), its root line made
+//   `<Root PresetName="Custom" MajorVersion="4" MinorVersion="1">` and nothing else changed
+//   (legacy src/lib/elite.ts `applyBinds`, and its test "is a Custom preset 4.1, and says so on the
+//   root"; reference/game-files/elite-Custom.4.1.binds, the file the game wrote, has that root);
+// - then every line of StartPreset names `Custom` (tasks.ts `applyElite`: "every line of
+//   `StartPreset.4.start` is set to `Custom`"). Which line is which category of controls isn't
+//   known; the legacy app set them all alike, and so does this.
 
 import type {
   Action,
@@ -438,14 +455,48 @@ export function readStartPreset(text: string): string[] {
     .filter((name) => name !== '');
 }
 
+const BOM = '\uFEFF';
+
 /**
  * `StartPreset.4.start` with every line naming `preset`: the game then reads that preset for every
- * category of controls. The number of lines and their endings stay as they were.
+ * category of controls (legacy src/lib/tasks.ts `applyElite` sets every line that isn't blank).
+ * The number of lines and their endings stay as they were, a byte order mark at the start is kept,
+ * and a line that names `preset` already, or none, stays byte for byte.
  */
 export function writeStartPreset(text: string, preset: string): string {
   return joinLines(
-    linesOf(text).map((line) => (line.text.trim() === '' ? line : { text: preset, end: line.end })),
+    linesOf(text).map((line, i) => {
+      const bom = i === 0 && line.text.startsWith(BOM) ? BOM : '';
+      const name = line.text.trim();
+      return name === '' || name === preset ? line : { text: bom + preset, end: line.end };
+    }),
   );
+}
+
+/** The file helmArray makes when the player has none, and the preset StartPreset then names. */
+export const ELITE_NEW_BINDS = 'Custom.4.1.binds';
+export const ELITE_NEW_PRESET = 'Custom';
+/** The preset the game ships that the new file is made from. */
+const BASE_PRESET = 'KeyboardMouseOnly.binds';
+const ROOT = /^(\s*)<Root\b/;
+
+/**
+ * The player's own file, made from the text of the preset the game ships: its root line says it is
+ * the Custom preset, version 4.1, and every other line stays byte for byte (the BOM and the CRLF
+ * included). Throws a `GameFileError` for a file with no root line.
+ */
+export function newEliteBinds(shipped: string): string {
+  const lines = linesOf(shipped);
+  const at = lines.findIndex((line) => ROOT.test(line.text));
+  const root = lines[at];
+  if (root === undefined)
+    throw new GameFileError(["The game's preset has no Root line to make the new file from."]);
+  const indent = groupOf(ROOT.exec(root.text) as RegExpExecArray, 1);
+  lines[at] = {
+    text: `${indent}<Root PresetName="${ELITE_NEW_PRESET}" MajorVersion="4" MinorVersion="1">`,
+    end: root.end,
+  };
+  return joinLines(lines);
 }
 
 const BINDINGS = ['Frontier Developments', 'Elite Dangerous', 'Options', 'Bindings'];
@@ -519,4 +570,40 @@ export function findEliteBinds(
     };
   }
   return null;
+}
+
+export interface EliteNewBinds {
+  /** The bindings folder, where StartPreset is and the new file goes. */
+  folder: string;
+  startPreset: string;
+  /** The preset the game ships, under its install folder, that the new file is made from. */
+  from: string;
+  /** The new file: `Custom.4.1.binds` in the bindings folder. */
+  path: string;
+}
+
+/**
+ * Where helmArray makes the player's own file, when the player has none: StartPreset is there and
+ * names a preset (the game has run), no line of it names a file of the player's, the folder holds
+ * no `Custom` file of any version (one the game would read once StartPreset names `Custom`, and
+ * which a new one must never be written over), and the install folder holds the preset the new
+ * file is made from. Null otherwise.
+ */
+export function findEliteNewBinds(
+  where: { installDir: string | null; localAppData: readonly string[] },
+  fs: FolderReader,
+): EliteNewBinds | null {
+  const found = findEliteBinds({ installDir: null, localAppData: where.localAppData }, fs);
+  // A StartPreset that names nothing could not be pointed at the new file.
+  if (found === null || found.presets.length === 0) return null;
+  if (found.presets.some((p) => p.path !== null)) return null;
+  if (presetFile(fs, found.folder, null, ELITE_NEW_PRESET) !== null) return null;
+  const from = walk(fs, where.installDir, [...CONTROL_SCHEMES, BASE_PRESET]);
+  if (from === null) return null;
+  return {
+    folder: found.folder,
+    startPreset: found.startPreset,
+    from,
+    path: fs.join(found.folder, ELITE_NEW_BINDS),
+  };
 }

@@ -303,12 +303,14 @@ export interface ApplyGame {
   rows: ApplyGameRow[];
   /**
    * The file, when helmArray writes it: its name once found (`Input.ini`), and whether it holds
-   * these bindings already (nothing is written, and no row is listed).
+   * these bindings already (nothing is written, and no row is listed). `made`: the game has no
+   * file of its own, and helmArray makes it (Elite's, from the preset it ships).
    */
-  file?: { name: string | null; same: boolean };
+  file?: { name: string | null; same: boolean; made?: true };
   /**
-   * Why the rows are set by hand, in one sentence, when helmArray would write the game's file but
-   * can't find it: the units are still written.
+   * One sentence. With `sheet`: why the rows are set by hand, when helmArray would write the
+   * game's file but can't find it (the units are still written). With `file`: that helmArray makes
+   * the file, the game having none of its own, and what from (Elite's, from its shipped preset).
    */
   note?: string;
   /**

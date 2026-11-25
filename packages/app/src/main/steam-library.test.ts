@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { SteamReaders } from './steam-library';
-import { HIDDEN_STEAM_APPS, parseSteamPathFromReg, readSteamLibrary } from './steam-library';
+import {
+  HIDDEN_STEAM_APPS,
+  parseSteamPathFromReg,
+  readSteamLibrary,
+  steamInstallDir,
+} from './steam-library';
 
 // Binary KeyValues for assetcache.vdf, laid out from the documented format (type byte, key and
 // string value ending in 0, section closed by 0x08). The parser's own byte-level tests are in
@@ -277,6 +282,32 @@ describe('readSteamLibrary', () => {
     });
     await readSteamLibrary(readers);
     expect(calls.listDir.filter((p) => p === `${CACHE}/1`)).toHaveLength(1);
+  });
+});
+
+describe('steamInstallDir', () => {
+  it("is the game's folder under steamapps/common of the library that has it", async () => {
+    const { readers } = fakeDisk({
+      [`${STEAM}/steamapps/libraryfolders.vdf`]: LIBRARYFOLDERS,
+      [`${STEAM}/steamapps/appmanifest_620.acf`]: manifest('620', 'Portal 2'),
+      [`${LIB2}/steamapps/appmanifest_359320.acf`]: manifest('359320', 'Elite', 'Elite Dangerous'),
+    });
+    expect([await steamInstallDir(readers, 359320), await steamInstallDir(readers, 620)]).toEqual([
+      `${LIB2}/steamapps/common/Elite Dangerous`,
+      // As libraryfolders.vdf spells the library.
+      'C:/Program Files (x86)/Steam/steamapps/common/Portal 2',
+    ]);
+  });
+
+  it('is null for a game Steam has not installed, and without Steam', async () => {
+    const { readers } = fakeDisk({
+      [`${STEAM}/steamapps/appmanifest_620.acf`]: manifest('620', 'P'),
+    });
+    expect([
+      await steamInstallDir(readers, 359320),
+      await steamInstallDir(fakeDisk({}, null).readers, 620),
+      await steamInstallDir(fakeDisk({}, '  ').readers, 620),
+    ]).toEqual([null, null, null]);
   });
 });
 

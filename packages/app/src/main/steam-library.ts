@@ -126,6 +126,26 @@ export async function readSteamLibrary(readers: SteamReaders): Promise<SteamLibr
   return { games: result };
 }
 
+/**
+ * The folder a game Steam installed is in: `<library>/steamapps/common/<installdir>`, the
+ * `installdir` of its app manifest (docs/spikes/02-steam-covers.md; the legacy repo's
+ * src/lib/machine.ts `candidatesFor` looks in the same place in every library). Null when Steam,
+ * or the game in it, isn't there.
+ */
+export async function steamInstallDir(
+  readers: SteamReaders,
+  appId: number,
+): Promise<string | null> {
+  const registry = await readers.readRegistrySteamPath();
+  if (!registry?.trim()) return null;
+  const game = (await installedGames(readers, trimEnd(registry.trim()))).find(
+    (g) => g.appId === String(appId),
+  );
+  return game === undefined
+    ? null
+    : `${trimEnd(game.libraryPath)}/steamapps/common/${game.installDir}`;
+}
+
 /** Every installed game in every library, once each. A manifest that can't be read is skipped. */
 async function installedGames(readers: SteamReaders, steam: string): Promise<InstalledGame[]> {
   const listed = await readers.readFile(`${steam}/steamapps/libraryfolders.vdf`);
