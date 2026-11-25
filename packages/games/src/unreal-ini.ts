@@ -86,15 +86,14 @@ const unquote = (value: string): string => value.replace(/^"(.*)"$/, '$1');
 /** The fields of `Name=(a=1,b="x, y",c=F("p", "q"))`, from the first after the parenthesis. */
 function fieldsOf(text: string, from: number): Map<string, Field> | null {
   const fields = new Map<string, Field>();
-  /** A field is `name=value`; a part with no `=` in it is no field. */
+  /** A field is `name=value`; a part with no `=` is a field with no name, which nothing reads. */
   const add = (start: number, end: number): void => {
     const eq = text.slice(start, end).indexOf('=');
-    if (eq >= 0)
-      fields.set(text.slice(start, start + eq), {
-        value: text.slice(start + eq + 1, end),
-        start: start + eq + 1,
-        end,
-      });
+    fields.set(text.slice(start, start + eq), {
+      value: text.slice(start + eq + 1, end),
+      start: start + eq + 1,
+      end,
+    });
   };
   let depth = 0;
   let quoted = false;

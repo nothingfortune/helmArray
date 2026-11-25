@@ -116,7 +116,7 @@ export function setOf(signal: Signal): BindingSet {
 export function signalKey(signal: Signal): string {
   switch (signal.kind) {
     case 'key': {
-      // Stryker disable next-line StringLiteral: ctrl, shift and alt joined with or without a separator are still distinct, so the separator changes nothing
+      // Stryker disable next-line StringLiteral,ArrayDeclaration: the default stands for no modifiers on both sides of every comparison, and ctrl, shift and alt joined with or without a separator are still distinct, so the separator changes nothing
       const mods = [...(signal.mods ?? [])].sort().join('+');
       return `key:${mods}+${signal.code}`;
     }
@@ -127,6 +127,7 @@ export function signalKey(signal: Signal): string {
     case 'pad':
       return `pad:${signal.control}`;
     case 'macro':
+      // Stryker disable next-line StringLiteral: no file holds a macro, so a macro is never compared with anything its key could be confused with
       return `macro:${signal.trigger}`;
   }
 }
@@ -174,8 +175,8 @@ export function assignSlots(
 /**
  * The game's data holds one default per action and set, the first binding the file has; a second
  * (Elite's Secondary, Unreal's Key2) is what the file knows and the data doesn't. A write that puts
- * the action somewhere keeps such a second binding as it is, unless the write asks for it or puts
- * it on another action (`taken`). A write that puts the action on nothing clears it with the rest.
+ * the action somewhere keeps such a second binding as it is, unless the write puts it on an action
+ * of the mode (`taken`), this one included. A write that puts the action on nothing clears it.
  */
 export function keepSeconds(
   slots: readonly Slot[],
@@ -190,27 +191,21 @@ export function keepSeconds(
       first = false;
       return slot;
     }
-    const key = signalKey(slot.signal);
-    return wanted.some((s) => signalKey(s) === key) || taken(slot.signal)
-      ? slot
-      : { state: 'kept' };
+    return taken(slot.signal) ? slot : { state: 'kept' };
   });
 }
 
 /**
  * What a write puts on each signal, per mode: `taken(mode)(signal)` says whether any row puts the
- * signal on an action of that mode. (An action asking for its own second key is seen first, by
- * `keepSeconds`.)
+ * signal on an action of that mode, whichever.
  */
 export function takenBy(
   rows: readonly GameBinding[],
   modeOf: (action: ActionId) => string | undefined,
 ): (mode: string) => (signal: Signal) => boolean {
-  const on = new Set(
-    rows.flatMap((row) =>
-      row.signal === null ? [] : [JSON.stringify([modeOf(row.action), signalKey(row.signal)])],
-    ),
-  );
+  const on = new Set<string>();
+  for (const row of rows)
+    if (row.signal !== null) on.add(JSON.stringify([modeOf(row.action), signalKey(row.signal)]));
   return (mode) => (signal) => on.has(JSON.stringify([mode, signalKey(signal)]));
 }
 

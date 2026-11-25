@@ -87,6 +87,25 @@ describe('Everspace 2: reading a line', () => {
     ]);
   });
 
+  it('reads past a quote escaped inside a quoted value, commas and all', () => {
+    const file = ini(line('Keyboard', { key1: 'F', extra: ',Note="a\\",Key1=X"' }));
+    expect(one(file)[0]?.native?.key).toEqual(key('F'));
+  });
+
+  it('takes quotes off a value only when they are its first and last characters', () => {
+    const file = ini(
+      line('Keyboard', { action: 'F"x"', key1: 'F' }),
+      line('Keyboard', { action: '"a"b', key1: 'G' }),
+    );
+    expect(one(file).map((a) => a.id)).toEqual(['F_x_', 'a_b']);
+  });
+
+  it('makes a usable mode id of any category', () => {
+    expect(harvestUnrealIni(ini(line('Keyboard', { category: '-1' })), GAME).game.modes).toEqual([
+      { id: 'category_1', name: 'Category -1' },
+    ]);
+  });
+
   it('passes over a part with no = in it', () => {
     const file = ini(line('Keyboard', { key1: 'F', extra: ',Key1X' }));
     expect(one(file)[0]?.native?.key).toEqual(key('F'));
@@ -188,6 +207,10 @@ describe('Everspace 2: how a stick turns', () => {
       line('Gamepad', { action: 'Move', scale: '-1.000000' }),
     );
   const ends = (file: string) => one(file).map((a) => a.native?.pad);
+
+  it('as the axis has it, at scale 0 too', () => {
+    expect(ends(stick({ scale: '0.000000' }))).toEqual(['LS_UP', 'LS_DOWN']);
+  });
 
   it('as the axis has it', () => {
     expect(ends(stick({}))).toEqual(['LS_UP', 'LS_DOWN']);
@@ -292,6 +315,7 @@ describe('Elite: reading a slot', () => {
     const file = binds(
       control('A', 'x<Primary Device="Keyboard" Key="Key_A" />', EMPTY2),
       control('B', '<Primary Device="Keyboard" Key="Key_B" /> x', EMPTY2),
+      control('C', '<Primary Device="Keyboard" Key="Key_C" />x', EMPTY2),
     );
     expect(elite(file).game.actions).toEqual([]);
   });
@@ -344,10 +368,12 @@ describe('Elite: reading a slot', () => {
       [
         '<Modifier Device="Keyboard" Key="Key_LeftShift" /> x',
         'x<Modifier Device="Keyboard" Key="Key_LeftShift" />',
+        '<Modifier Device="Keyboard" Key="Key_LeftShift" />x',
         '<Hold Value="1" /> x',
         'x<Hold Value="1" />',
+        '<Hold Value="1" />x',
       ].map((c) => elite(child(c)).kept.length),
-    ).toEqual([1, 1, 1, 1]);
+    ).toEqual([1, 1, 1, 1, 1, 1]);
   });
 
   it('is empty on no device, or with no key', () => {
@@ -358,6 +384,49 @@ describe('Elite: reading a slot', () => {
     expect([elite(file).game.actions.map((a) => a.native), elite(file).kept]).toEqual([
       [undefined, undefined],
       [],
+    ]);
+  });
+
+  it('is free on no device whatever key it names', () => {
+    const file = binds(control('A', '<Primary Device="{NoDevice}" Key="Key_A" />', EMPTY2));
+    expect(
+      writeEliteBinds(file, [row('A', 'keyboard', key('B')), row('A', 'keyboard', key('C'))]),
+    ).toBe(
+      binds(
+        control(
+          'A',
+          '<Primary Device="Keyboard" Key="Key_B" />',
+          '<Secondary Device="Keyboard" Key="Key_C" />',
+        ),
+      ),
+    );
+  });
+
+  it('reads the first of two keys, and keeps the second aside', () => {
+    const file = binds(
+      control(
+        'A',
+        '<Primary Device="Keyboard" Key="Key_A" />',
+        '<Secondary Device="Keyboard" Key="Key_B" />',
+      ),
+    );
+    expect([elite(file).game.actions[0]?.native, elite(file).kept]).toEqual([
+      { key: key('A') },
+      [{ action: 'A', set: 'keyboard', text: 'Key_B' }],
+    ]);
+  });
+
+  it('reads the first of two controller buttons, and keeps the second aside', () => {
+    const file = binds(
+      control(
+        'A',
+        '<Primary Device="GamePad" Key="GamePad_FaceDown" />',
+        '<Secondary Device="GamePad" Key="GamePad_FaceUp" />',
+      ),
+    );
+    expect([elite(file).game.actions[0]?.native, elite(file).kept]).toEqual([
+      { pad: 'A' },
+      [{ action: 'A', set: 'controller', text: 'GamePad_FaceUp' }],
     ]);
   });
 
@@ -400,15 +469,24 @@ describe('Elite: reading a slot', () => {
 describe('Elite: names in words', () => {
   it('splits a tag into words, keeping capitals that are all capitals', () => {
     const file = binds(
-      ...['__proto__', 'UI__Up', 'HumanoidSetSpeed100Button', 'CamTranslateZHold_Landing'].map(
-        (tag) => control(tag, '<Primary Device="{NoDevice}" Key="" />', EMPTY2),
-      ),
+      ...[
+        '__proto__',
+        'UI__Up',
+        'HumanoidSetSpeed100Button',
+        'CamTranslateZHold_Landing',
+        'SelectHumanoidTarget',
+        'Fire_Buggy_Mode',
+        'Target0Wingman',
+      ].map((tag) => control(tag, '<Primary Device="{NoDevice}" Key="" />', EMPTY2)),
     );
     expect(elite(file).game.actions.map((a) => a.name)).toEqual([
       'proto',
       'UI up',
       'Set speed 100',
       'Cam translate Z hold',
+      'Select humanoid target',
+      'Fire buggy mode',
+      'Target 0 wingman',
     ]);
   });
 });
@@ -561,7 +639,14 @@ describe("Elite: the newest of the player's files", () => {
       pick(['Custom.3.9.binds', 'Custom.4.0.binds']),
       pick(['Custom.4.0.binds', 'Custom.3.9.binds']),
       pick(['Custom.4.1.binds', 'Custom.4.0.binds']),
-    ]).toEqual(['Custom.4.10.binds', 'Custom.4.0.binds', 'Custom.4.0.binds', 'Custom.4.1.binds']);
+      pick(['Custom.9.1.binds', 'Custom.10.1.binds']),
+    ]).toEqual([
+      'Custom.4.10.binds',
+      'Custom.4.0.binds',
+      'Custom.4.0.binds',
+      'Custom.4.1.binds',
+      'Custom.10.1.binds',
+    ]);
   });
 
   it('only a .binds file named for the preset', () => {
