@@ -69,7 +69,7 @@ describe('modes', () => {
       c.kind === 'row' ? c.row.finding.action : c.rule,
     );
 
-  it("lists the checks of the mode shown first, then the other modes' in the game's order", () => {
+  it("lists the checks of the mode shown first, then the other modes' as they come", () => {
     expect({ ship: checksIn('ship'), srv: checksIn('srv'), foot: checksIn('foot') }).toEqual({
       ship: ['fsd', 'jump', 'walk'],
       srv: ['jump', 'fsd', 'walk'],

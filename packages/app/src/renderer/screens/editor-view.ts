@@ -922,7 +922,6 @@ export function editorView(input: EditorViewInput): EditorView {
         const entry = book.get(key);
         return entry !== undefined && entry !== null && 'group' in entry && entry.group;
       }),
-      game,
       mode,
     ),
     kept: rows.filter((r) => r.kept !== undefined),
@@ -931,19 +930,18 @@ export function editorView(input: EditorViewInput): EditorView {
 
 /**
  * The checks with the mode shown's first, and the whole setup's with them (a finding in no mode
- * holds in every one); then each other mode's, in the game's order. Each sentence names its mode,
- * so one of another mode is still there to see and fix: an error anywhere stops Apply. Otherwise
- * in the order given.
+ * holds in every one); then the other modes'. Each sentence names its mode, so one of another
+ * mode is still there to see and fix: an error anywhere stops Apply.
  */
-function modeFirst(items: readonly CheckItem[], game: Game, mode: ModeId): CheckItem[] {
+function modeFirst(items: readonly CheckItem[], mode: ModeId): CheckItem[] {
   const modeOf = (item: CheckItem) =>
     item.kind === 'row' ? item.row.finding.mode : item.rows[0]?.finding.mode;
-  const rank = (item: CheckItem) => {
+  const elsewhere = (item: CheckItem): number => {
     const of = modeOf(item);
-    return of === undefined || of === mode ? 0 : 1 + game.modes.findIndex((m) => m.id === of);
+    return of === undefined || of === mode ? 0 : 1;
   };
-  // A stable sort: within a mode, the order given.
-  return [...items].sort((a, b) => rank(a) - rank(b));
+  // A stable sort: on either side, the order given (errors first, then the game's modes).
+  return [...items].sort((a, b) => elsewhere(a) - elsewhere(b));
 }
 
 const STICK_SUBJECTS = ['The left stick', 'The right stick'];
