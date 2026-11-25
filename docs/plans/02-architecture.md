@@ -191,6 +191,14 @@ name), with what the file has now, what it had at the last read, and what the da
   id is retired (you deleted it, or its mode: the Game screen's rule, so it never comes back) or
   its mode isn't there. One in the data and not in the file stays: added by hand, or gone from
   the file.
+- An action you typed in by hand (in the data, not in the file, and not in it at the last read)
+  whose name is that of an action the file has in the same mode, compared in any case and with any
+  spaces, is the file's action: yours stays as you have it, and the file's isn't added beside it.
+  Each of yours stands for one of the file's. The list says so in one line ("Boost is in the file
+  too: yours stays, and the file's isn't added beside it."). A game typed in by hand before its
+  file was read (`everspace_2`, under Everspace 2's Steam id) reads the file into itself, never
+  into a second id. (A game made on the Game screen starts with one mode, `default`, which no file
+  has: its actions match none of the file's until they are in the same mode.)
 - `file.format` is the file's; the game's name, Steam id, retired ids and *the sticks must send
   keys* are the data's.
 
@@ -210,9 +218,17 @@ a read). The games helmArray has a file format for are known by their Steam app 
 yet is listed as a game helmArray knows (its Steam tile, *Game's own keys* offered) and is saved
 the first time it is used: a scheme made from it, or an edit on the Game screen. So setting one up
 from its tile is a click on the tile, one on the preset, and Apply, as for a game that ships with
-helmArray. A game with a file format (or known by its id or Steam id) has *Read from the game's file*
-on the Game screen. Deleting a game read this way brings it back from its file, fresh, the next
-time the Library looks.
+helmArray. (Not Everspace 2 by *Xbox controller*: its sticks must send keys, from the legacy
+`game.yaml`'s `require_keyboard_stick`, so the head start sets *the sticks must send keys* and
+that preset opens the editor on the two sticks to fix.) One whose file isn't there yet (Everspace 2 saves its `Input.ini` only once a control
+is changed in its menu) keeps its tile on *Set up*, and the Game screen says why in one sentence,
+in Apply's words: "helmArray can't find Everspace 2's controls file yet: changing any control in
+the game's own menu makes the game save one." Elite's tile says the same of its file. A game with
+a file format (or known by its id or Steam id) has *Read from the game's file*
+on the Game screen. A game read this way and deleted stays deleted: the settings keep its id
+(`dismissed`; deleting any game helmArray knows by that id or Steam id does the same), and the
+Library no longer finds it from its file. Its Steam tile says *Set up* under Steam's name, and that
+click reads the file afresh, as a head start no one has used yet.
 
 ## Targets
 
@@ -241,7 +257,10 @@ bindings than a line holds) is a check that isn't ready, before any unit is writ
 same is not written at all. A file that isn't there (Everspace 2 saves one only once a control is
 changed in its menu) doesn't stop Apply: the units are written, and the game's half is bind sheet
 rows with one sentence saying why; the game's baseline doesn't move, so the Library's reminder
-keeps them until *Done*. An action the file doesn't have (one added by hand on the Game screen)
+keeps them until *Done*. A file that goes between the drawer and the write, once the units are
+written, is the same: Apply sends back the game's half as bind sheet rows (every binding that
+changes) with that sentence, and is done, with no *Try again*. Any other failure to write the file
+after the units is a failure, said in a sentence. An action the file doesn't have (one added by hand on the Game screen)
 has no line to write: its rows are bind sheet rows, listed apart in the drawer, the rest is
 written, and the baseline moves for the rest only. The game must be closed, told from the running
 programs; a game whose programs helmArray doesn't know can't be told running, so its file is
@@ -275,7 +294,8 @@ open Play view, quit.
 
 ## Storage
 
-- `%APPDATA%/helmArray/`: `games/<id>.json`, `schemes/<id>.json`, `settings.json`.
+- `%APPDATA%/helmArray/`: `games/<id>.json`, `schemes/<id>.json`, `settings.json` (the
+  active game and scheme, and the games read from their file that you deleted).
   Each file carries `schemaVersion`; migrations run on load, one function per version. (Scheme
   version 3 added `devices`: an older scheme is both Azerons and nothing else. Applied plan
   version 2 added `gameBindings`: an older plan claims none.)

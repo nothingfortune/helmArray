@@ -282,7 +282,7 @@ describe('Apply on Everspace 2, when the file goes between the drawer and the wr
     await world.dispose();
   });
 
-  it('when the file goes after the drawer looked, writes the units, keeps no copy, and leaves the bindings to set by hand', async () => {
+  it('when the file goes after the drawer looked, writes the units, keeps no copy, and leaves the bindings to set by hand, as when it was never there', async () => {
     await moveBoost(world, scheme.id, 'R.index_2');
     const preview = await world.helm.previewApply(scheme.id);
     // Gone once Apply is pressed: Apply's own look still finds it, the write does not.
@@ -295,26 +295,34 @@ describe('Apply on Everspace 2, when the file goes between the drawer and the wr
     const before = unitWrites(world);
     const result = await world.helm.apply(scheme.id, preview.fingerprint);
     await world.idle();
+    const reminder = world.state.sheets.find((s) => s.gameId === ES2);
     expect({
       via: preview.game.via,
+      ok: result.ok,
       units: result.units.map((u) => u.status),
       wroteUnits: unitWrites(world) > before,
       gameFile: result.gameFile,
+      game: { via: result.game?.via, note: result.game?.note },
+      // Every binding that changes is to set by hand: the ones the drawer had for the file.
+      rows: result.game?.rows.map((r) => r.action),
       file: (await readFile(ini)).equals(ES2_BYTES),
       copies: await backupsOf(world),
-      reminder: world.state.sheets.some((s) => s.gameId === ES2 && s.rows.length > 0),
+      // The baseline didn't move: the Library's reminder keeps the rows until *Done*.
+      reminder: reminder?.rows.map((r) => r.action),
     }).toEqual({
       via: 'file',
+      ok: true,
       units: ['applied', 'applied'],
       wroteUnits: true,
-      gameFile: {
-        ok: false,
-        message:
-          "helmArray can't find Everspace 2's controls file, so set these in the game's own menu (changing any control there makes the game save one).",
+      gameFile: undefined,
+      game: {
+        via: 'sheet',
+        note: "helmArray can't find Everspace 2's controls file, so set these in the game's own menu (changing any control there makes the game save one).",
       },
+      rows: preview.game.rows.map((r) => r.action),
       file: true,
       copies: [],
-      reminder: true,
+      reminder: preview.game.rows.map((r) => r.action),
     });
   });
 });

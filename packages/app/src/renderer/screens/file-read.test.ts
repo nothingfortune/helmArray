@@ -214,6 +214,37 @@ describe('the words for what a read of the file changes', () => {
     ]);
   });
 
+  it('says in one line which actions you typed in the file has too, after what it no longer has', () => {
+    expect(
+      readLines(
+        [
+          { kind: 'same-name', action: 'boost', name: 'Boost', file: 'Boost' },
+          { kind: 'gone', action: 'Log', name: 'Log' },
+          { kind: 'same-name', action: 'map', name: 'map', file: 'Map' },
+          {
+            kind: 'kept',
+            action: 'Scan',
+            name: 'Scan',
+            field: 'name',
+            yours: 'Scan',
+            file: 'Scanner',
+          },
+        ],
+        FIRST,
+      ),
+    ).toEqual([
+      "Log isn't in the file any more, and stays.",
+      "Boost and map are in the file too: yours stay, and the file's aren't added beside them.",
+      'Scan keeps the name you gave it (the file calls it Scanner).',
+    ]);
+  });
+
+  it('says one action you typed in that the file has too as one', () => {
+    expect(
+      readLines([{ kind: 'same-name', action: 'boost', name: 'Boost', file: 'Boost' }], FIRST),
+    ).toEqual(["Boost is in the file too: yours stays, and the file's isn't added beside it."]);
+  });
+
   it('says one gone action as one', () => {
     expect(readLines([{ kind: 'gone', action: 'Map', name: 'Map' }], FIRST)).toEqual([
       "Map isn't in the file any more, and stays.",
@@ -291,6 +322,26 @@ describe('what the Game screen shows of a read', () => {
     expect(fileReadView(mine, { ok: true, file: later, held: null })).toMatchObject({
       kind: 'changes',
       lines: ['Nothing you see changes: helmArray notes what the file has now.'],
+    });
+  });
+
+  it("reads a game typed in by hand into it: an action of the same name isn't shown twice", () => {
+    const typed: Game = {
+      id: 'everspace_2',
+      name: 'Everspace 2',
+      modes: [{ id: 'flight', name: 'Flight' }],
+      actions: [act({ id: 'boost', name: 'BOOST' })],
+    };
+    const view = fileReadView(typed, { ok: true, file: FILE, held: null });
+    expect(view).toMatchObject({
+      kind: 'changes',
+      game: { actions: [{ id: 'Map' }, { id: 'boost' }] },
+      lines: [
+        'New mode: Menus.',
+        "Apply can write the game's controls file from now on.",
+        '1 new action in Menus: Map.',
+        "BOOST is in the file too: yours stays, and the file's isn't added beside it.",
+      ],
     });
   });
 

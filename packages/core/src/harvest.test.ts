@@ -353,6 +353,82 @@ describe('mergeHarvest: a re-read', () => {
   });
 });
 
+describe('mergeHarvest: an action typed in by hand that the file has too, by name', () => {
+  /** A game typed in by hand before its file was read: never read, its actions its own ids. */
+  const typed = (actions: Action[], modes = [{ id: 'flight', name: 'Flight' }]): Game => ({
+    id: 'es2',
+    name: 'Everspace 2',
+    steamAppId: 1128920,
+    modes,
+    actions,
+  });
+  const MY_BOOST = act({ id: 'boost', name: 'boost', role: 'movement', native: { key: key('G') } });
+
+  it("keeps yours, and doesn't add the file's beside it", () => {
+    const { game } = mergeHarvest(typed([MY_BOOST]), FILE);
+    expect(game.actions.map((a) => [a.id, a.name, a.native?.key])).toEqual([
+      ['boost', 'boost', key('G')],
+      ['Fire', 'Fire primary', undefined],
+    ]);
+  });
+
+  it('says so, naming yours and the one in the file', () => {
+    expect(mergeHarvest(typed([MY_BOOST]), FILE).changes).toEqual([
+      { kind: 'same-name', action: 'boost', name: 'boost', file: 'Boost' },
+      { kind: 'added', action: 'Fire', name: 'Fire primary', mode: 'flight' },
+      { kind: 'format' },
+    ]);
+  });
+
+  it('matches a name in any case and with any spaces', () => {
+    const mine = act({ id: 'fire', name: ' FIRE  pri mary ', mode: 'flight' });
+    expect(mergeHarvest(typed([mine]), FILE).game.actions.map((a) => a.id)).toEqual([
+      'fire',
+      'Boost',
+    ]);
+  });
+
+  it('matches only within one mode: the same name in another mode is another action', () => {
+    const modes = [
+      { id: 'flight', name: 'Flight' },
+      { id: 'menus', name: 'Menus' },
+    ];
+    const mine = act({ id: 'boost', name: 'Boost', mode: 'menus' });
+    expect(
+      mergeHarvest(typed([mine], modes), FILE).game.actions.map((a) => `${a.mode}/${a.id}`),
+    ).toEqual(['flight/Boost', 'flight/Fire', 'menus/boost']);
+  });
+
+  it('matches each of yours once: a second action of that name in the file is added', () => {
+    const file = fileGame([BOOST, act({ id: 'Boost2', name: 'Boost' })]);
+    const { game, changes } = mergeHarvest(typed([MY_BOOST]), file);
+    expect([
+      game.actions.map((a) => a.id),
+      changes.filter((c) => c.kind === 'same-name').length,
+    ]).toEqual([['boost', 'Boost2'], 1]);
+  });
+
+  it("doesn't match an action the file had at the last read: it is the file's, not typed in", () => {
+    const read = mergeHarvest(null, fileGame([act({ id: 'OldBoost', name: 'Boost' })])).game;
+    const { game } = mergeHarvest(read, FILE);
+    expect(game.actions.map((a) => a.id)).toEqual(['OldBoost', 'Boost', 'Fire']);
+  });
+
+  it("matches the same way on every read: yours stays, the file's is never added", () => {
+    const once = mergeHarvest(typed([MY_BOOST]), FILE).game;
+    const { game, changes } = mergeHarvest(once, FILE);
+    expect([game.actions.map((a) => a.id), changes]).toEqual([
+      ['boost', 'Fire'],
+      [{ kind: 'same-name', action: 'boost', name: 'boost', file: 'Boost' }],
+    ]);
+  });
+
+  it("leaves an action of yours whose id is the file's to the field rule, not the name rule", () => {
+    const mine = typed([{ ...BOOST, native: { key: key('G') } }]);
+    expect(mergeHarvest(mine, FILE).changes.map((c) => c.kind)).not.toContain('same-name');
+  });
+});
+
 describe('mergeHarvest: what helmArray put in the file itself', () => {
   const heldOf = (rows: Partial<GameBinding>[]): GameBinding[] =>
     rows.map((r) => ({

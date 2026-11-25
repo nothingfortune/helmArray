@@ -69,5 +69,8 @@ export function createHelmApi(bridge: IpcBridge): HelmApi {
       await bridge.invoke(CHANNELS.dismissSheet, gameId);
     },
     readGameFile: (gameId) => bridge.invoke(CHANNELS.readGameFile, gameId) as Promise<GameFileRead>,
+    restoreGame: async (gameId) => {
+      await bridge.invoke(CHANNELS.restoreGame, gameId);
+    },
   };
 }

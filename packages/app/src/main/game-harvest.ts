@@ -25,15 +25,32 @@ export interface FileGame {
   /** Its Steam app id, so its tile is Steam's own (with the cover), when Steam lists it. */
   steamAppId: number;
   format: GameFileFormat;
+  /**
+   * Its sticks must send keys (`Game.needsKeyStick`), set on the head start only: on data you
+   * have, the flag is yours (the merge rule).
+   */
+  needsKeyStick?: true;
 }
 
 /**
  * The games helmArray has an adapter for. The ids are the ones the part 2 tests and the e2e seeds
  * use. The Steam app ids are each game's store page: store.steampowered.com/app/1128920
  * (EVERSPACE™ 2) and store.steampowered.com/app/359320 (Elite Dangerous), read 2026-11-25.
+ *
+ * Everspace 2's sticks must send keys. The legacy repo's games/SpaceSims/everspace/game.yaml sets
+ * `lint.require_keyboard_stick: true` ("a stick in gamepad/analog mode made the game flip between
+ * gamepad and keyboard/mouse input and stuttered the frame rate. Keyboard mode only"), and
+ * reference/legacy/CLAUDE.md, *Hard-won constraints* 1, says why: an Xbox stick stuttered, and a
+ * stick moving the mouse spins the ship.
  */
 export const FILE_GAMES: readonly FileGame[] = [
-  { id: 'everspace2', name: 'Everspace 2', steamAppId: 1128920, format: 'unreal-ini' },
+  {
+    id: 'everspace2',
+    name: 'Everspace 2',
+    steamAppId: 1128920,
+    format: 'unreal-ini',
+    needsKeyStick: true,
+  },
   { id: 'elite-dangerous', name: 'Elite Dangerous', steamAppId: 359320, format: 'elite-binds' },
 ];
 
@@ -50,6 +67,16 @@ export interface Found {
   games: Game[];
   /** Each game whose file is there and can't be used, by its Steam id, with why in a sentence. */
   unreadable: { steamAppId: number; message: string }[];
+  /**
+   * Each game read from its file that was deleted (`dismissed`) and whose file is there and usable:
+   * not found, but set up afresh from its Steam tile.
+   */
+  restorable: { steamAppId: number; gameId: string }[];
+  /**
+   * Each game whose file isn't there (Everspace 2 saves its Input.ini only once a control is changed
+   * in its menu), by its Steam id, with why in a sentence: its tile stays *Set up*.
+   */
+  missing: { steamAppId: number; message: string }[];
 }
 
 export interface HarvestDeps {
@@ -69,10 +96,22 @@ export interface GameHarvester {
   /**
    * The games helmArray has a file format for whose file is found, and that none of `known` is
    * (by id or Steam id): each as a first read leaves it, ready to save, or why its file can't be
-   * used.
+   * used. One `dismissed` (deleted after it was read) isn't found, only said to be restorable.
    */
-  found(known: readonly Pick<Game, 'id' | 'steamAppId'>[]): Promise<Found>;
+  found(
+    known: readonly Pick<Game, 'id' | 'steamAppId'>[],
+    dismissed: readonly string[],
+  ): Promise<Found>;
+  /** The id of the game with a file format that this game is (by its id or Steam id), or null. */
+  fileGameOf(game: Pick<Game, 'id' | 'steamAppId'>): string | null;
 }
+
+/**
+ * Why a game helmArray reads the file of isn't found from it, when the game has saved no file yet:
+ * Apply's sentence for the same (game-file.ts), as the Game screen of its *Set up* tile says it.
+ */
+const missingNote = (name: string): string =>
+  `helmArray can't find ${name}'s controls file yet: changing any control in the game's own menu makes the game save one.`;
 
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
@@ -145,19 +184,26 @@ export function createGameHarvester(deps: HarvestDeps): GameHarvester {
     return { ok: true, game: harvested };
   };
 
-  const found: GameHarvester['found'] = async (have) => {
-    const out: Found = { games: [], unreadable: [] };
+  const found: GameHarvester['found'] = async (have, dismissed) => {
+    const out: Found = { games: [], unreadable: [], restorable: [], missing: [] };
     for (const game of games) {
       const taken = have.some((g) => g.id === game.id || g.steamAppId === game.steamAppId);
       if (taken) continue;
       const got = await read({ ...game, file: { format: game.format } });
-      if (got.ok)
-        out.games.push({ ...mergeHarvest(null, got.game).game, steamAppId: game.steamAppId });
+      if (got.ok && dismissed.includes(game.id))
+        out.restorable.push({ steamAppId: game.steamAppId, gameId: game.id });
+      else if (got.ok)
+        out.games.push({
+          ...mergeHarvest(null, got.game).game,
+          steamAppId: game.steamAppId,
+          ...(game.needsKeyStick === true ? { needsKeyStick: true } : {}),
+        });
       else if (got.reason === 'unreadable')
         out.unreadable.push({ steamAppId: game.steamAppId, message: got.message });
+      else out.missing.push({ steamAppId: game.steamAppId, message: missingNote(game.name) });
     }
     return out;
   };
 
-  return { formatOf, read, found };
+  return { formatOf, read, found, fileGameOf: (game) => known(game)?.id ?? null };
 }

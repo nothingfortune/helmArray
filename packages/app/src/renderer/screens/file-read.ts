@@ -84,14 +84,15 @@ function keptLine(game: Game, c: Extract<HarvestChange, { kind: 'kept' }>): stri
 
 /**
  * The list, in the order a person checks it: the file's format, modes, then each action's
- * changes in the game's order, the new actions by mode, what of yours stays, and what the file no
- * longer has. `after` is the data as it would be.
+ * changes in the game's order, the new actions by mode, what the file no longer has, the actions
+ * you typed in that the file has too, and what of yours stays. `after` is the data as it would be.
  */
 export function readLines(changes: readonly HarvestChange[], after: Game): string[] {
   const lines: string[] = [];
   const added = new Map<string, string[]>();
   const kept: string[] = [];
   const gone: string[] = [];
+  const typed: string[] = [];
   for (const c of changes) {
     switch (c.kind) {
       case 'format':
@@ -115,6 +116,9 @@ export function readLines(changes: readonly HarvestChange[], after: Game): strin
       case 'gone':
         gone.push(c.name);
         break;
+      case 'same-name':
+        typed.push(c.name);
+        break;
     }
   }
   for (const [mode, list] of added) {
@@ -125,6 +129,13 @@ export function readLines(changes: readonly HarvestChange[], after: Game): strin
   if (gone.length > 0)
     lines.push(
       `${names(gone)} ${gone.length === 1 ? "isn't" : "aren't"} in the file any more, and ${gone.length === 1 ? 'stays' : 'stay'}.`,
+    );
+  // Typed in by hand under a name the file has too: one line for all of them.
+  if (typed.length > 0)
+    lines.push(
+      typed.length === 1
+        ? `${names(typed)} is in the file too: yours stays, and the file's isn't added beside it.`
+        : `${names(typed)} are in the file too: yours stay, and the file's aren't added beside them.`,
     );
   return [...lines, ...kept];
 }

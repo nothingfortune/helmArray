@@ -111,6 +111,23 @@ describe('the merged library', () => {
     ]);
   });
 
+  it('marks a Steam tile whose game, read from its file, was deleted: Set up reads it afresh', () => {
+    const entries = mergeLibrary({
+      steam: [steam('1128920', 'EVERSPACE 2'), steam('553850', 'HELLDIVERS 2')],
+      games: [HD2],
+      schemes: none,
+      activeSchemeOf: () => null,
+      restorable: new Map([
+        ['1128920', 'everspace2'],
+        ['553850', 'never shown: helmArray has data for it'],
+      ]),
+    });
+    expect(entries.map((e) => [e.appId, e.gameId, e.restores])).toEqual([
+      ['553850', 'helldivers2', undefined],
+      ['1128920', null, 'everspace2'],
+    ]);
+  });
+
   it('keeps a known game Steam does not list, with the placeholder (Steam absent)', () => {
     const entries = mergeLibrary({
       steam: [],
@@ -304,6 +321,20 @@ describe('the library service', () => {
     const { library, readSteam } = service();
     await Promise.all([library.list(), library.list(), library.coverFiles()]);
     expect(readSteam).toHaveBeenCalledTimes(1);
+  });
+
+  it("passes on what the games' files say of a tile: why one can't be used, and which is set up afresh", async () => {
+    const { library } = service({
+      games: () => Promise.resolve([]),
+      readSteam: () =>
+        Promise.resolve({ games: [steam('1128920', 'EVERSPACE 2'), steam('359320', 'Elite')] }),
+      fileNotes: () => Promise.resolve(new Map([['359320', 'No file.']])),
+      restorable: () => Promise.resolve(new Map([['1128920', 'everspace2']])),
+    });
+    expect((await library.list()).map((e) => [e.appId, e.fileNote, e.restores])).toEqual([
+      ['359320', 'No file.', undefined],
+      ['1128920', undefined, 'everspace2'],
+    ]);
   });
 
   it('reads the schemes afresh on every ask, so a new scheme shows at once', async () => {

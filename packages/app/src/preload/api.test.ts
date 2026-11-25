@@ -138,6 +138,7 @@ describe('window.helm', () => {
       await api.deleteGame('skiff');
       await api.dismissSheet('skiff');
       await api.readGameFile('skiff');
+      await api.restoreGame('everspace2');
       expect(b.invoked).toEqual([
         [CHANNELS.listGames, []],
         [CHANNELS.getScheme, ['skiff-own-keys']],
@@ -154,6 +155,7 @@ describe('window.helm', () => {
         [CHANNELS.deleteGame, ['skiff']],
         [CHANNELS.dismissSheet, ['skiff']],
         [CHANNELS.readGameFile, ['skiff']],
+        [CHANNELS.restoreGame, ['everspace2']],
       ]);
     });
 
@@ -181,7 +183,8 @@ describe('window.helm', () => {
         await api.saveGame(game),
         await api.deleteGame('skiff'),
         await api.dismissSheet('skiff'),
-      ]).toEqual([undefined, undefined, undefined]);
+        await api.restoreGame('everspace2'),
+      ]).toEqual([undefined, undefined, undefined, undefined]);
     });
   });
 });

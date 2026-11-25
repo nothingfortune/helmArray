@@ -93,10 +93,15 @@ export interface LibraryEntry {
    */
   actionCount: number;
   /**
-   * For a game helmArray has a file format for and no data: why its own file, which is there,
-   * can't be used, in one sentence. Its tile is *Set up*, and the Game screen says it.
+   * For a game helmArray has a file format for and no data: why its own file can't be used, or
+   * isn't there yet, in one sentence. Its tile is *Set up*, and the Game screen says it.
    */
   fileNote?: string;
+  /**
+   * For a Steam game helmArray read from its own file, and that you deleted since: the id it is
+   * read under again. Its tile is *Set up*, which reads the file afresh (`restoreGame`).
+   */
+  restores?: string;
 }
 
 /** The starting points a new scheme is copied from. Using one never edits it. */
@@ -356,6 +361,11 @@ export interface ApplyResult {
   units: ApplyUnitResult[];
   /** The game's file, when Apply went on to write it: how that ended, in one sentence. */
   gameFile?: { ok: boolean; message: string };
+  /**
+   * The game's half, when it ended other than the preview said: the file gone between the drawer
+   * and the write, so every binding that changes is set by hand, with the sentence saying why.
+   */
+  game?: ApplyGame;
 }
 
 export interface HelmApi {
@@ -415,6 +425,11 @@ export interface HelmApi {
   dismissSheet(gameId: string): Promise<void>;
   /** Reads the game's own file (never writes it), for the Game screen to merge. Never rejects. */
   readGameFile(gameId: string): Promise<GameFileRead>;
+  /**
+   * *Set up* on the tile of a game read from its own file and deleted since: it is found from its
+   * file again, afresh (`LibraryEntry.restores`).
+   */
+  restoreGame(gameId: string): Promise<void>;
 }
 
 /** IPC channel names, shared by main and preload. */
@@ -439,4 +454,5 @@ export const CHANNELS = {
   deleteGame: 'helm:delete-game',
   dismissSheet: 'helm:dismiss-sheet',
   readGameFile: 'helm:read-game-file',
+  restoreGame: 'helm:restore-game',
 } as const;

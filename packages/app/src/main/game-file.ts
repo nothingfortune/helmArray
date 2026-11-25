@@ -133,6 +133,11 @@ export interface FileOutcome {
   ok: boolean;
   /** The file was changed (and a copy of the old one kept). */
   written: boolean;
+  /**
+   * Nothing written because the file isn't there (gone since the drawer looked): not a failure but
+   * the same as a file missing from the start, the bindings set by hand; `message` says why.
+   */
+  missing?: true;
   message: string;
 }
 
@@ -370,11 +375,9 @@ export function createGameFileTarget(deps: GameFileDeps): GameFileTarget {
     const ready = await prepare(game, plan);
     if (ready.status === 'sheet') {
       // The file gone since the drawer looked: nothing is written, and the bindings are set by hand.
-      return {
-        ok: false,
-        written: false,
-        message: ready.note ?? `helmArray doesn't write ${game.name}'s file.`,
-      };
+      return ready.note === null
+        ? { ok: false, written: false, message: `helmArray doesn't write ${game.name}'s file.` }
+        : { ok: false, written: false, missing: true, message: ready.note };
     }
     if (ready.status === 'blocked') return { ok: false, written: false, message: ready.problem };
     const check = await closed(game, ready.processNames);

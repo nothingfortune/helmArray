@@ -150,19 +150,31 @@ export async function composeServices(options: ComposeOptions): Promise<Services
         });
   /**
    * The store's games, each marked when its file can be read, then the ones found; and, by Steam
-   * app id, why a game's file that is there can't be used (its tile stays *Set up*).
+   * app id, why a game's file can't be used or isn't there yet (its tile stays *Set up*), and the
+   * games read from their file and deleted, set up afresh from their tile.
    */
-  const scan = async (): Promise<{ entries: GameEntry[]; notes: Map<string, string> }> => {
+  const scan = async (): Promise<{
+    entries: GameEntry[];
+    notes: Map<string, string>;
+    restorable: Map<string, string>;
+  }> => {
     const entries = await data.listGames();
     const notes = new Map<string, string>();
-    if (harvester === undefined) return { entries, notes };
-    let found: Found = { games: [], unreadable: [] };
+    const restorable = new Map<string, string>();
+    if (harvester === undefined) return { entries, notes, restorable };
+    let found: Found = { games: [], unreadable: [], restorable: [], missing: [] };
     try {
-      found = await harvester.found(entries.map((e) => e.game));
+      found = await harvester.found(
+        entries.map((e) => e.game),
+        data.dismissedFiles(),
+      );
     } catch (error) {
       log.write('(game file)', `couldn't look for games' files: ${String(error)}`);
     }
-    for (const { steamAppId, message } of found.unreadable) notes.set(String(steamAppId), message);
+    for (const { steamAppId, message } of [...found.unreadable, ...found.missing])
+      notes.set(String(steamAppId), message);
+    for (const { steamAppId, gameId } of found.restorable)
+      restorable.set(String(steamAppId), gameId);
     return {
       entries: [
         ...entries.map((e) =>
@@ -176,6 +188,7 @@ export async function composeServices(options: ComposeOptions): Promise<Services
         })),
       ],
       notes,
+      restorable,
     };
   };
   const games = async (): Promise<GameEntry[]> => (await scan()).entries;
@@ -200,6 +213,7 @@ export async function composeServices(options: ComposeOptions): Promise<Services
     readSteam: () => readSteamLibrary(options.steam),
     games,
     fileNotes: async () => (await scan()).notes,
+    restorable: async () => (await scan()).restorable,
     listSchemes: (gameId) => data.listSchemes(gameId),
     activeSchemeOf: (gameId) => data.activeSchemeOf(gameId),
     lastApplied: (gameId) => data.lastApplied(gameId),
@@ -320,9 +334,15 @@ export async function composeServices(options: ComposeOptions): Promise<Services
         void helm.plansChanged();
       },
       deleteGame: async (gameId) => {
+        const game = (await data.listGames()).find((e) => e.game.id === gameId)?.game;
         await data.deleteGame(gameId);
+        // A game read from its own file stays deleted: its file isn't found again until it is set
+        // up from its tile (`restoreGame`).
+        const fromFile = game === undefined ? null : (harvester?.fileGameOf(game) ?? null);
+        if (fromFile !== null) await data.dismissFile(fromFile);
         await helm.plansChanged();
       },
+      restoreGame: (gameId) => data.restoreFile(gameId),
       dismissSheet: async (gameId) => {
         await settleReminder(data, gameId);
         await helm.plansChanged();

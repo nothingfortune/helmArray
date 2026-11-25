@@ -280,6 +280,11 @@ export interface AppSettings {
   activeGameId: string | null;
   /** Per game id: the id of its active scheme. A game with none has no entry. */
   activeScheme: Record<string, string>;
+  /**
+   * The games read from their own file that you deleted, by id: not found from their file again
+   * until set up from their tile. None when absent.
+   */
+  dismissed?: string[];
 }
 
 export const DEFAULT_SETTINGS: Readonly<AppSettings> = { activeGameId: null, activeScheme: {} };

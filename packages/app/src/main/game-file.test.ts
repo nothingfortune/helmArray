@@ -380,6 +380,7 @@ describe('the game-file target: a write', () => {
       outcome: {
         ok: false,
         written: false,
+        missing: true,
         message:
           "helmArray can't find Everspace 2's controls file, so set these in the game's own menu (changing any control there makes the game save one).",
       },

@@ -15,6 +15,7 @@ import { gameProblem, mergeHarvest } from '@helmarray/core';
 import { harvestEliteBinds, harvestUnrealIni, writeUnrealIni } from '@helmarray/games';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { assign } from '../../packages/app/src/renderer/screens/editor-model';
+import { addAction, newGame } from '../../packages/app/src/renderer/screens/game-model';
 import type {
   ApplyPreview,
   ApplyResult,
@@ -125,7 +126,7 @@ describe('J1 on Everspace 2 from its tile, with no game data: its file is the he
     }).toEqual({ saved: [], found: [ES2, 'elite-dangerous'] });
   });
 
-  it("saves the game's data when a scheme is made from it: the file's, with its Steam id", () => {
+  it("saves the game's data when a scheme is made from it: the file's, with its Steam id, and its sticks sending keys", () => {
     expect({
       saved: { ...saved, schemaVersion: undefined },
       problem: gameProblem(saved),
@@ -133,6 +134,7 @@ describe('J1 on Everspace 2 from its tile, with no game data: its file is the he
       saved: {
         ...mergeHarvest(null, ES2_HARVEST).game,
         steamAppId: 1128920,
+        needsKeyStick: true,
         schemaVersion: undefined,
       },
       problem: null,
@@ -168,6 +170,18 @@ describe('J1 on Everspace 2 from its tile, with no game data: its file is the he
 
   it('never wrote the game’s file to read it', async () => {
     expect((await readFile(ini)).equals(ES2_BYTES)).toBe(true);
+  });
+
+  it("sends keys from both sticks with the game's own keys, and says an Xbox stick won't do", async () => {
+    const xbox = await world.helm.createScheme(ES2, 'xbox');
+    const errorsOf = async (id: string) =>
+      (await world.planOf(await world.scheme(id))).findings
+        .filter((f) => f.severity === 'error' && f.rule === 'stick-not-keyboard')
+        .map((f) => f.control);
+    expect({ keys: await errorsOf(scheme.id), xbox: await errorsOf(xbox.id) }).toEqual({
+      keys: [],
+      xbox: ['L.stick', 'R.stick'],
+    });
   });
 });
 
@@ -401,6 +415,238 @@ describe('Everspace 2 with an action added by hand, applied', () => {
   it("keeps Wave, and only Wave, on the Library's reminder to set by hand", () => {
     const sheet = world.state.sheets.find((s) => s.gameId === ES2);
     expect([...new Set(sheet?.rows.map((r) => r.action))]).toEqual(['wave']);
+  });
+});
+
+describe('Everspace 2 read from its file, used, edited and deleted', () => {
+  let world: World;
+  let afterDelete: { library: LibraryEntry[]; games: GameEntry[] };
+  let afterRestart: { library: LibraryEntry[]; games: GameEntry[] };
+  let settings: { dismissed?: string[] };
+  let restored: { library: LibraryEntry[]; games: GameEntry[] };
+  let settingsAfter: { dismissed?: string[] };
+  const look = async () => ({
+    library: await world.helm.listLibrary(),
+    games: await world.helm.listGames(),
+  });
+  const readSettings = async () =>
+    JSON.parse(await readFile(join(world.dataDir, 'settings.json'), 'utf8')) as {
+      dismissed?: string[];
+    };
+
+  beforeAll(async () => {
+    world = await World.create({ steam: STEAM });
+    await placeFiles(world);
+    await world.boot();
+    await world.helm.createScheme(ES2, 'keys');
+    // An edit of yours, so a fresh read is told from the data you had.
+    const mine = entryOf(await world.helm.listGames(), ES2)?.game as Game;
+    await world.helm.saveGame({ ...mine, name: 'My Everspace' });
+    await world.app.data.flush();
+    await world.helm.deleteGame(ES2);
+    await world.idle();
+    afterDelete = await look();
+    settings = await readSettings();
+    await world.quit();
+    await world.boot();
+    afterRestart = await look();
+    // *Set up* on its Steam tile.
+    await world.helm.restoreGame(ES2);
+    restored = await look();
+    settingsAfter = await readSettings();
+  });
+
+  afterAll(async () => {
+    await world.dispose();
+  });
+
+  it('stays deleted: its tile is Set up under Steam’s name, and reads its file afresh from there', () => {
+    const tile = tileOf(afterDelete.library, '1128920');
+    expect({
+      tile: [tile?.name, tile?.gameId, tile?.restores],
+      found: entryOf(afterDelete.games, ES2),
+    }).toEqual({ tile: ['EVERSPACE™ 2', null, ES2], found: undefined });
+  });
+
+  it('keeps it deleted in your data, and after the app starts again', () => {
+    expect({
+      dismissed: settings.dismissed,
+      tile: tileOf(afterRestart.library, '1128920')?.gameId,
+      found: entryOf(afterRestart.games, ES2),
+    }).toEqual({ dismissed: [ES2], tile: null, found: undefined });
+  });
+
+  it('leaves Elite as it was: still found from its file', () => {
+    expect(entryOf(afterDelete.games, 'elite-dangerous')?.found).toBe(true);
+  });
+
+  it('is found again once set up from its tile, fresh from the file, not as you had it', () => {
+    const entry = entryOf(restored.games, ES2);
+    expect({
+      found: entry?.found,
+      game: entry?.game,
+      tile: tileOf(restored.library, '1128920')?.gameId,
+      dismissed: settingsAfter.dismissed,
+    }).toEqual({
+      found: true,
+      game: {
+        ...mergeHarvest(null, ES2_HARVEST).game,
+        steamAppId: 1128920,
+        needsKeyStick: true,
+      },
+      tile: ES2,
+      dismissed: [],
+    });
+  });
+});
+
+describe('a game typed in by hand under Everspace 2’s Steam id, deleted', () => {
+  let world: World;
+  let library: LibraryEntry[];
+
+  beforeAll(async () => {
+    world = await World.create({ steam: STEAM });
+    await placeFiles(world);
+    await world.boot();
+    await world.helm.saveGame({
+      id: 'everspace_2',
+      name: 'Everspace 2',
+      steamAppId: 1128920,
+      modes: [{ id: 'default', name: 'Default' }],
+      actions: [{ id: 'boost', name: 'Boost', mode: 'default', required: false }],
+    });
+    await world.app.data.flush();
+    await world.helm.deleteGame('everspace_2');
+    await world.idle();
+    library = await world.helm.listLibrary();
+  });
+
+  afterAll(async () => {
+    await world.dispose();
+  });
+
+  it("doesn't come back as the game found by its file: its tile is Set up, from the file", () => {
+    const tile = tileOf(library, '1128920');
+    expect([tile?.gameId, tile?.restores]).toEqual([null, ES2]);
+  });
+});
+
+describe('Everspace 2 typed in by hand before its file was read', () => {
+  let world: World;
+  let typed: Game;
+  let flightTyped: Game;
+
+  beforeAll(async () => {
+    world = await World.create({ steam: STEAM });
+    await placeFiles(world);
+    await world.boot();
+    // As *Set up* on its Steam tile makes it, then two actions typed in.
+    typed = newGame('Everspace 2', [], 1128920);
+    typed = addAction(typed, 'default', 'Boost [HOLD]').game;
+    typed = addAction(typed, 'default', 'Wave').game;
+    await world.helm.saveGame(typed);
+    await world.idle();
+    // The same, its actions in a mode with the file's id for flight.
+    flightTyped = {
+      ...typed,
+      modes: [{ id: 'flight', name: 'Flight' }],
+      actions: typed.actions.map((a) => ({ ...a, mode: 'flight' })),
+    };
+  });
+
+  afterAll(async () => {
+    await world.dispose();
+  });
+
+  it('is the game the Library has for Everspace 2: its file is found under no second id', async () => {
+    const games = await world.helm.listGames();
+    const tile = tileOf(await world.helm.listLibrary(), '1128920');
+    expect({
+      id: typed.id,
+      tile: tile?.gameId,
+      found: games.filter((e) => e.found === true).map((e) => e.game.id),
+      readsFile: entryOf(games, typed.id)?.readsFile,
+    }).toEqual({
+      id: 'everspace_2',
+      tile: 'everspace_2',
+      found: ['elite-dangerous'],
+      readsFile: true,
+    });
+  });
+
+  it("reads the file into that game, under that game's id", async () => {
+    const read = await world.helm.readGameFile(typed.id);
+    expect(read.ok && [read.file.id, read.file.actions.length]).toEqual([
+      'everspace_2',
+      ES2_HARVEST.actions.length,
+    ]);
+  });
+
+  it("keeps an action typed in under a name the file has in the same mode, and says so: the file's isn't added beside it", async () => {
+    const read = await world.helm.readGameFile(typed.id);
+    // As the Game screen merges it.
+    const { game, changes } = mergeHarvest(flightTyped, (read as { file: Game }).file);
+    const boosts = game.actions.filter((a) => a.name === 'Boost [HOLD]').map((a) => a.id);
+    expect({
+      boosts,
+      wave: game.actions.some((a) => a.id === 'wave'),
+      all: game.actions.length,
+      same: changes.filter((c) => c.kind === 'same-name'),
+    }).toEqual({
+      boosts: ['boost_hold'],
+      wave: true,
+      all: ES2_HARVEST.actions.length + 1,
+      same: [{ kind: 'same-name', action: 'boost_hold', name: 'Boost [HOLD]', file: 'Boost' }],
+    });
+  });
+
+  it('saves that read, and a second read adds nothing more', async () => {
+    const first = await world.helm.readGameFile(typed.id);
+    await world.helm.saveGame(mergeHarvest(flightTyped, (first as { file: Game }).file).game);
+    await world.idle();
+    const saved = entryOf(await world.helm.listGames(), typed.id)?.game as Game;
+    const again = await world.helm.readGameFile(typed.id);
+    const { game, changes } = mergeHarvest(saved, (again as { file: Game }).file);
+    expect([game.actions.length, changes.map((c) => c.kind)]).toEqual([
+      saved.actions.length,
+      ['same-name'],
+    ]);
+  });
+});
+
+describe('Everspace 2 installed, with no Input.ini saved yet', () => {
+  let world: World;
+  let library: LibraryEntry[];
+  let listed: GameEntry[];
+
+  beforeAll(async () => {
+    world = await World.create({ steam: STEAM });
+    const { ini } = await placeFiles(world);
+    await rm(ini);
+    await world.boot();
+    library = await world.helm.listLibrary();
+    listed = await world.helm.listGames();
+  });
+
+  afterAll(async () => {
+    await world.dispose();
+  });
+
+  it('leaves its tile on Set up, saying why in one sentence; Elite, whose file is there, is found', () => {
+    expect([
+      [tileOf(library, '1128920')?.gameId, tileOf(library, '1128920')?.fileNote],
+      [tileOf(library, '359320')?.gameId, tileOf(library, '359320')?.fileNote],
+    ]).toEqual([
+      [
+        null,
+        "helmArray can't find Everspace 2's controls file yet: changing any control in the game's own menu makes the game save one.",
+      ],
+      ['elite-dangerous', undefined],
+    ]);
+  });
+
+  it('lists it as no game found, and saves nothing', async () => {
+    expect([entryOf(listed, ES2), await savedGames(world)]).toEqual([undefined, []]);
   });
 });
 

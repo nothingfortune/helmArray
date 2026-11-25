@@ -1,7 +1,8 @@
 // The Game screen: a game's modes and actions, and each action's default key and controller button
 // (docs/plans/04-roadmap.md, M4.5, *Game data in the app*). Not drawn on the canvas: designed in its
-// style, from the tokens. Reached from a Library tile: *Set up* on a game helmArray doesn't know,
-// *Edit game* on one it does, and *Add a game* for one Steam doesn't list.
+// style, from the tokens. Reached from a Library tile: *Set up* on a game helmArray doesn't know
+// (or one read from its own file and deleted since, read afresh), *Edit game* on one it does, and
+// *Add a game* for one Steam doesn't list.
 //
 // A default is set by pressing it while the window has focus: ordinary keydown and mousedown in the
 // page, and the Gamepad API (`navigator.getGamepads`) read once a frame only while a controller
@@ -59,9 +60,12 @@ export function GameScreen(props: GameScreenProps) {
 
   useEffect(() => {
     let live = true;
+    // A game set up again from its file is let back in first, so the list finds it afresh.
+    const restored =
+      target.kind === 'restore' ? window.helm.restoreGame(target.gameId) : Promise.resolve();
     // The game's saved schemes too: the ids they name are never given to anything new.
     const schemes = target.kind === 'edit' ? window.helm.listSchemes(target.gameId) : [];
-    Promise.all([window.helm.listGames(), schemes]).then(
+    Promise.all([restored.then(() => window.helm.listGames()), schemes]).then(
       ([games, saved]: [GameEntry[], Scheme[]]) => {
         if (!live) return;
         const loaded = loadedOf(target, games, saved);

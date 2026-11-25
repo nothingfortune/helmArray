@@ -468,12 +468,15 @@ export function drawerView(state: DrawerState): DrawerView {
     sections: [],
     game: null,
     byHand: null,
-    // Rows only the person can now set: the units are done, the game is theirs.
+    // Rows only the person can now set: the units are done, the game is theirs. Apply's own word on
+    // the game's half, when it has one (the file gone before it was written), over the preview's.
     sheet: !result.ok
       ? null
-      : preview.game.via === 'sheet'
-        ? gameSection(preview.game, nowTitle)
-        : byHandSection(preview, nowTitle),
+      : result.game !== undefined
+        ? gameSection(result.game, nowTitle)
+        : preview.game.via === 'sheet'
+          ? gameSection(preview.game, nowTitle)
+          : byHandSection(preview, nowTitle),
     cancel: { label: 'Close', disabled: false },
     apply: result.ok ? null : { label: 'Try again', disabled: false },
     closable: true,

@@ -15,6 +15,9 @@
 //   - In the file and not in the data: added at the end of its mode, unless its id is retired (you
 //     deleted it, or its mode) or its mode isn't there. A retired id never comes back.
 //   - In the data and not in the file: kept as it is, added by hand or gone from the file.
+//   - Typed in by hand (in the data, not in the file and not in it at the last read) under the name
+//     of an action the file has in the same mode, the name compared in any case and with any spaces:
+//     yours stays, and the file's isn't added beside it. Each of yours stands for one of the file's.
 // `file.format` is the file's. Everything else of the game (its id, Steam id, retired ids, whether
 // the sticks must send keys) is the data's.
 // A file with nothing usable in it (no action, or a game core's gameProblem refuses: an empty
@@ -55,7 +58,12 @@ export type HarvestChange =
       file: unknown;
     }
   /** The file had the action last time and doesn't now: it stays in the data. */
-  | { kind: 'gone'; action: ActionId; name: string };
+  | { kind: 'gone'; action: ActionId; name: string }
+  /**
+   * An action you typed in has the name of one in the file (`file`), in the same mode: yours stays,
+   * and the file's isn't added beside it.
+   */
+  | { kind: 'same-name'; action: ActionId; name: string; file: ActionId };
 
 export interface HarvestMerge {
   game: Game;
@@ -103,6 +111,10 @@ function actionOf(id: ActionId, get: (field: HarvestField) => unknown): Action {
         }),
   };
 }
+
+/** A name as it is compared with another: in any case, and with any spaces. */
+// Stryker disable next-line MethodExpression: both names are folded the same way, so upper or lower case makes the same match
+const nameKey = (name: string): string => name.toLowerCase().replace(/\s/g, '');
 
 /** In the order a person reads an action. */
 const FIELDS: readonly HarvestField[] = ['name', 'mode', 'role', 'required', 'key', 'pad'];
@@ -215,9 +227,18 @@ export function mergeHarvest(
     }
     return clone(actionOf(m.id, (field) => values.get(field)));
   });
+  // Yours typed in by hand, never the file's: each may stand for one of the file's of its name.
+  const typed = mine.actions.filter((a) => !fileActions.has(a.id) && !baseActions.has(a.id));
   for (const t of theirs) {
     if (actions.some((a) => a.id === t.id) || retiredActions.has(t.id) || !modeIds.has(t.mode))
       continue;
+    const at = typed.findIndex((a) => a.mode === t.mode && nameKey(a.name) === nameKey(t.name));
+    const same = typed[at];
+    if (same !== undefined) {
+      typed.splice(at, 1);
+      changes.push({ kind: 'same-name', action: same.id, name: same.name, file: t.id });
+      continue;
+    }
     const after = actions.findLastIndex((a) => a.mode === t.mode);
     actions.splice(after + 1, 0, clone(t));
     changes.push({ kind: 'added', action: t.id, name: t.name, mode: t.mode });
