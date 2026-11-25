@@ -130,17 +130,22 @@ export interface GameFileTarget {
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 const clause = (text: string): string => text.replace(/[.\s]+$/, '');
-const decoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
+/** The file's text, a byte order mark kept as its first character; throws if it isn't UTF-8. */
+const decode = (bytes: Uint8Array): string =>
+  new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
 const encoder = new TextEncoder();
 const sameBytes = (a: Uint8Array, b: Uint8Array): boolean =>
   a.length === b.length && a.every((byte, i) => byte === b[i]);
 const baseName = (path: string): string => path.split(/[\\/]/).at(-1) ?? path;
 
-/** A backup's name: when it was taken, then the file's name, so the newest sorts last. */
-const BACKUP = /^\d{4}-\d{2}-\d{2} \d{2}\.\d{2}\.\d{2}\.\d{3}(?: \d+)? /;
+/**
+ * A backup's name: when it was taken (to the millisecond, UTC), then the file's name, so the newest
+ * sorts last. A second copy in the same millisecond takes `-01`, which sorts after the first.
+ */
+const BACKUP = /^\d{4}-\d{2}-\d{2} \d{2}\.\d{2}\.\d{2}\.\d{3}[ -]/;
 function backupName(at: number, name: string, n: number): string {
   const when = new Date(at).toISOString().replace('T', ' ').replace(/:/g, '.').replace('Z', '');
-  return n === 0 ? `${when} ${name}` : `${when} ${n} ${name}`;
+  return n === 0 ? `${when} ${name}` : `${when}-${String(n).padStart(2, '0')} ${name}`;
 }
 
 type Prepared =
@@ -200,7 +205,7 @@ export function createGameFileTarget(deps: GameFileDeps): GameFileTarget {
     if (before === null) return blocked(null, missing);
     let text: string;
     try {
-      text = decoder.decode(before);
+      text = decode(before);
     } catch {
       return blocked(name, `${game.name}'s controls file isn't text helmArray can read.`);
     }
@@ -210,10 +215,9 @@ export function createGameFileTarget(deps: GameFileDeps): GameFileTarget {
     } catch (error) {
       const problems = error instanceof GameFileError ? error.problems : [messageOf(error)];
       const more = problems.length > 1 ? ` (and ${problems.length - 1} more)` : '';
-      return blocked(
-        name,
-        `${game.name}'s controls file can't take this scheme: ${clause(problems[0] ?? '')}${more}.`,
-      );
+      // Stryker disable next-line StringLiteral: an adapter throws a GameFileError only with a problem in it, so there is always a first
+      const first = clause(problems[0] ?? '');
+      return blocked(name, `${game.name}'s controls file can't take this scheme: ${first}${more}.`);
     }
     return { status: 'ready', kind, processNames, path, name, before, after, same: after === text };
   };
@@ -278,7 +282,7 @@ export function createGameFileTarget(deps: GameFileDeps): GameFileTarget {
     if (back === null) return false;
     let text: string;
     try {
-      text = decoder.decode(back);
+      text = decode(back);
     } catch {
       return false;
     }

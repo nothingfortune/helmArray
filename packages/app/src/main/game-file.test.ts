@@ -164,17 +164,56 @@ describe('the game-file target: what it says before Apply', () => {
 
   it('says how to make the file when there is none yet', async () => {
     await rm(iniPath);
-    expect((await target().look(ES2_GAME, MOVED)).checks[1]).toEqual({
-      ok: false,
-      kind: 'game-file',
-      text: "helmArray can't find Everspace 2's controls file: change any control in the game's own menu once, then apply.",
+    expect(await target().look(ES2_GAME, MOVED)).toEqual({
+      via: 'file',
+      name: null,
+      same: false,
+      checks: [
+        { ok: true, kind: 'game', text: 'Everspace 2 is closed.' },
+        {
+          ok: false,
+          kind: 'game-file',
+          text: "helmArray can't find Everspace 2's controls file: change any control in the game's own menu once, then apply.",
+        },
+      ],
     });
+  });
+
+  it('names the file and never says it holds the bindings, when it cannot take them', async () => {
+    const look = await target().look(ES2_GAME, planOf(ES2_GAME, [row('NoSuchAction', key('B'))]));
+    expect([look.name, look.same]).toEqual(['Input.ini', false]);
+  });
+
+  it('leaves a game whose programs are listed as none to the bind sheet', async () => {
+    const kinds = { 'unreal-ini': { ...KINDS['unreal-ini'], processNames: [] } };
+    expect((await target({ kinds }).look(ES2_GAME, MOVED)).via).toBe('sheet');
+  });
+
+  it('says the one thing the file can not take, with no count of more', async () => {
+    const plan = planOf(ES2_GAME, [row('NoSuchAction', key('B'))]);
+    expect((await target().look(ES2_GAME, plan)).checks[1]?.text).toBe(
+      `Everspace 2's controls file can't take this scheme: The file has no action "NoSuchAction".`,
+    );
+  });
+
+  it('says what went wrong when the adapter fails some other way', async () => {
+    const kinds = {
+      'unreal-ini': {
+        ...KINDS['unreal-ini'],
+        write: () => {
+          throw new Error('Unexpected end of line.  ');
+        },
+      },
+    };
+    expect((await target({ kinds }).look(ES2_GAME, MOVED)).checks[1]?.text).toBe(
+      "Everspace 2's controls file can't take this scheme: Unexpected end of line.",
+    );
   });
 
   it("says why when the file can't be read", async () => {
     const disk: GameFileDisk = {
       ...nodeGameFileDisk,
-      read: () => Promise.reject(new Error('EBUSY: resource busy or locked.')),
+      read: () => Promise.reject(new Error('EBUSY: resource busy or locked. \n')),
     };
     expect((await target({ disk }).look(ES2_GAME, MOVED)).checks[1]).toEqual({
       ok: false,
@@ -217,6 +256,75 @@ describe('the game-file target: a write', () => {
       boost: key('B'),
       copies: ['2026-11-24 09.30.01.250 Input.ini'],
       copy: ES2_BYTES,
+    });
+  });
+
+  it('keeps a byte order mark the file starts with', async () => {
+    await writeFile(iniPath, Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), ES2_BYTES]));
+    await target().write(ES2_GAME, MOVED);
+    expect([...(await ini()).subarray(0, 4)]).toEqual([0xef, 0xbb, 0xbf, ES2_BYTES[0]]);
+  });
+
+  it("refuses to write for a plan that doesn't write the game's file", async () => {
+    const noFile = planOf(ES2_GAME, MOVED.gameBindings);
+    delete noFile.gameFile;
+    expect({ outcome: await target().write(ES2_GAME, noFile), file: await ini() }).toEqual({
+      outcome: {
+        ok: false,
+        written: false,
+        message: "helmArray doesn't write Everspace 2's file.",
+      },
+      file: ES2_BYTES,
+    });
+  });
+
+  it('says in the log what it kept, what it wrote, and what went wrong', async () => {
+    running = [];
+    await target().write(ES2_GAME, MOVED);
+    const failing = target({
+      disk: failingWrites(() => Promise.reject(new Error('EPERM'))),
+      listProcesses: () => Promise.reject(new Error('tasklist failed')),
+    });
+    await failing.look(ES2_GAME, MOVED);
+    await writeFile(iniPath, ES2_BYTES);
+    await target({ disk: failingWrites(() => Promise.reject(new Error('EPERM'))) }).write(
+      ES2_GAME,
+      MOVED,
+    );
+    const at = (text: string) => lines.some((line) => line.includes(text));
+    expect({
+      kept: at(`everspace2: kept a copy of ${iniPath} as 2026-11-24 09.30.01.250 Input.ini`),
+      wrote: at(`everspace2: wrote ${iniPath}`),
+      look: at("couldn't look for everspace2: tasklist failed"),
+      failed: at("everspace2: Everspace 2's controls file couldn't be written (EPERM)"),
+      putBack: at('putting the file back failed: EPERM'),
+    }).toEqual({ kept: true, wrote: true, look: true, failed: true, putBack: true });
+  });
+
+  it('says in the log when no copy could be kept', async () => {
+    const disk: GameFileDisk = {
+      ...nodeGameFileDisk,
+      makeDir: () => Promise.reject(new Error('EACCES')),
+    };
+    await target({ disk }).write(ES2_GAME, MOVED);
+    expect(lines).toContain(`everspace2: no copy of ${iniPath} could be kept: EACCES`);
+  });
+
+  it('puts the file back when it is gone after the write', async () => {
+    let writes = 0;
+    const disk = failingWrites(async (path, bytes) => {
+      writes++;
+      if (writes === 1) await rm(path);
+      else await nodeGameFileDisk.write(path, bytes);
+    });
+    expect({ outcome: await target({ disk }).write(ES2_GAME, MOVED), file: await ini() }).toEqual({
+      outcome: {
+        ok: false,
+        written: false,
+        message:
+          "Everspace 2's controls file didn't read back as it was written, so it was put back as it was.",
+      },
+      file: ES2_BYTES,
     });
   });
 
@@ -356,6 +464,21 @@ describe('the game-file target: a write', () => {
     );
   });
 
+  it.each([
+    ['short of its last byte', (bytes: Uint8Array) => bytes.slice(0, -1)],
+    ['with one byte changed', (bytes: Uint8Array) => bytes.map((b, i) => (i === 10 ? b ^ 1 : b))],
+  ])("doesn't say the file was put back when it reads back %s", async (_how, spoil) => {
+    let writes = 0;
+    const disk = failingWrites(async (path, bytes) => {
+      writes++;
+      if (writes === 1) throw new Error('EIO');
+      await nodeGameFileDisk.write(path, spoil(bytes));
+    });
+    expect((await target({ disk }).write(ES2_GAME, MOVED)).message).toBe(
+      "Everspace 2's controls file couldn't be written (EIO), and couldn't be put back: a copy of the old one is in helmArray's backups folder, as “2026-11-24 09.30.01.250 Input.ini”.",
+    );
+  });
+
   it("says where the copy is when the file can't even be put back", async () => {
     const disk = failingWrites(() => Promise.reject(new Error('EPERM: operation not permitted')));
     expect(await target({ disk }).write(ES2_GAME, MOVED)).toEqual({
@@ -382,13 +505,16 @@ describe('the game-file target: a write', () => {
     });
   });
 
-  it("doesn't write the file when the copy doesn't read back as the file", async () => {
+  it.each([
+    ['short of its last byte', (bytes: Uint8Array) => bytes.slice(0, -1)],
+    ['with one byte changed', (bytes: Uint8Array) => bytes.map((b, i) => (i === 10 ? b ^ 1 : b))],
+  ])("doesn't write the file when the copy reads back %s", async (_how, spoil) => {
     const disk: GameFileDisk = {
       ...nodeGameFileDisk,
       write: (path, bytes) =>
         path === iniPath
           ? nodeGameFileDisk.write(path, bytes)
-          : nodeGameFileDisk.write(path, bytes.slice(1)),
+          : nodeGameFileDisk.write(path, spoil(bytes)),
     };
     expect({ outcome: await target({ disk }).write(ES2_GAME, MOVED), file: await ini() }).toEqual({
       outcome: {
@@ -437,9 +563,24 @@ describe('the game-file target: the copies it keeps', () => {
 
   it('never removes a file it did not make', async () => {
     await mkdir(join(backups, 'everspace2'), { recursive: true });
-    await writeFile(join(backups, 'everspace2', 'my notes.txt'), 'mine');
+    // Each sorts before helmArray's own copies: removed first, were it taken for one.
+    const mine = ['0 my notes.txt', '0 2026-11-01 10.00.00.000 Input.ini'];
+    for (const name of mine) await writeFile(join(backups, 'everspace2', name), 'mine');
     await applyEach(['B', 'C', 'F', 'G', 'H', 'J', 'K']);
-    expect(await backupsOf('everspace2')).toContain('my notes.txt');
+    expect(await backupsOf('everspace2')).toEqual(expect.arrayContaining(mine));
+  });
+
+  it('keeps the newest, whatever order the folder lists them in', async () => {
+    const disk: GameFileDisk = {
+      ...nodeGameFileDisk,
+      list: async (dir) => (await nodeGameFileDisk.list(dir)).reverse(),
+    };
+    for (const code of ['B', 'C', 'F'])
+      await target({ disk, keep: 2 }).write(ES2_GAME, planOf(ES2_GAME, [row('Boost', key(code))]));
+    expect(await backupsOf('everspace2')).toEqual([
+      '2026-11-24 09.30.02.250 Input.ini',
+      '2026-11-24 09.30.03.250 Input.ini',
+    ]);
   });
 
   it('takes a second name when two copies are made in the same moment', async () => {
@@ -447,8 +588,8 @@ describe('the game-file target: the copies it keeps', () => {
     await target({ now: still }).write(ES2_GAME, MOVED);
     await target({ now: still }).write(ES2_GAME, planOf(ES2_GAME, [row('Boost', key('C'))]));
     expect(await backupsOf('everspace2')).toEqual([
-      '2026-11-24 09.30.00.250 1 Input.ini',
       '2026-11-24 09.30.00.250 Input.ini',
+      '2026-11-24 09.30.00.250-01 Input.ini',
     ]);
   });
 
