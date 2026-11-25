@@ -14,6 +14,7 @@ const STATE: AppState = {
   activeGameId: null,
   activeSchemeId: null,
   onUnits: { left: null, right: null },
+  sheets: [],
 };
 
 function bridge() {
@@ -135,6 +136,7 @@ describe('window.helm', () => {
       await api.apply('skiff-own-keys', 'abc');
       await api.saveGame(game);
       await api.deleteGame('skiff');
+      await api.dismissSheet('skiff');
       expect(b.invoked).toEqual([
         [CHANNELS.listGames, []],
         [CHANNELS.getScheme, ['skiff-own-keys']],
@@ -149,6 +151,7 @@ describe('window.helm', () => {
         [CHANNELS.apply, ['skiff-own-keys', 'abc']],
         [CHANNELS.saveGame, [game]],
         [CHANNELS.deleteGame, ['skiff']],
+        [CHANNELS.dismissSheet, ['skiff']],
       ]);
     });
 
@@ -172,10 +175,11 @@ describe('window.helm', () => {
       expect(await api.saveScheme(scheme)).toBeUndefined();
       expect(await api.deleteScheme('x')).toBeUndefined();
       expect(await api.setActive('skiff', null)).toBeUndefined();
-      expect([await api.saveGame(game), await api.deleteGame('skiff')]).toEqual([
-        undefined,
-        undefined,
-      ]);
+      expect([
+        await api.saveGame(game),
+        await api.deleteGame('skiff'),
+        await api.dismissSheet('skiff'),
+      ]).toEqual([undefined, undefined, undefined]);
     });
   });
 });

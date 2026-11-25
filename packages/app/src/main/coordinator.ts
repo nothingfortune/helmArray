@@ -2,7 +2,7 @@
 // works out the new `AppState`, tells the listeners, and keeps the hand finder and the devices
 // service in step. Pure: everything it touches is handed in, so tests run it over fakes.
 
-import type { UnitsHeld } from '@helmarray/core';
+import type { KeptSheet, UnitsHeld } from '@helmarray/core';
 import type { AppState, Hand } from '../shared/api';
 import type { ActivePlans } from './active-plans';
 import { composeAppState, pendingAsk } from './app-state';
@@ -31,6 +31,8 @@ export interface CoordinatorDeps {
   plans?(): Promise<ActivePlans>;
   /** What each unit was last written with, read afresh each time the state is worked out. */
   unitsHeld?(): Promise<UnitsHeld>;
+  /** What is still to set by hand in each game, read afresh each time the state is worked out. */
+  sheets?(): Promise<KeptSheet[]>;
   /**
    * True while something is writing to the units (an Apply): the state is not worked out then,
    * so the pill never shows a half-done write. Whoever was writing asks for it afterwards
@@ -131,6 +133,12 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
     } catch (error) {
       trace(`reading what the units hold failed: ${messageOf(error)}`);
     }
+    let sheets: KeptSheet[] = [];
+    try {
+      sheets = (await deps.sheets?.()) ?? [];
+    } catch (error) {
+      trace(`reading what is still to set in the games failed: ${messageOf(error)}`);
+    }
     const snapshot = devices.snapshot();
     const ids = idsOf(snapshot);
     let hands: HandsResult;
@@ -151,6 +159,7 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
       active: deps.active?.(),
       plans,
       held,
+      sheets,
       now: (deps.now ?? Date.now)(),
     });
     const json = JSON.stringify(next);
@@ -194,7 +203,7 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
     azeronChanged: (processes) => {
       azeronKnown = true;
       writeBlock = processes.block?.reason ?? null;
-      // Units about to vanish because the service is stopped are not an unplug.
+      // Units let go because the service is paused (or stopped) are not an unplug.
       finder.update(null, blocked(), []);
       void gate.azeronRunning(processes.azeronRunning);
       void refresh();

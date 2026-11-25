@@ -62,10 +62,7 @@ function CheckRow({
         className={`dot tone-${row.finding.severity === 'error' ? 'error' : 'warning'}`}
         aria-hidden="true"
       />
-      <span className="ed-check-text">
-        {row.finding.message}
-        {row.why !== undefined && <span className="ed-check-why"> {row.why}</span>}
-      </span>
+      <CheckText row={row} />
       {row.fix && (
         <button type="button" className="btn ed-fix" onClick={() => onFix(row)}>
           {row.fix.label}
@@ -127,6 +124,18 @@ function CheckGroupRow({
   );
 }
 
+/** A check's one sentence, its subject in bold, as the canvas draws it. */
+function CheckText({ row }: { row: FindingRow }) {
+  return (
+    <span className="ed-check-text">
+      {row.subject !== null && <strong className="ed-check-subject">{row.subject}</strong>}
+      {row.rest}
+      {/* Why its fix isn't offered, when its rule has one that can't act here. */}
+      {row.why !== undefined && <span className="ed-check-why"> {row.why}</span>}
+    </span>
+  );
+}
+
 export function Checks({
   view,
   onFix,
@@ -172,7 +181,7 @@ export function Checks({
           {view.kept.map((row) => (
             <div key={row.key} className="ed-check is-kept">
               <span className="dot tone-ok" aria-hidden="true" />
-              <span className="ed-check-text">{row.finding.message}</span>
+              <CheckText row={row} />
               <button type="button" className="btn ghost" onClick={() => onFlag(row)}>
                 Flag it again
               </button>
@@ -410,7 +419,8 @@ export function Unplaced({
   onPlace,
 }: {
   view: EditorView;
-  modeName: string;
+  /** The mode shown, for a game with modes to tell apart; null for a game with one. */
+  modeName: string | null;
   prompt: string | null;
   onPlace(id: string): void;
 }) {
@@ -437,13 +447,14 @@ export function Unplaced({
         <div key={list.set} className="ed-group">
           <div className="ed-unplaced-head">
             <span className="ed-lbl">
-              Not on a {list.word} · {modeName}
+              Not on a {list.word}
+              {modeName === null ? '' : ` · ${modeName}`}
             </span>
             <span className="ed-count">{list.actions.length}</span>
           </div>
           {list.actions.length === 0 ? (
             <p className="ed-hint">
-              Every {modeName} action is on a {list.word}.
+              Every {modeName === null ? '' : `${modeName} `}action is on a {list.word}.
             </p>
           ) : (
             <ul className="ed-actions">{list.actions.map((a) => act(a))}</ul>
@@ -471,6 +482,9 @@ export function Unplaced({
     </div>
   );
 }
+
+/** The confirmation before a setup is deleted: it names the scheme, so it never reads as a device. */
+export const deleteQuestion = (name: string): string => `Delete the scheme “${name}”?`;
 
 /** What the Scheme picker can do: each switches the editor to the setup it leads to. */
 export interface PickerActions {
@@ -590,18 +604,21 @@ export function SchemePicker({
             </span>
           </form>
           {confirming ? (
-            <div className="ed-confirm" role="group" aria-label={`Delete ${scheme.name}?`}>
-              <span>Delete {scheme.name}?</span>
-              <button
-                type="button"
-                className="btn ed-danger"
-                onClick={() => choose(actions.remove)}
-              >
-                Delete
-              </button>
-              <button type="button" className="btn ghost" onClick={() => setConfirming(false)}>
-                Keep
-              </button>
+            <div className="ed-confirm" role="group" aria-label={deleteQuestion(scheme.name)}>
+              <span>{deleteQuestion(scheme.name)}</span>
+              {/* The two answers stay together on one row. */}
+              <span className="ed-confirm-buttons">
+                <button
+                  type="button"
+                  className="btn ed-danger"
+                  onClick={() => choose(actions.remove)}
+                >
+                  Delete
+                </button>
+                <button type="button" className="btn ghost" onClick={() => setConfirming(false)}>
+                  Keep
+                </button>
+              </span>
             </div>
           ) : (
             <button
@@ -617,6 +634,15 @@ export function SchemePicker({
     </Popover.Root>
   );
 }
+
+/**
+ * Why None can't be picked, said beside it rather than left to a greyed-out guess; null when it
+ * can be.
+ */
+export const noneWhy = (devices: Scheme['devices']): string | null =>
+  hasDevices(chooseAzerons(devices, 'none'))
+    ? null
+    : 'None needs another device: a setup plays with at least one.';
 
 const AZERON_CHOICES: { value: AzeronUse; label: string }[] = [
   { value: 'both', label: 'Both' },
@@ -640,6 +666,8 @@ export function DevicesChooser({
     disabled: !hasDevices(next),
     onChange: () => onChange(next),
   });
+  const why = noneWhy(devices);
+  const noneOff = why !== null;
   return (
     <Popover.Root>
       <Popover.Trigger asChild>
@@ -666,10 +694,16 @@ export function DevicesChooser({
                   name="ed-azerons"
                   checked={devices.azerons === c.value}
                   {...offer(chooseAzerons(devices, c.value))}
+                  {...(c.value === 'none' && noneOff && { 'aria-describedby': 'ed-devices-why' })}
                 />
                 {c.label}
               </label>
             ))}
+            {noneOff && (
+              <p className="hint ed-devices-why" id="ed-devices-why">
+                {why}
+              </p>
+            )}
           </fieldset>
           <fieldset className="ed-fieldset">
             <legend className="hint">Also</legend>

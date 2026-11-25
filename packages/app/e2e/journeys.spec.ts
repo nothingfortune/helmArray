@@ -7,6 +7,7 @@ import {
   applyInDrawer,
   countInput,
   drawer,
+  editorApply,
   helldiversTile,
   leftUnit,
   openFrom,
@@ -95,7 +96,7 @@ test.describe('the journeys, counted', () => {
       .getByRole('button', { name: /^Move forward/ })
       .dragTo(right.getByRole('button', { name: 'Empty, ring 2' }));
     await expect(right.getByRole('button', { name: 'Move forward, ring 2' })).toBeVisible();
-    await page.getByRole('button', { name: 'Apply', exact: true }).click();
+    await editorApply(page).click();
     await applyNow(page);
     expect(await counted()).toEqual({ clicks: 2, drags: 1 });
     // The button sends W, Move forward's own key, as the stick's up does.
@@ -154,7 +155,7 @@ test.describe('the journeys, counted', () => {
       .first()
       .click();
     await expect(schemePicker(page)).toHaveText(/Xbox controller/);
-    await page.getByRole('button', { name: 'Apply', exact: true }).click();
+    await editorApply(page).click();
     await applyNow(page);
     expect(await counted()).toEqual({ clicks: 4, drags: 0 });
   });

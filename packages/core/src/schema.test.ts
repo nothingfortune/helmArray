@@ -40,6 +40,58 @@ describe('the versions', () => {
     expect(currentVersion('settings')).toBe(MIGRATIONS.settings.length + 1);
     expect(currentVersion('applied')).toBe(MIGRATIONS.applied.length + 1);
     expect(currentVersion('units')).toBe(MIGRATIONS.units.length + 1);
+    expect(currentVersion('sheets')).toBe(MIGRATIONS.sheets.length + 1);
+  });
+});
+
+describe('the baselines (sheets.json, version 2)', () => {
+  it('is the version sheets.json is written at', () => {
+    expect(store('sheets', { games: [] }).schemaVersion).toBe(2);
+  });
+
+  it('drop the reminder rows of a version-1 file, counted, and keep no baseline from them', () => {
+    // A version-1 file: reminders merged apply by apply, `from` the apply before.
+    const v1 = {
+      schemaVersion: 1,
+      games: [
+        {
+          gameId: 'helldivers2',
+          gameName: 'Helldivers 2',
+          rows: [
+            {
+              set: 'keyboard',
+              mode: 'default',
+              modeName: 'Default',
+              action: 'jump',
+              actionName: 'Jump',
+              to: null,
+              from: { kind: 'key', code: 'J' },
+            },
+          ],
+        },
+      ],
+    };
+    expect(load('sheets', v1)).toEqual({ games: [], droppedReminders: 1 });
+  });
+
+  it('give back the baselines they were given', () => {
+    const baselines = {
+      games: [
+        {
+          gameId: 'g',
+          held: [
+            {
+              set: 'keyboard' as const,
+              mode: 'default',
+              action: 'jump',
+              signal: { kind: 'key' as const, code: 'J' as const },
+              native: null,
+            },
+          ],
+        },
+      ],
+    };
+    expect(load('sheets', store('sheets', baselines))).toEqual(baselines);
   });
 });
 

@@ -4,17 +4,18 @@ import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { expect, test } from './helm';
 import {
-  AZERON_APP,
-  CLOSE_AZERON_FIRST,
   applyInDrawer,
+  AZERON_APP,
   chooseDevice,
+  CLOSE_AZERON_FIRST,
   deviceTab,
   drawer,
+  editorApply,
   gameHalf,
   helldivers,
+  keepEveryCheck,
   leftUnit,
   schemePicker,
-  keepEveryCheck,
   startFrom,
   startWithChecks,
 } from './screens';
@@ -62,7 +63,7 @@ test.describe('axe: no serious or critical violations', () => {
     const { page } = helm;
     await startFrom(page, 'Xbox controller');
     await page.getByRole('button', { name: 'Library' }).click();
-    await page.getByRole('button', { name: /^HELLDIVERS.* schemes$/ }).click();
+    await page.getByRole('button', { name: 'Helldivers 2 schemes' }).click();
     await expect(page.getByRole('dialog')).toBeVisible();
     expect(await seriousViolations(page)).toEqual([]);
   });
@@ -160,7 +161,7 @@ test.describe('axe: no serious or critical violations', () => {
     const { page } = helm;
     await startFrom(page, 'Xbox controller');
     await keepEveryCheck(page);
-    await page.getByRole('button', { name: 'Apply', exact: true }).click();
+    await editorApply(page).click();
     await expect(applyInDrawer(page)).toBeEnabled();
     expect(await seriousViolations(page)).toEqual([]);
   });
@@ -171,7 +172,7 @@ test.describe('axe: no serious or critical violations', () => {
     await keepEveryCheck(page);
     await helm.setProcesses([AZERON_APP]);
     await expect(page.getByText(CLOSE_AZERON_FIRST).first()).toBeVisible();
-    await page.getByRole('button', { name: 'Apply', exact: true }).click();
+    await editorApply(page).click();
     await expect(drawer(page).getByLabel('What is ready')).toContainText(CLOSE_AZERON_FIRST);
     await expect(applyInDrawer(page)).toBeDisabled();
     expect(await seriousViolations(page)).toEqual([]);
@@ -240,7 +241,7 @@ test.describe('axe: no serious or critical violations', () => {
     await left
       .getByRole('button', { name: 'Reload, middle 1' })
       .dragTo(left.getByRole('button', { name: 'Empty, middle 2' }));
-    await page.getByRole('button', { name: 'Apply', exact: true }).click();
+    await editorApply(page).click();
     await expect(gameHalf(page)).toContainText('Set Reload to Xbox Y');
     expect(await seriousViolations(page)).toEqual([]);
   });
@@ -252,7 +253,7 @@ test.describe('axe: no serious or critical violations', () => {
     await left
       .getByRole('button', { name: 'Reload, middle 1' })
       .dragTo(left.getByRole('button', { name: 'Empty, middle 2' }));
-    await page.getByRole('button', { name: 'Apply', exact: true }).click();
+    await editorApply(page).click();
     await expect(applyInDrawer(page)).toBeEnabled();
     await applyInDrawer(page).click();
     await expect(drawer(page).getByLabel("Now, in Helldivers 2's controls")).toBeVisible();

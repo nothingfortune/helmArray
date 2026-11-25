@@ -197,8 +197,7 @@ describe('stick directions', () => {
         severity: 'error',
         control: 'L.stick',
         mode: 'ship',
-        message:
-          "In Ship, the left stick's up and Boost are both on Insert: the game does them at once.",
+        message: "Boost and the left stick's up are both on Insert in Ship: one press does both.",
       }),
     ]);
   });

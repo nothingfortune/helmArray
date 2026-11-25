@@ -41,7 +41,11 @@ export const POLL_MS = 1000;
  */
 export const RUNNING_MS = 3000;
 
-export type UnitState = 'connecting' | 'ready' | 'failed';
+/**
+ * `paused`: let go of while the Azeron app is open (see `pause`). Still plugged in, as the bus
+ * lists it, but not opened or talked to: nothing of what it holds is known.
+ */
+export type UnitState = 'connecting' | 'ready' | 'failed' | 'paused';
 
 /** One unit as the windows see it: plain data, safe to send over IPC. */
 export interface UnitSnapshot {
@@ -115,20 +119,91 @@ export class Devices {
   private holding = 0;
   /** Settles when the last job to ask for the service has let go of it. */
   private holdTail: Promise<void> = Promise.resolve();
+  /**
+   * While paused: the units still plugged in, by path, with who each said it was before it was
+   * let go (none for a unit plugged in since). Only the bus listing changes it.
+   */
+  private readonly paused = new Map<string, UnitIdentity | undefined>();
+  private cancelListing: (() => void) | null = null;
 
   constructor(private readonly deps: DeviceDeps) {}
 
   /** Starts polling, with the first poll at once. Starting a running service does nothing. */
   start(): void {
     if (this.running) return;
+    this.endPause();
     this.running = true;
     const generation = ++this.generation;
     void this.tick(generation);
     this.scheduleAsk(generation);
   }
 
+  /**
+   * Stops as `stop` does, but keeps each unit that is still plugged in, as `paused`: the Azeron app
+   * is open, and a unit it has is still a unit plugged in. While paused the bus is only listed, on
+   * the poll's beat: no unit is opened and nothing is sent, so a unit unplugged meanwhile goes, and
+   * one plugged in shows, not yet known. `start` ends it, and `stop` too.
+   */
+  async pause(): Promise<void> {
+    const kept = [...this.entries.values()].map((e) => [e.path, e.identity] as const);
+    // Started again while it was stopping: that start supersedes this pause.
+    if (await this.halt(kept)) this.listWhilePaused(this.generation);
+  }
+
+  /** Lists the bus once a poll while paused, and only lists it. */
+  private listWhilePaused(generation: number): void {
+    const schedule = this.deps.schedule ?? defaultSchedule;
+    this.cancelListing = schedule(() => {
+      this.cancelListing = null;
+      void (async () => {
+        let paths: Set<string> | null = null;
+        try {
+          paths = new Set((await this.deps.findUnits()).map((unit) => unit.path));
+        } catch (error) {
+          this.trace(LOG, `listing the units failed: ${messageOf(error)}`);
+        }
+        if (generation !== this.generation || this.running) return;
+        if (paths !== null) {
+          let changed = false;
+          for (const path of [...this.paused.keys()]) {
+            if (paths.has(path)) continue;
+            this.paused.delete(path);
+            this.trace(path, 'unplugged while the Azeron app is open');
+            changed = true;
+          }
+          for (const path of paths) {
+            if (this.paused.has(path)) continue;
+            this.paused.set(path, undefined);
+            changed = true;
+          }
+          if (changed) this.emit();
+        }
+        this.listWhilePaused(generation);
+      })();
+    }, this.deps.pollMs ?? POLL_MS);
+  }
+
+  /** Forgets the units kept while paused, and stops listing for them. */
+  private endPause(): void {
+    this.cancelListing?.();
+    this.cancelListing = null;
+    this.paused.clear();
+  }
+
   /** Stops polling and closes every unit. The listeners stay subscribed. */
   async stop(): Promise<void> {
+    await this.halt([]);
+  }
+
+  /**
+   * Stops polling and closes every unit, keeping `keep` as paused. False when a start came while
+   * it waited, which supersedes it.
+   */
+  private async halt(
+    keep: readonly (readonly [string, UnitIdentity | undefined])[],
+  ): Promise<boolean> {
+    const wasPaused = this.paused.size > 0;
+    this.endPause();
     this.running = false;
     this.generation++;
     this.cancelNext?.();
@@ -139,14 +214,17 @@ export class Devices {
     // Its own checks stop it at the next step if the Azeron app has opened meanwhile.
     while (this.holding > 0) await this.holdTail;
     // Started again while waiting: that start supersedes this stop.
-    if (this.running) return;
+    if (this.running) return false;
     // Every unit let go is tracked until its open and close have finished, so a second stop
     // waits for them too and a restart can't open a path still being let go.
-    const hadUnits = this.entries.size > 0;
+    const hadUnits = this.entries.size > 0 || wasPaused;
     for (const [path, entry] of this.entries) this.cleanUp(path, entry);
     this.entries.clear();
+    // The units kept are there in the same notice that lets the others go: no chip blinks out.
+    for (const [path, identity] of keep) this.paused.set(path, identity);
     if (hadUnits) this.emit();
     await Promise.all([...this.cleaning.values()]);
+    return !this.running;
   }
 
   /** Calls `listener` with a fresh snapshot on every change. Returns the way to stop. */
@@ -156,7 +234,14 @@ export class Devices {
   }
 
   snapshot(): DevicesSnapshot {
-    return { units: [...this.entries.values()].map(snapshotOf) };
+    const paused = [...this.paused]
+      .filter(([path]) => !this.entries.has(path))
+      .map(([path, identity]): UnitSnapshot => ({
+        path,
+        state: 'paused',
+        ...(identity !== undefined && { identity }),
+      }));
+    return { units: [...[...this.entries.values()].map(snapshotOf), ...paused] };
   }
 
   /** The session of a ready unit, for writing to it. Undefined for a unit that isn't ready. */

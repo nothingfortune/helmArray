@@ -14,7 +14,13 @@ export const drawer = (page: Page): Locator => page.getByRole('dialog', { name: 
 export const applyInDrawer = (page: Page): Locator =>
   drawer(page).getByRole('button', { name: 'Apply' });
 export const helldivers = (page: Page): Locator =>
-  page.getByRole('button', { name: /^HELLDIVERS/ });
+  page.getByRole('button', { name: /^Helldivers 2\. / });
+/**
+ * The Editor's Apply button: "Apply", "Apply 3" with changes not applied, or "Applied" (muted)
+ * once in sync. It opens the drawer in every case.
+ */
+export const editorApply = (page: Page): Locator =>
+  page.locator('.ed-bar').getByRole('button', { name: /^(Apply( \d+)?|Applied)$/ });
 /** Helldivers 2's cover: the tile's own button, also once the game has schemes beside it. */
 export const helldiversTile = (page: Page): Locator =>
   page.locator('.tile', { hasText: /HELLDIVERS|Helldivers 2/ }).locator('.tile-button');

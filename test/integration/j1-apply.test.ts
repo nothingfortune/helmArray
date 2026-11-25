@@ -123,15 +123,15 @@ describe('J1: a scheme whose errors were not kept', () => {
     const fresh = await world.createBlankKeysScheme();
     const preview = await world.helm.previewApply(fresh.id);
     expect(preview.checks.filter((check) => !check.ok).map((check) => check.text)).toEqual([
-      'Move forward is needed to play Default, and it is on no button.',
-      'Move back is needed to play Default, and it is on no button.',
-      'Strafe left is needed to play Default, and it is on no button.',
-      'Strafe right is needed to play Default, and it is on no button.',
-      'Fire is needed to play Default, and it is on no button.',
-      'Stratagem (hold) is needed to play Default, and it is on no button.',
+      "Move forward isn't on a button.",
+      "Move back isn't on a button.",
+      "Strafe left isn't on a button.",
+      "Strafe right isn't on a button.",
+      "Fire isn't on a button.",
+      "Stratagem (hold) isn't on a button.",
       // Key output with nothing placed: the sticks have no keys either.
-      'The left stick sends nothing: give its directions keys or set it to a controller stick.',
-      'The right stick sends nothing: give its directions keys or set it to a controller stick.',
+      'The left stick sends nothing.',
+      'The right stick sends nothing.',
     ]);
   });
 

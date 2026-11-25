@@ -22,8 +22,8 @@
 // Nothing here throws at a caller: every refusal and failure comes back as a sentence.
 // Pure: the store, the units and the running programs are handed in.
 
-import type { ApplyWho, Game, GameBinding, Hand, Plan, Scheme } from '@helmarray/core';
-import { gameRowsChanged, handsOf } from '@helmarray/core';
+import type { ApplyWho, Game, Hand, Plan, Scheme, UnitsHeld } from '@helmarray/core';
+import { handsOf, pendingRows } from '@helmarray/core';
 import type {
   ApplyGame,
   ApplyGameRow,
@@ -33,8 +33,8 @@ import type {
   ApplyUnitResult,
   ReadyCheck,
 } from '../shared/api';
-import { NO_UNIT_SENTENCE, applyUnits, previewUnits } from './apply-units';
-import type { UnitsDeps } from './apply-units';
+import { NO_UNIT_SENTENCE, applyUnits, previewUnits, verifyProfile } from './apply-units';
+import type { HeldUnits, UnitsDeps, UnitsOptions } from './apply-units';
 import { heldUnits } from './app-state';
 import type { DevicesSnapshot, HoldTools } from './devices';
 import type { UnitOps } from './gated-session';
@@ -73,10 +73,10 @@ export interface ApplyServiceDeps {
   /** Makes the scheme the game's active one, and the game the active one. */
   setActive(gameId: string, schemeId: string): Promise<void>;
   /**
-   * The plan applied to this game last, of any of its schemes: the game holds its bindings. Null
-   * when none was; without it, the game is taken to hold what it ships.
+   * The bindings the game holds as far as helmArray knows: its baseline, moved only when the
+   * person says they set what was left to set (*Done*). Null: what it ships, as without it.
    */
-  gameHolds?(gameId: string): Promise<Plan | null>;
+  gameHolds?(gameId: string): Promise<Pick<Plan, 'gameBindings'> | null>;
   /**
    * Notes what each unit now holds, after the units are written: every unit that came out holding
    * the plan holds this scheme (`recordApply`). Called whatever came of the others.
@@ -86,6 +86,11 @@ export interface ApplyServiceDeps {
     outcomes: readonly { hand: Hand; status: string }[],
     who: ApplyWho,
   ): Promise<void>;
+  /**
+   * What each unit was last written with (units.json): the identity of the layout it runs. Without
+   * it no layout Apply removes is taken for the scheme's own earlier copy, so every one is said.
+   */
+  unitsHeld?(): Promise<UnitsHeld>;
   /** The clock, for when an apply was. Defaults to `Date.now`. */
   now?(): number;
   /** An apply ended, however it ended: the state is to be worked out again. */
@@ -121,11 +126,51 @@ const emptyUnit = (hand: Hand, problem: string | null, used = true): ApplyUnitCh
   connected: false,
   differs: false,
   inputsChanged: 0,
+  buttons: [],
   write: null,
   deletes: [],
   changes: [],
   problem,
 });
+
+/** What is known of the layouts on a unit, for what Apply removes: see `RemovedLayout`. */
+type LayoutOf = NonNullable<UnitsOptions['layoutOf']>;
+
+/**
+ * Identity, never a name: a layout is this scheme's own earlier copy only when the units' record
+ * says this scheme was last written to that unit, and the unit, read now, runs that very layout in
+ * this slot. The record's game is known of the slot the unit runs when the read agrees with it;
+ * of any other slot nothing is known but its name.
+ */
+export function layoutIdentity(
+  schemeId: string,
+  held: HeldUnits,
+  record: UnitsHeld | null,
+  gameName: (gameId: string) => string | null,
+): LayoutOf {
+  return (hand, slot) => {
+    const unit = held[hand];
+    const write = record?.[hand] ?? null;
+    if (unit === undefined || write === null || slot.slot !== unit.running) {
+      return { ownCopy: false, game: null };
+    }
+    const verdict = verifyProfile(write.profile, unit);
+    const runs =
+      verdict !== null && verdict.differences.length === 0 && verdict.unchecked.length === 0;
+    if (!runs) return { ownCopy: false, game: null };
+    return { ownCopy: write.schemeId === schemeId, game: gameName(write.gameId) };
+  };
+}
+
+/** What a good apply says of the layouts it removed: each that wasn't the scheme's own copy. */
+export function removedWords(
+  gone: readonly { name: string; game: string | null }[],
+): string | null {
+  if (gone.length === 0) return null;
+  const one = ({ name, game }: { name: string; game: string | null }) =>
+    `${name === '' ? 'a layout with no name' : `your layout “${name}”`}${game === null ? '' : ` from ${game}`}`;
+  return `${gone.map(one).join(' and ')} ${gone.length === 1 ? 'was' : 'were'} removed`;
+}
 
 export function createApplyService(deps: ApplyServiceDeps): ApplyService {
   let running = false;
@@ -160,34 +205,54 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
       if (!unit) {
         return {
           ok: false,
+          kind: 'unit',
           text: strangers
             ? `helmArray doesn't know yet which Azeron is the ${word} one.`
             : `The ${word} Azeron isn't connected.`,
         };
       }
       if (unit.state === 'connecting') {
-        return { ok: false, text: `The ${word} Azeron is still being read.` };
+        return { ok: false, kind: 'unit', text: `The ${word} Azeron is still being read.` };
       }
-      if (unit.state === 'ready' && unit.slots === undefined) {
-        // Not looked at since the Azeron app was last open, or could not be ruled out.
-        return { ok: false, text: `The ${word} Azeron hasn't been read yet.` };
+      if (unit.state === 'paused' || (unit.state === 'ready' && unit.slots === undefined)) {
+        // Let go of while the Azeron app was open, not looked at since it was, or could not be
+        // ruled out.
+        return { ok: false, kind: 'unit', text: `The ${word} Azeron hasn't been read yet.` };
       }
       if (unit.state === 'failed') {
         return {
           ok: false,
+          kind: 'unit',
           text: `The ${word} Azeron couldn't be read${unit.error ? `: ${sentence(unit.error)}` : '.'}`,
         };
       }
-      return { ok: true, text: `The ${word} Azeron is connected.` };
+      return { ok: true, kind: 'unit', text: `The ${word} Azeron is connected.` };
     });
+  };
+
+  /** What is known of the layouts on the units, by identity (`layoutIdentity`). */
+  const identityOf = async (schemeId: string, held: HeldUnits): Promise<LayoutOf> => {
+    let record: UnitsHeld | null = null;
+    try {
+      record = (await deps.unitsHeld?.()) ?? null;
+    } catch (error) {
+      trace(`couldn't read what the units were last written with: ${messageOf(error)}`);
+    }
+    const names = new Map<string, string>();
+    for (const write of [record?.left, record?.right]) {
+      if (!write || names.has(write.gameId)) continue;
+      const known = await deps.plans.getGame(write.gameId).catch(() => undefined);
+      if (known) names.set(write.gameId, known.name);
+    }
+    return layoutIdentity(schemeId, held, record, (id) => names.get(id) ?? null);
   };
 
   /** What blocks, and what doesn't, as checks. Errors the player accepted don't block. */
   const findingChecks = (plan: Plan): ReadyCheck[] => {
     const errors = plan.findings.filter((f) => f.severity === 'error' && f.accepted === undefined);
     return errors.length === 0
-      ? [{ ok: true, text: 'The scheme has no errors.' }]
-      : errors.map((f) => ({ ok: false, text: sentence(f.message) }));
+      ? [{ ok: true, kind: 'scheme', text: 'The scheme has no errors.' }]
+      : errors.map((f): ReadyCheck => ({ ok: false, kind: 'scheme', text: sentence(f.message) }));
   };
 
   /** What must hold before Apply. A setup with no Azeron talks to no unit: nothing about them. */
@@ -196,10 +261,10 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
     if (used.length === 0) return findingChecks(plan);
     return [
       open === null
-        ? { ok: false, text: APP_UNKNOWN_SENTENCE }
+        ? { ok: false, kind: 'azeron-app', text: APP_UNKNOWN_SENTENCE }
         : open
-          ? { ok: false, text: APP_OPEN_SENTENCE }
-          : { ok: true, text: 'The Azeron app is closed.' },
+          ? { ok: false, kind: 'azeron-app', text: APP_OPEN_SENTENCE }
+          : { ok: true, kind: 'azeron-app', text: 'The Azeron app is closed.' },
       // With the Azeron app open the units are not talked to, so the service lists none: that is
       // not "unplugged", and is not said.
       ...(open === false ? unitChecks(used) : []),
@@ -209,11 +274,11 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
 
   /** The game's bindings that change: the plan's against what the game holds now. */
   const gameHalf = async (plan: Plan, game: Game): Promise<ApplyGame> => {
-    let holds: Plan | null = null;
+    let holds: Pick<Plan, 'gameBindings'> | null = null;
     try {
       holds = (await deps.gameHolds?.(game.id)) ?? null;
     } catch (error) {
-      trace(`couldn't read what was applied to ${game.id} last: ${messageOf(error)}`);
+      trace(`couldn't read what ${game.id} holds: ${messageOf(error)}`);
     }
     return { via: plan.gameFile ? 'file' : 'sheet', rows: changedRows(plan, game, holds) };
   };
@@ -222,6 +287,7 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
     const base = {
       schemeId,
       schemeName: '',
+      gameId: '',
       gameName: '',
       fingerprint: '',
       azeronOpen: false,
@@ -238,6 +304,7 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
     const used = handsOf(resolved.plan);
     const names = {
       schemeName: resolved.scheme.name,
+      gameId: resolved.game.id,
       gameName: resolved.game.name,
       fingerprint: planFingerprint(resolved.plan),
       game: await gameHalf(resolved.plan, resolved.game),
@@ -250,7 +317,7 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
         ...names,
         busy: true,
         ready: false,
-        checks: [{ ok: false, text: BUSY_SENTENCE }],
+        checks: [{ ok: false, kind: 'busy', text: BUSY_SENTENCE }],
       };
     }
     // A setup with no Azeron has nothing to ask of the units or of the Azeron app.
@@ -280,10 +347,18 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
     const snapshot = deps.devices.snapshot();
     const ids = snapshot.units.flatMap((u) => (u.identity ? [u.identity.deviceId] : []));
     const held = heldUnits(snapshot, handsFor(ids, deps.hands));
-    const units = previewUnits(resolved.plan, held, { name: resolved.scheme.name });
+    const { game } = resolved;
+    const units = previewUnits(resolved.plan, held, {
+      name: resolved.scheme.name,
+      layoutOf: await identityOf(schemeId, held),
+      actionName: (mode, action) =>
+        game.actions.find((a) => a.mode === mode && a.id === action)?.name ?? action,
+    });
     // A unit that isn't there already has its own check above; one not used has no problem.
     for (const unit of [units.left, units.right]) {
-      if (unit.connected && unit.problem !== null) checks.push({ ok: false, text: unit.problem });
+      if (unit.connected && unit.problem !== null) {
+        checks.push({ ok: false, kind: 'unit', text: unit.problem });
+      }
     }
     return {
       ...base,
@@ -360,6 +435,9 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
       if (planFingerprint(plan) !== fingerprint) {
         return { ok: false, changed: true, message: CHANGED_SENTENCE, units: [] };
       }
+      // What is left to set by hand in the game is worked out afresh from what is applied and
+      // what the game holds (sheets.json), never kept from here. M5: once helmArray writes the
+      // game's file, the writer moves the game's baseline (`DataStore.settleBaseline`) after it.
 
       // A setup with no Azeron writes no unit: it is remembered, and the game's half is the
       // player's, from the drawer.
@@ -377,7 +455,16 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
       const snapshot = deps.devices.snapshot();
       const ids = snapshot.units.flatMap((u) => (u.identity ? [u.identity.deviceId] : []));
       const hands = handsFor(ids, deps.hands);
+      // Whose each layout is, as the units are now, before anything is written.
+      const layoutOf = await identityOf(schemeId, heldUnits(snapshot, hands));
       const unitDeps: UnitsDeps = {
+        removed: (hand, gone) =>
+          removedWords(
+            gone.flatMap((slot) => {
+              const known = layoutOf(hand, slot);
+              return known.ownCopy ? [] : [{ name: slot.name, game: known.game }];
+            }),
+          ),
         azeronAppRunning: () => deps.azeronAppRunning(),
         unit: (hand) => {
           const id = hands.units.find((u) => u.hand === hand)?.id;
@@ -402,6 +489,7 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
             schemeId,
             gameId: game.id,
             schemeName: scheme.name,
+            gameName: game.name,
             devices: { ...scheme.devices },
             output: scheme.output,
             at: (deps.now ?? Date.now)(),
@@ -443,6 +531,7 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
         return {
           schemeId,
           schemeName: '',
+          gameId: '',
           gameName: '',
           fingerprint: '',
           ready: false,
@@ -464,22 +553,18 @@ export function createApplyService(deps: ApplyServiceDeps): ApplyService {
 /** The game's half when there is nothing to say: no binding changes. */
 const NO_GAME_CHANGE: ApplyGame = { via: 'sheet', rows: [] };
 
-export function changedRows(plan: Plan, game: Game, holds: Plan | null): ApplyGameRow[] {
-  // What the game holds of each action: the first of its rows in the plan applied last.
-  const held = new Map<string, GameBinding>();
-  for (const b of holds?.gameBindings ?? []) {
-    const k = `${b.set}|${b.mode}|${b.action}`;
-    if (!held.has(k)) held.set(k, b);
-  }
-  return gameRowsChanged(plan, holds).map((b) => ({
-    set: b.set,
-    mode: b.mode,
-    modeName: game.modes.find((m) => m.id === b.mode)?.name ?? b.mode,
-    action: b.action,
-    actionName: game.actions.find((a) => a.id === b.action)?.name ?? b.action,
-    to: b.signal,
-    from: held.has(`${b.set}|${b.mode}|${b.action}`)
-      ? (held.get(`${b.set}|${b.mode}|${b.action}`)?.signal ?? null)
-      : b.native,
+/**
+ * The game's bindings the plan changes, in the drawer's words: against what the game holds as far
+ * as helmArray knows (its baseline; null: what it ships). Also what the Library's reminder shows.
+ */
+export function changedRows(
+  plan: Pick<Plan, 'gameBindings'>,
+  game: Game,
+  holds: Pick<Plan, 'gameBindings'> | null,
+): ApplyGameRow[] {
+  return pendingRows(plan.gameBindings, holds === null ? null : holds.gameBindings).map((row) => ({
+    ...row,
+    modeName: game.modes.find((m) => m.id === row.mode)?.name ?? row.mode,
+    actionName: game.actions.find((a) => a.id === row.action)?.name ?? row.action,
   }));
 }

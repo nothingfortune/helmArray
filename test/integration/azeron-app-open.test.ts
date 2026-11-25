@@ -1,7 +1,8 @@
 // The Azeron app opens while helmArray is idle, and closes again. The watcher of the running
-// programs tells the coordinator, which tells the gate, which stops the devices service and lets
-// every unit go; Apply, asked in the meantime, refuses in one sentence. When the Azeron app closes
-// the units are found and read again.
+// programs tells the coordinator, which tells the gate, which pauses the devices service and lets
+// every unit go. The units are still plugged in, so their chips stay, paused, and the pill says the
+// Azeron app is open; Apply, asked in the meantime, refuses in one sentence. When the Azeron app
+// closes the units are found and read again.
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { ApplyPreview, ApplyResult } from '../../packages/app/src/shared/api';
@@ -24,7 +25,9 @@ describe('the Azeron app opens while helmArray is idle', () => {
     expect(opensBefore).toBe(2);
     framesAtOpen = world.left.unit.received.length + world.right.unit.received.length;
     await world.setAzeronApp(true);
-    await world.until('the units to be let go', () => world.state.devices.length === 0);
+    await world.until('the units to be let go', () =>
+      world.state.devices.every((chip) => chip.state === 'paused'),
+    );
     const preview = await world.helm.previewApply(schemeId);
     result = await world.helm.apply(schemeId, preview.fingerprint);
   });
@@ -35,6 +38,19 @@ describe('the Azeron app opens while helmArray is idle', () => {
 
   it('tells the windows why writing is blocked, in one sentence', () => {
     expect(world.state.writeBlock).toBe(SENTENCE);
+  });
+
+  it('keeps both units as chips, paused, and the pill says the Azeron app is open', () => {
+    expect([
+      world.state.devices.map((chip) => [chip.hand, chip.state]),
+      world.state.sync.label,
+    ]).toEqual([
+      [
+        ['left', 'paused'],
+        ['right', 'paused'],
+      ],
+      'Azeron app is open',
+    ]);
   });
 
   it('lets go of both units: every device opened was closed', () => {

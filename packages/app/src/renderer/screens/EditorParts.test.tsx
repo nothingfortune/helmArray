@@ -15,6 +15,8 @@ import {
   Panel,
   SchemePicker,
   Unplaced,
+  deleteQuestion,
+  noneWhy,
 } from './EditorParts';
 import type { PickerActions } from './EditorParts';
 import { game, keysScheme, padGame, padScheme, plan } from './editor-fixture';
@@ -252,6 +254,46 @@ describe('the actions not on a button', () => {
       <Unplaced view={v} modeName="Ship" prompt={null} onPlace={none} />,
     );
     expect(html).toContain('Every Ship action is on a button.');
+  });
+});
+
+describe('the device chooser', () => {
+  it('says why None is greyed out, and only when it is', () => {
+    expect([
+      noneWhy(AZERONS_ONLY),
+      noneWhy({ ...AZERONS_ONLY, keyboard: true, mouse: true }),
+    ]).toEqual(['None needs another device: a setup plays with at least one.', null]);
+  });
+});
+
+describe('deleting a scheme', () => {
+  it('asks about the scheme by name, never as if it were the device it is named for', () => {
+    expect(deleteQuestion('Xbox controller')).toBe('Delete the scheme “Xbox controller”?');
+  });
+});
+
+describe('the lists for a game with one mode', () => {
+  it('name no mode: its one mode has no name the player knows', () => {
+    const html = renderToStaticMarkup(
+      <Unplaced view={view(keysScheme())} modeName={null} prompt={null} onPlace={none} />,
+    );
+    expect([html.includes('Not on a button<'), html.includes(' · ')]).toEqual([true, false]);
+  });
+});
+
+describe('a check, drawn', () => {
+  it('draw each sentence with its subject in bold', () => {
+    const scheme: Scheme = {
+      ...keysScheme(),
+      map: { ship: { 'L.index_1': { tap: 'boost' } }, srv: {} },
+    };
+    const v = editorView({ scheme, game, plan: plan(scheme), mode: 'ship' });
+    const html = renderToStaticMarkup(
+      <Checks view={v} onFix={none} onKeep={none} onFlag={none} onFixAll={none} onKeepAll={none} />,
+    );
+    expect(html).toContain(
+      '<strong class="ed-check-subject">Frame shift drive</strong> isn&#x27;t on a button in Ship.',
+    );
   });
 });
 

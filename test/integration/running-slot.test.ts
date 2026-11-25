@@ -53,7 +53,7 @@ describe('the profile button moves the slot the left unit runs', () => {
     expect(world.state.sync).toEqual({
       label: 'Left unit differs',
       tone: 'error',
-      detail: expect.stringMatching(/^Left unit: \d+ inputs? not as applied\.$/),
+      detail: expect.stringMatching(/^Left unit: \d+ buttons? not as applied\.$/),
     });
   });
 

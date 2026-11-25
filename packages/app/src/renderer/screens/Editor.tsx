@@ -33,7 +33,7 @@ import {
   unacceptFinding,
 } from './editor-model';
 import type { History } from './editor-model';
-import { assignable, editorView, opensApply } from './editor-view';
+import { assignable, editorView, gainedTab, opensApply } from './editor-view';
 import { sidePanelWidth } from './editor-layout';
 import type { DeviceTabId } from './editor-view';
 import type { Fix } from './fixes';
@@ -51,6 +51,7 @@ import {
 } from './EditorParts';
 import type { PickerActions } from './EditorParts';
 import { RecentGames } from './RecentGames';
+import type { ApplyButton } from '../apply/applyButton';
 import './editor.css';
 
 export interface EditorProps {
@@ -82,6 +83,8 @@ export interface EditorProps {
    * and a later edit would give buttons other keys.
    */
   keysKept?: number;
+  /** What the Apply button says: "Apply 3", or "Applied" once in sync. Plain "Apply" without it. */
+  applyButton?: ApplyButton;
 }
 
 type Load =
@@ -122,6 +125,7 @@ function EditorLoader({
   historyOff,
   keysKept,
   applyWhenReady,
+  applyButton,
 }: EditorProps) {
   const [load, setLoad] = useState<Load>({ kind: 'loading' });
 
@@ -158,6 +162,7 @@ function EditorLoader({
         historyOff={historyOff === true}
         keysKept={keysKept ?? 0}
         applyWhenReady={applyWhenReady === true}
+        applyButton={applyButton ?? { label: 'Apply', done: false }}
       />
     );
   }
@@ -193,6 +198,7 @@ interface BodyProps {
   historyOff: boolean;
   keysKept: number;
   applyWhenReady: boolean;
+  applyButton: ApplyButton;
 }
 
 function EditorBody({
@@ -204,6 +210,7 @@ function EditorBody({
   historyOff,
   keysKept,
   applyWhenReady,
+  applyButton,
 }: BodyProps) {
   const [history, setHistory] = useState<History<Scheme>>(() => startHistory(loaded));
   const historyRef = useRef(history);
@@ -330,7 +337,10 @@ function EditorBody({
       }),
   };
   const changeDevices = (next: Scheme['devices']) => {
+    // A device just added is shown at once: no second click on its tab.
+    const added = gainedTab(scheme.devices, next);
     edit((s) => setDevices(s, next, game));
+    if (added !== undefined) setTab(added);
     setSelected(undefined);
     setPress('tap');
   };
@@ -486,8 +496,12 @@ function EditorBody({
               </Tooltip.Portal>
             </Tooltip.Root>
           ) : (
-            <button type="button" className="btn ed-primary" onClick={onApply}>
-              Apply
+            <button
+              type="button"
+              className={`btn ed-primary${applyButton.done ? ' is-done' : ''}`}
+              onClick={onApply}
+            >
+              {applyButton.label}
             </button>
           )}
         </div>
@@ -566,7 +580,9 @@ function EditorBody({
                 )}
                 <Unplaced
                   view={view}
-                  modeName={view.modes.find((m) => m.active)?.name ?? ''}
+                  modeName={
+                    view.modes.length > 1 ? (view.modes.find((m) => m.active)?.name ?? null) : null
+                  }
                   prompt={
                     canPlace && view.panel
                       ? `Click an action to put it on ${view.panel.where}, ${PRESS_WORD[target]}.`

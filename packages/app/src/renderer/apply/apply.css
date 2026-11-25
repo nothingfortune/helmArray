@@ -31,6 +31,13 @@
   opacity: 0.5;
   cursor: default;
 }
+/* Apply that can't be pressed yet: grey, not a faded amber that still reads as the thing to do. */
+.apply-foot .btn.primary:disabled {
+  opacity: 1;
+  background: var(--color-raised);
+  border-color: var(--color-line);
+  color: var(--color-muted);
+}
 .apply-checks {
   list-style: none;
   margin: 0;
@@ -51,17 +58,9 @@
   font-size: var(--size-body);
   font-weight: 600;
 }
-.apply-mark {
-  flex: none;
-  width: 16px;
-  font-weight: 700;
-  text-align: center;
-}
-.apply-mark.tone-ok {
-  color: var(--color-ok);
-}
-.apply-mark.tone-error {
-  color: var(--color-error);
+.apply-dot {
+  /* Centred on the first line of its sentence. */
+  margin-top: 5px;
 }
 .apply-result {
   display: flex;
@@ -83,7 +82,7 @@
   font-size: var(--size-label);
   color: var(--color-secondary);
 }
-.apply-line.kind-delete,
+.apply-line.kind-housekeeping,
 .apply-line.kind-same {
   color: var(--color-muted);
 }

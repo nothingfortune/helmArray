@@ -32,6 +32,15 @@ describe('chipView', () => {
     expect(chipView(chip({ state: 'failed', error: 'x' }), 0).statusWord).toBe('failed');
   });
 
+  it('shows a unit let go of for the Azeron app as paused, in a plain tone, and says why', () => {
+    const view = chipView(chip({ state: 'paused', read: false, running: null }), 0);
+    expect([view.tone, view.statusWord, view.tooltip]).toEqual([
+      'plain',
+      'paused while the Azeron app is open',
+      null,
+    ]);
+  });
+
   it('puts the error sentence in the tooltip of a failed unit only', () => {
     const failed = chip({ state: 'failed', error: 'The unit stopped answering.' });
     expect(chipView(failed, 0).tooltip).toBe('The unit stopped answering.');

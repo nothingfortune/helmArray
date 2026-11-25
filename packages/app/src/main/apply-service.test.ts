@@ -1,7 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Game, Plan, Scheme } from '@helmarray/core';
-import { BUILT_IN_DEVICES, blankKeysScheme, resolve } from '@helmarray/core';
-import { Command, FakeUnit, parseHostReport } from '@helmarray/azeron';
+import type { Game, Plan, Scheme, UnitWrite } from '@helmarray/core';
+import { BUILT_IN_DEVICES, CYBORG2_LEFT, blankKeysScheme, resolve, unitOf } from '@helmarray/core';
+import {
+  Command,
+  FakeUnit,
+  encodeRecord,
+  parseHostReport,
+  storedFromWritten,
+  unitRecords,
+} from '@helmarray/azeron';
 import { planFingerprint } from './plan-fingerprint';
 import { createApplyService } from './apply-service';
 import type { ApplyServiceDeps } from './apply-service';
@@ -75,16 +82,23 @@ async function rig(
     trace?: (line: string) => void;
     settled?: () => void | Promise<void>;
     gameHolds?: ApplyServiceDeps['gameHolds'];
+    unitsHeld?: ApplyServiceDeps['unitsHeld'];
+    /** What the left unit holds, instead of a Default and an Old layout. */
+    left?: ConstructorParameters<typeof FakeUnit>[0];
+    /** Games besides Skiff, by id, for what a unit's record names. */
+    games?: Game[];
   } = {},
 ) {
   const units = new Map<string, FakeUnit>([
     [
       'left-path',
-      new FakeUnit({
-        deviceId: LEFT,
-        slots: { 0: { name: 'Default' }, 2: { name: 'Old' } },
-        running: 0,
-      }),
+      new FakeUnit(
+        over.left ?? {
+          deviceId: LEFT,
+          slots: { 0: { name: 'Default' }, 2: { name: 'Old' } },
+          running: 0,
+        },
+      ),
     ],
   ]);
   if (over.right !== false) {
@@ -135,7 +149,8 @@ async function rig(
   const service = createApplyService({
     plans: {
       getScheme: (id) => Promise.resolve(id === store.scheme.id ? store.scheme : null),
-      getGame: (id) => Promise.resolve(id === game.id ? game : undefined),
+      getGame: (id) =>
+        Promise.resolve(id === game.id ? game : over.games?.find((g) => g.id === id)),
     },
     devices,
     hands: { get: (id) => HANDS[id as keyof typeof HANDS] },
@@ -148,6 +163,7 @@ async function rig(
     now: () => 1234,
     ...(over.trace ? { trace: over.trace } : {}),
     ...(over.gameHolds ? { gameHolds: over.gameHolds } : {}),
+    ...(over.unitsHeld ? { unitsHeld: over.unitsHeld } : {}),
   });
   const reports = () => [...units.values()].reduce((n, u) => n + u.received.length, 0);
   return {
@@ -198,8 +214,8 @@ describe('Apply as the windows ask for it', () => {
     // The lowest free slot, named for the scheme; the others go, by name.
     expect(preview.left.write).toEqual({ slot: 1, name: 'Main', overwrites: null });
     expect(preview.left.deletes).toEqual([
-      { slot: 0, name: 'Default' },
-      { slot: 2, name: 'Old' },
+      { slot: 0, name: 'Default', ownCopy: false, game: null },
+      { slot: 2, name: 'Old', ownCopy: false, game: null },
     ]);
     expect(preview.right.write).toMatchObject({ slot: 1, name: 'Main' });
     expect(structuredClone(preview)).toEqual(preview);
@@ -248,7 +264,11 @@ describe('Apply as the windows ask for it', () => {
       expect(preview).toMatchObject({ ready: false, azeronOpen: true });
       expect(preview.checks).toEqual(
         expect.arrayContaining([
-          { ok: false, text: 'Close the Azeron app first: it talks to the units too.' },
+          {
+            ok: false,
+            kind: 'azeron-app',
+            text: 'Close the Azeron app first: it talks to the units too.',
+          },
         ]),
       );
       // Not "unplugged": the units were not looked at.
@@ -275,6 +295,21 @@ describe('Apply as the windows ask for it', () => {
       expect(r.reports()).toBe(reports);
       expect(preview.ready).toBe(false);
       expect(preview.checks.some((c) => /hasn't been read yet/.test(c.text))).toBe(true);
+    });
+
+    it('never calls a unit let go for the Azeron app connected, when the app has just closed', async () => {
+      r = await rig();
+      // Paused (the app was open), and the preview's look finds it closed before the units are back.
+      await r.devices.pause();
+      const preview = await r.service.preview(scheme.id);
+      expect([preview.ready, preview.checks.filter((c) => /Azeron/.test(c.text))]).toEqual([
+        false,
+        [
+          { ok: true, kind: 'azeron-app', text: 'The Azeron app is closed.' },
+          { ok: false, kind: 'unit', text: "The left Azeron hasn't been read yet." },
+          { ok: false, kind: 'unit', text: "The right Azeron hasn't been read yet." },
+        ],
+      ]);
     });
 
     it('does not trust a look at the programs that failed', async () => {
@@ -570,9 +605,14 @@ describe('Apply as the windows ask for it', () => {
       expect(preview.ready).toBe(false);
       expect(preview.checks).toContainEqual({
         ok: false,
+        kind: 'unit',
         text: "The right Azeron isn't connected.",
       });
-      expect(preview.checks).toContainEqual({ ok: true, text: 'The left Azeron is connected.' });
+      expect(preview.checks).toContainEqual({
+        ok: true,
+        kind: 'unit',
+        text: 'The left Azeron is connected.',
+      });
       expect(preview.right.connected).toBe(false);
 
       const before = writesTo(r.left).length;
@@ -611,12 +651,13 @@ describe('Apply as the windows ask for it', () => {
       expect(preview.ready).toBe(false);
       expect(preview.checks).toContainEqual({
         ok: false,
-        text: 'Fire is needed to play Ship, and it is on no button.',
+        kind: 'scheme',
+        text: "Fire isn't on a button.",
       });
       const reports = r.reports();
       const result = await r.service.apply(unplaced.id, fp(unplaced));
       expect(result.ok).toBe(false);
-      expect(result.message).toBe('Fire is needed to play Ship, and it is on no button.');
+      expect(result.message).toBe("Fire isn't on a button.");
       expect(r.saveApplied).not.toHaveBeenCalled();
       expect(r.reports()).toBe(reports);
     });
@@ -983,12 +1024,12 @@ describe('the game half of the Apply drawer', () => {
     });
   });
 
-  it('lists nothing the game already holds from the setup applied to it last', async () => {
+  it('lists nothing the game already holds', async () => {
     r = await rig({ scheme: single, gameHolds: () => Promise.resolve(singlePlan) });
     expect((await r.service.preview(single.id)).game.rows).toEqual([]);
   });
 
-  it('lists a binding back to where the game ships it, when the setup applied last moved it', async () => {
+  it('lists a binding back to where the game ships it, when the game holds it elsewhere', async () => {
     const moved: Plan = {
       ...singlePlan,
       gameBindings: singlePlan.gameBindings.map((b) =>
@@ -1030,5 +1071,145 @@ describe('what Apply says when the note of a setup could not be kept, by which u
     expect(result.message).toBe(
       `${words}, but helmArray couldn't keep a note of it (disk full), so it can't say they are in sync.`,
     );
+  });
+});
+
+// Whether a layout Apply removes is this scheme's own earlier copy is told from the units' record
+// (units.json: the scheme last written to each unit) and the unit read as holding it, never from
+// its name: every game's preset is "Xbox controller", and a unit keeps 19 characters of a name.
+describe('the layouts Apply removes, told apart by what wrote them, not by name', () => {
+  let r: Awaited<ReturnType<typeof rig>> | undefined;
+  beforeEach(() => void vi.useFakeTimers());
+  afterEach(async () => {
+    await r?.devices.stop();
+    r = undefined;
+    vi.useRealTimers();
+  });
+
+  const ROVER: Game = { ...game, id: 'rover', name: 'Rover' };
+  /** An earlier version of the scheme: Boost alone, on the left index 1. */
+  const earlier: Scheme = { ...scheme, map: { ship: { 'L.index_1': { tap: 'boost' } } } };
+  const earlierPlan = resolve(earlier, game, BUILT_IN_DEVICES);
+  const leftHolding = (name: string, plan: Plan) => ({
+    deviceId: LEFT,
+    slots: {
+      1: {
+        name,
+        records: unitRecords(unitOf(plan, 'left'), CYBORG2_LEFT).map((rec) =>
+          storedFromWritten(encodeRecord(1, rec)),
+        ),
+      },
+    },
+    running: 1,
+  });
+  const record = (schemeId: string, gameId: string, schemeName: string, plan: Plan): UnitWrite => ({
+    schemeId,
+    gameId,
+    schemeName,
+    devices: { ...scheme.devices },
+    output: scheme.output,
+    at: 1,
+    profile: unitOf(plan, 'left'),
+  });
+  const LONG = 'Xbox controller for flying';
+  const CUT = 'Xbox controller for';
+
+  const CASES: {
+    title: string;
+    scheme: Scheme;
+    slotName: string;
+    held: UnitWrite | null;
+    /** What the slot really holds: the plan recorded, or another. */
+    holds: Plan;
+    /** What the drawer is told of the layout removed (it says every one that isn't own). */
+    known: { ownCopy: boolean; game: string | null };
+  }[] = [
+    {
+      title: 'same name, same scheme: its own earlier copy, said nothing of',
+      scheme,
+      slotName: 'Main',
+      held: record(scheme.id, game.id, 'Main', earlierPlan),
+      holds: earlierPlan,
+      known: { ownCopy: true, game: 'Skiff' },
+    },
+    {
+      title: 'same name, another scheme of the same game',
+      scheme,
+      slotName: 'Main',
+      held: record('skiff-other', game.id, 'Main', earlierPlan),
+      holds: earlierPlan,
+      known: { ownCopy: false, game: 'Skiff' },
+    },
+    {
+      title: 'same name, another game',
+      scheme,
+      slotName: 'Main',
+      held: record('rover-main', 'rover', 'Main', earlierPlan),
+      holds: earlierPlan,
+      known: { ownCopy: false, game: 'Rover' },
+    },
+    {
+      title: 'a name cut to 19 characters that matches another scheme’s',
+      scheme: { ...scheme, name: LONG },
+      slotName: CUT,
+      held: record('skiff-other', game.id, `${CUT} too`, earlierPlan),
+      holds: earlierPlan,
+      known: { ownCopy: false, game: 'Skiff' },
+    },
+    {
+      title: 'same name, and no record of what wrote it',
+      scheme,
+      slotName: 'Main',
+      held: null,
+      holds: earlierPlan,
+      known: { ownCopy: false, game: null },
+    },
+    {
+      title: 'same name, a record of this scheme, but the unit reads as holding something else',
+      scheme,
+      slotName: 'Main',
+      held: record(scheme.id, game.id, 'Main', earlierPlan),
+      holds: plan,
+      known: { ownCopy: false, game: null },
+    },
+  ];
+
+  it.each(CASES)('$title', async (c) => {
+    r = await rig({
+      scheme: c.scheme,
+      games: [ROVER],
+      left: leftHolding(c.slotName, c.holds),
+      unitsHeld: () => Promise.resolve({ left: c.held, right: null }),
+    });
+    // The unit runs something else than the scheme now: a new layout is written, the old removed.
+    const scheme2 = { ...c.scheme, map: { ship: { 'L.index_2': { tap: 'fire' } } } };
+    r.store.scheme = scheme2;
+    const preview = await r.service.preview(scheme2.id);
+    expect(preview.left.deletes).toEqual([{ slot: 1, name: c.slotName, ...c.known }]);
+  });
+
+  it('says in the result what it removed of someone else’s', async () => {
+    r = await rig({
+      games: [ROVER],
+      left: leftHolding('Main', earlierPlan),
+      unitsHeld: () =>
+        Promise.resolve({ left: record('rover-main', 'rover', 'Main', earlierPlan), right: null }),
+    });
+    const preview = await r.service.preview(scheme.id);
+    const result = await r.service.apply(scheme.id, preview.fingerprint);
+    expect(result.units[0]?.message).toBe(
+      'The left unit runs the layout; your layout “Main” from Rover was removed.',
+    );
+  });
+
+  it('says nothing more in the result when all it removed was the scheme’s own earlier copy', async () => {
+    r = await rig({
+      left: leftHolding('Main', earlierPlan),
+      unitsHeld: () =>
+        Promise.resolve({ left: record(scheme.id, game.id, 'Main', earlierPlan), right: null }),
+    });
+    const preview = await r.service.preview(scheme.id);
+    const result = await r.service.apply(scheme.id, preview.fingerprint);
+    expect(result.units[0]?.message).toBe('The left unit runs the layout.');
   });
 });

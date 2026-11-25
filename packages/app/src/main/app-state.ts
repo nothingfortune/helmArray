@@ -3,7 +3,7 @@
 // Pure: every input is handed in, so tests build them by hand.
 
 import type { AppState, DeviceChip, HandQuestion as ApiQuestion, UnitHolds } from '../shared/api';
-import type { Hand, UnitWrite, UnitsHeld } from '@helmarray/core';
+import type { Hand, KeptSheet, UnitWrite, UnitsHeld } from '@helmarray/core';
 import type { ActivePlans } from './active-plans';
 import { NO_PLANS } from './active-plans';
 import { verifyProfile, verifyUnits } from './apply-units';
@@ -16,11 +16,14 @@ import type { SyncInput } from './sync-state';
 
 /**
  * The question to put to the person now, or null. Nothing is asked while a unit is still
- * connecting: a unit that has yet to answer could be the second one, and a single unit asked
+ * connecting, or let go of for the Azeron app: a unit that has yet to answer could be the second one, and a single unit asked
  * about "outright" would then be asked about twice.
  */
 export function pendingAsk(devices: DevicesSnapshot, hands: HandsResult): HandQuestion | null {
-  return devices.units.some((unit) => unit.state === 'connecting') ? null : hands.ask;
+  // Nor while the Azeron app has the units: a press can't be seen, and a unit can't be read.
+  return devices.units.some((unit) => unit.state === 'connecting' || unit.state === 'paused')
+    ? null
+    : hands.ask;
 }
 
 const RANK = { left: 0, right: 1, unknown: 2 } as const;
@@ -103,6 +106,8 @@ export interface AppStateInput {
   plans?: ActivePlans | undefined;
   /** What each unit was last written with (units.json). Without it no unit is said to hold anything. */
   held?: UnitsHeld | undefined;
+  /** What is still to set by hand in each game (sheets.json). None without it. */
+  sheets?: KeptSheet[] | undefined;
   /**
    * The time now (ms since 1970). With it, a unit read longer ago than `MAX_READING_AGE_MS` counts
    * as not read: the pill says it has not checked. Without it, no reading is too old.
@@ -131,17 +136,26 @@ export function composeAppState(input: AppStateInput): AppState {
   const setupPlan = plans.applied ?? plans.current;
   const used = (hand: 'left' | 'right') =>
     setupPlan === null || setupPlan.units[hand] !== undefined;
+  const changes = plans.active ? pendingChanges(plans.applied, plans.current) : 0;
   const syncInput: SyncInput = {
     left: { used: used('left'), connected: there('left'), verdict: verdicts.left },
     right: { used: used('right'), connected: there('right'), verdict: verdicts.right },
-    pendingChanges: plans.active ? pendingChanges(plans.applied, plans.current) : 0,
+    pendingChanges: changes,
     nothingApplied: plans.active && plans.applied === null,
+    azeronOpen: writeBlock !== null,
   };
-  const { label, tone } = syncState(syncInput);
+  const judged = syncState(syncInput);
+  const { label, tone } = judged;
   const detail = syncDetail(syncInput);
   return {
     devices: chips,
-    sync: { label, tone, ...(detail !== undefined && { detail }) },
+    sync: {
+      label,
+      tone,
+      ...(detail !== undefined && { detail }),
+      ...(changes > 0 && { changes }),
+      ...(judged.kind === 'paused' && { paused: true as const }),
+    },
     writeBlock,
     question: questionOf(pendingAsk(devices, hands)),
     activeGameId: active?.gameId ?? null,
@@ -150,6 +164,7 @@ export function composeAppState(input: AppStateInput): AppState {
       left: holdsOf(input.held?.left ?? null, read.left),
       right: holdsOf(input.held?.right ?? null, read.right),
     },
+    sheets: input.sheets ?? [],
   };
 }
 
@@ -170,6 +185,8 @@ export function holdsOf(write: UnitWrite | null, unit: HeldUnit | undefined): Un
     schemeId: write.schemeId,
     gameId: write.gameId,
     schemeName: write.schemeName,
+    ...(write.gameName !== undefined && { gameName: write.gameName }),
+    ...(write.gameDeleted === true && { gameDeleted: true as const }),
     devices: { ...write.devices },
     output: write.output,
     at: write.at,

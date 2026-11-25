@@ -118,6 +118,7 @@ describe('the sync pill is the units against what was applied', () => {
     expect(pill(both, active(APPLIED, planOf(edited)))).toEqual({
       label: '1 change not applied',
       tone: 'warning',
+      changes: 1,
     });
   });
 
@@ -139,7 +140,7 @@ describe('the sync pill is the units against what was applied', () => {
     const sync = pill(wrong, active(APPLIED, planOf(base)));
     expect(sync.label).toBe('Right unit differs');
     expect(sync.tone).toBe('error');
-    expect(sync.detail).toMatch(/^Right unit: \d+ inputs? not as applied\.$/);
+    expect(sync.detail).toMatch(/^Right unit: \d+ buttons? not as applied\.$/);
   });
 
   it('names the left unit when it is the left that differs', async () => {
@@ -246,7 +247,10 @@ describe('the sync pill counts the game’s bindings', () => {
     expect([
       unitOf(hd(withMouse), 'left').pins,
       pill(units, active(applied, hd(withMouse))),
-    ]).toEqual([unitOf(applied, 'left').pins, { label: '2 changes not applied', tone: 'warning' }]);
+    ]).toEqual([
+      unitOf(applied, 'left').pins,
+      { label: '2 changes not applied', tone: 'warning', changes: 2 },
+    ]);
   });
 
   it('is In sync again once those rows are what was applied', async () => {
@@ -333,7 +337,11 @@ describe('the coordinator works the pill out from the plans', () => {
     const r = await rig();
     r.plans.value = active(APPLIED, planOf(edited));
     await r.helm.plansChanged();
-    expect(r.helm.state().sync).toEqual({ label: '1 change not applied', tone: 'warning' });
+    expect(r.helm.state().sync).toEqual({
+      label: '1 change not applied',
+      tone: 'warning',
+      changes: 1,
+    });
 
     // An apply: the units hold the edited layout and it is the applied plan now.
     const next = planOf(edited);

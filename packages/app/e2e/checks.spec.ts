@@ -120,7 +120,7 @@ test.describe('the checks’ fixes', () => {
     await startFrom(page, 'Xbox controller');
     await page.getByRole('button', { name: 'Library' }).click();
     // Reload goes from the game (your copy of Helldivers 2).
-    await page.getByRole('button', { name: /^Edit game: / }).click();
+    await page.getByRole('button', { name: /^Edit actions: / }).click();
     await page.getByRole('button', { name: 'More for Reload' }).click();
     await page.getByRole('button', { name: 'Delete Reload' }).click();
     await page.getByRole('button', { name: 'Library' }).click();

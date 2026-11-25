@@ -10,6 +10,7 @@ const state = (label: string): AppState => ({
   activeGameId: null,
   activeSchemeId: null,
   onUnits: { left: null, right: null },
+  sheets: [],
 });
 
 /** A fake `helm`: the test decides when state() answers and pushes states itself. */

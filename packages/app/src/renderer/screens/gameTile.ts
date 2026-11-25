@@ -1,5 +1,5 @@
 // Where a Library tile leads for a game's data: *Set up* on a game helmArray doesn't know (or one
-// with no action and no scheme), *Edit game* on one it does. Pure.
+// with no action and no scheme), *Edit actions* on one it does. Pure.
 
 import type { LibraryEntry } from '../../shared/api';
 import type { GameTarget } from './game-model';
@@ -7,7 +7,7 @@ import type { GameTarget } from './game-model';
 /**
  * The game has no data to make a scheme from, and no scheme: the tile says *Set up*. A game with
  * schemes keeps its scheme navigation whatever its action count (its last action deleted, say):
- * *Edit game* sits beside it, never instead of it.
+ * *Edit actions* sits beside it, never instead of it.
  */
 export const needsSetUp = (entry: LibraryEntry): boolean =>
   entry.gameId === null || (entry.actionCount === 0 && entry.schemes.length === 0);
