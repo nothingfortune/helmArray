@@ -138,11 +138,13 @@ const sameBytes = (a: Uint8Array, b: Uint8Array): boolean =>
   a.length === b.length && a.every((byte, i) => byte === b[i]);
 const baseName = (path: string): string => path.split(/[\\/]/).at(-1) ?? path;
 
+/** Whether a name in the backups folder is one of helmArray's copies (`backupName`). */
+const isCopy = (entry: string): boolean =>
+  /^\d{4}-\d{2}-\d{2} \d{2}\.\d{2}\.\d{2}\.\d{3}[ -]/.test(entry);
 /**
  * A backup's name: when it was taken (to the millisecond, UTC), then the file's name, so the newest
  * sorts last. A second copy in the same millisecond takes `-01`, which sorts after the first.
  */
-const BACKUP = /^\d{4}-\d{2}-\d{2} \d{2}\.\d{2}\.\d{2}\.\d{3}[ -]/;
 function backupName(at: number, name: string, n: number): string {
   const when = new Date(at).toISOString().replace('T', ' ').replace(/:/g, '.').replace('Z', '');
   return n === 0 ? `${when} ${name}` : `${when}-${String(n).padStart(2, '0')} ${name}`;
@@ -253,7 +255,7 @@ export function createGameFileTarget(deps: GameFileDeps): GameFileTarget {
     await deps.disk.write(path, bytes);
     const back = await deps.disk.read(path);
     if (back === null || !sameBytes(back, bytes)) throw new Error("the copy didn't read back");
-    const copies = [...taken, copy].filter((entry) => BACKUP.test(entry)).sort();
+    const copies = [...taken, copy].filter(isCopy).sort();
     for (const old of copies.slice(0, Math.max(0, copies.length - keep))) {
       try {
         await deps.disk.remove(deps.disk.folders.join(dir, old));
