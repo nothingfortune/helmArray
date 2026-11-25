@@ -1,0 +1,3316 @@
+{
+  "game": {
+    "id": "elite",
+    "name": "Elite Dangerous",
+    "modes": [
+      {
+        "id": "ship",
+        "name": "Ship"
+      },
+      {
+        "id": "landing",
+        "name": "Landing"
+      },
+      {
+        "id": "srv",
+        "name": "SRV"
+      },
+      {
+        "id": "foot",
+        "name": "On foot"
+      },
+      {
+        "id": "fss",
+        "name": "System scanner"
+      },
+      {
+        "id": "dss",
+        "name": "Surface scanner"
+      },
+      {
+        "id": "fighter",
+        "name": "Fighter orders"
+      },
+      {
+        "id": "multicrew",
+        "name": "Multicrew"
+      },
+      {
+        "id": "ui",
+        "name": "Menus and panels"
+      },
+      {
+        "id": "map",
+        "name": "Galaxy map"
+      },
+      {
+        "id": "headlook",
+        "name": "Headlook"
+      },
+      {
+        "id": "camera",
+        "name": "Camera"
+      },
+      {
+        "id": "store",
+        "name": "Store"
+      },
+      {
+        "id": "general",
+        "name": "Everywhere"
+      }
+    ],
+    "actions": [
+      {
+        "id": "MouseReset",
+        "name": "Mouse reset",
+        "mode": "general",
+        "required": false
+      },
+      {
+        "id": "BlockMouseDecay",
+        "name": "Block mouse decay",
+        "mode": "general",
+        "required": false
+      },
+      {
+        "id": "YawLeftButton",
+        "name": "Yaw left",
+        "mode": "ship",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "YawRightButton",
+        "name": "Yaw right",
+        "mode": "ship",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "YawToRollButton",
+        "name": "Yaw to roll",
+        "mode": "ship",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "RollLeftButton",
+        "name": "Roll left",
+        "mode": "ship",
+        "role": "movement",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Q"
+          }
+        }
+      },
+      {
+        "id": "RollRightButton",
+        "name": "Roll right",
+        "mode": "ship",
+        "role": "movement",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "E"
+          }
+        }
+      },
+      {
+        "id": "PitchUpButton",
+        "name": "Pitch up",
+        "mode": "ship",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "PitchDownButton",
+        "name": "Pitch down",
+        "mode": "ship",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "LeftThrustButton",
+        "name": "Left thrust",
+        "mode": "ship",
+        "role": "movement",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "A"
+          }
+        }
+      },
+      {
+        "id": "RightThrustButton",
+        "name": "Right thrust",
+        "mode": "ship",
+        "role": "movement",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "D"
+          }
+        }
+      },
+      {
+        "id": "UpThrustButton",
+        "name": "Up thrust",
+        "mode": "ship",
+        "role": "movement",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "[",
+            "mods": ["shift"]
+          }
+        }
+      },
+      {
+        "id": "DownThrustButton",
+        "name": "Down thrust",
+        "mode": "ship",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "ForwardThrustButton",
+        "name": "Forward thrust",
+        "mode": "ship",
+        "role": "movement",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "W"
+          }
+        }
+      },
+      {
+        "id": "BackwardThrustButton",
+        "name": "Backward thrust",
+        "mode": "ship",
+        "role": "movement",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "S"
+          }
+        }
+      },
+      {
+        "id": "UseAlternateFlightValuesToggle",
+        "name": "Use alternate flight values toggle",
+        "mode": "ship",
+        "required": false
+      },
+      {
+        "id": "ToggleReverseThrottleInput",
+        "name": "Toggle reverse throttle input",
+        "mode": "ship",
+        "required": false
+      },
+      {
+        "id": "ForwardKey",
+        "name": "Forward key",
+        "mode": "ship",
+        "role": "movement",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "W",
+            "mods": ["shift"]
+          }
+        }
+      },
+      {
+        "id": "BackwardKey",
+        "name": "Backward key",
+        "mode": "ship",
+        "role": "movement",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "S",
+            "mods": ["shift"]
+          }
+        }
+      },
+      {
+        "id": "SetSpeedMinus100",
+        "name": "Set speed minus 100",
+        "mode": "ship",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "SetSpeedMinus75",
+        "name": "Set speed minus 75",
+        "mode": "ship",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "SetSpeedMinus50",
+        "name": "Set speed minus 50",
+        "mode": "ship",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "SetSpeedMinus25",
+        "name": "Set speed minus 25",
+        "mode": "ship",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "SetSpeedZero",
+        "name": "Set speed zero",
+        "mode": "ship",
+        "role": "movement",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "X"
+          }
+        }
+      },
+      {
+        "id": "SetSpeed25",
+        "name": "Set speed 25",
+        "mode": "ship",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "SetSpeed50",
+        "name": "Set speed 50",
+        "mode": "ship",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "SetSpeed75",
+        "name": "Set speed 75",
+        "mode": "ship",
+        "role": "movement",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Del"
+          }
+        }
+      },
+      {
+        "id": "SetSpeed100",
+        "name": "Set speed 100",
+        "mode": "ship",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "YawLeftButton_Landing",
+        "name": "Yaw left",
+        "mode": "landing",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "YawRightButton_Landing",
+        "name": "Yaw right",
+        "mode": "landing",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "PitchUpButton_Landing",
+        "name": "Pitch up",
+        "mode": "landing",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "PitchDownButton_Landing",
+        "name": "Pitch down",
+        "mode": "landing",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "RollLeftButton_Landing",
+        "name": "Roll left",
+        "mode": "landing",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "RollRightButton_Landing",
+        "name": "Roll right",
+        "mode": "landing",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "LeftThrustButton_Landing",
+        "name": "Left thrust",
+        "mode": "landing",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "RightThrustButton_Landing",
+        "name": "Right thrust",
+        "mode": "landing",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "UpThrustButton_Landing",
+        "name": "Up thrust",
+        "mode": "landing",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "DownThrustButton_Landing",
+        "name": "Down thrust",
+        "mode": "landing",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "ForwardThrustButton_Landing",
+        "name": "Forward thrust",
+        "mode": "landing",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "BackwardThrustButton_Landing",
+        "name": "Backward thrust",
+        "mode": "landing",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "ToggleFlightAssist",
+        "name": "Toggle flight assist",
+        "mode": "ship",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Z"
+          }
+        }
+      },
+      {
+        "id": "UseBoostJuice",
+        "name": "Use boost juice",
+        "mode": "ship",
+        "role": "travel",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Tab"
+          }
+        }
+      },
+      {
+        "id": "HyperSuperCombination",
+        "name": "Hyper super combination",
+        "mode": "ship",
+        "role": "travel",
+        "required": false
+      },
+      {
+        "id": "Supercruise",
+        "name": "Supercruise",
+        "mode": "ship",
+        "role": "travel",
+        "required": false
+      },
+      {
+        "id": "Hyperspace",
+        "name": "Hyperspace",
+        "mode": "ship",
+        "role": "travel",
+        "required": false
+      },
+      {
+        "id": "DisableRotationCorrectToggle",
+        "name": "Disable rotation correct toggle",
+        "mode": "ship",
+        "required": false
+      },
+      {
+        "id": "OrbitLinesToggle",
+        "name": "Orbit lines toggle",
+        "mode": "ship",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "="
+          }
+        }
+      },
+      {
+        "id": "SelectTarget",
+        "name": "Select target",
+        "mode": "ship",
+        "role": "combat",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "G"
+          }
+        }
+      },
+      {
+        "id": "CycleNextTarget",
+        "name": "Cycle next target",
+        "mode": "ship",
+        "role": "combat",
+        "required": false
+      },
+      {
+        "id": "CyclePreviousTarget",
+        "name": "Cycle previous target",
+        "mode": "ship",
+        "role": "combat",
+        "required": false
+      },
+      {
+        "id": "SelectHighestThreat",
+        "name": "Select highest threat",
+        "mode": "ship",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "F"
+          }
+        }
+      },
+      {
+        "id": "CycleNextHostileTarget",
+        "name": "Cycle next hostile target",
+        "mode": "ship",
+        "role": "combat",
+        "required": false
+      },
+      {
+        "id": "CyclePreviousHostileTarget",
+        "name": "Cycle previous hostile target",
+        "mode": "ship",
+        "role": "combat",
+        "required": false
+      },
+      {
+        "id": "TargetWingman0",
+        "name": "Target wingman 0",
+        "mode": "ship",
+        "role": "combat",
+        "required": false
+      },
+      {
+        "id": "TargetWingman1",
+        "name": "Target wingman 1",
+        "mode": "ship",
+        "role": "combat",
+        "required": false
+      },
+      {
+        "id": "TargetWingman2",
+        "name": "Target wingman 2",
+        "mode": "ship",
+        "role": "combat",
+        "required": false
+      },
+      {
+        "id": "SelectTargetsTarget",
+        "name": "Select targets target",
+        "mode": "ship",
+        "role": "combat",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "0"
+          }
+        }
+      },
+      {
+        "id": "WingNavLock",
+        "name": "Wing nav lock",
+        "mode": "ship",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "-"
+          }
+        }
+      },
+      {
+        "id": "CycleNextSubsystem",
+        "name": "Cycle next subsystem",
+        "mode": "ship",
+        "required": false
+      },
+      {
+        "id": "CyclePreviousSubsystem",
+        "name": "Cycle previous subsystem",
+        "mode": "ship",
+        "required": false
+      },
+      {
+        "id": "TargetNextRouteSystem",
+        "name": "Target next route system",
+        "mode": "ship",
+        "role": "combat",
+        "required": false
+      },
+      {
+        "id": "PrimaryFire",
+        "name": "Primary fire",
+        "mode": "ship",
+        "role": "combat",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "mouse",
+            "button": "left"
+          }
+        }
+      },
+      {
+        "id": "SecondaryFire",
+        "name": "Secondary fire",
+        "mode": "ship",
+        "role": "combat",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "mouse",
+            "button": "right"
+          }
+        }
+      },
+      {
+        "id": "CycleFireGroupNext",
+        "name": "Cycle fire group next",
+        "mode": "ship",
+        "role": "combat",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "mouse",
+            "button": "forward"
+          }
+        }
+      },
+      {
+        "id": "CycleFireGroupPrevious",
+        "name": "Cycle fire group previous",
+        "mode": "ship",
+        "role": "combat",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "mouse",
+            "button": "back"
+          }
+        }
+      },
+      {
+        "id": "DeployHardpointToggle",
+        "name": "Deploy hardpoint toggle",
+        "mode": "ship",
+        "role": "combat",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "T"
+          }
+        }
+      },
+      {
+        "id": "ToggleButtonUpInput",
+        "name": "Toggle button up input",
+        "mode": "ship",
+        "required": false
+      },
+      {
+        "id": "DeployHeatSink",
+        "name": "Deploy heat sink",
+        "mode": "ship",
+        "role": "combat",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "V"
+          }
+        }
+      },
+      {
+        "id": "ShipSpotLightToggle",
+        "name": "Ship spot light toggle",
+        "mode": "ship",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Y"
+          }
+        }
+      },
+      {
+        "id": "RadarIncreaseRange",
+        "name": "Radar increase range",
+        "mode": "ship",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "P"
+          }
+        }
+      },
+      {
+        "id": "RadarDecreaseRange",
+        "name": "Radar decrease range",
+        "mode": "ship",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": ";"
+          }
+        }
+      },
+      {
+        "id": "IncreaseEnginesPower",
+        "name": "Increase engines power",
+        "mode": "ship",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "1"
+          }
+        }
+      },
+      {
+        "id": "IncreaseWeaponsPower",
+        "name": "Increase weapons power",
+        "mode": "ship",
+        "role": "combat",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "2"
+          }
+        }
+      },
+      {
+        "id": "IncreaseSystemsPower",
+        "name": "Increase systems power",
+        "mode": "ship",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "3"
+          }
+        }
+      },
+      {
+        "id": "ResetPowerDistribution",
+        "name": "Reset power distribution",
+        "mode": "ship",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "4"
+          }
+        }
+      },
+      {
+        "id": "HMDReset",
+        "name": "HMD reset",
+        "mode": "general",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "F12"
+          }
+        }
+      },
+      {
+        "id": "ToggleCargoScoop",
+        "name": "Toggle cargo scoop",
+        "mode": "ship",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "/",
+            "mods": ["shift"]
+          }
+        }
+      },
+      {
+        "id": "EjectAllCargo",
+        "name": "Eject all cargo",
+        "mode": "ship",
+        "required": false
+      },
+      {
+        "id": "LandingGearToggle",
+        "name": "Landing gear toggle",
+        "mode": "ship",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "L"
+          }
+        }
+      },
+      {
+        "id": "MicrophoneMute",
+        "name": "Microphone mute",
+        "mode": "general",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Backspace"
+          }
+        }
+      },
+      {
+        "id": "UseShieldCell",
+        "name": "Use shield cell",
+        "mode": "ship",
+        "role": "combat",
+        "required": false
+      },
+      {
+        "id": "FireChaffLauncher",
+        "name": "Fire chaff launcher",
+        "mode": "ship",
+        "role": "combat",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "6"
+          }
+        }
+      },
+      {
+        "id": "TriggerFieldNeutraliser",
+        "name": "Trigger field neutraliser",
+        "mode": "ship",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "7"
+          }
+        }
+      },
+      {
+        "id": "ChargeECM",
+        "name": "Charge ECM",
+        "mode": "ship",
+        "role": "combat",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "8"
+          }
+        }
+      },
+      {
+        "id": "WeaponColourToggle",
+        "name": "Weapon colour toggle",
+        "mode": "ship",
+        "role": "combat",
+        "required": false
+      },
+      {
+        "id": "EngineColourToggle",
+        "name": "Engine colour toggle",
+        "mode": "ship",
+        "required": false
+      },
+      {
+        "id": "NightVisionToggle",
+        "name": "Night vision toggle",
+        "mode": "ship",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "9"
+          }
+        }
+      },
+      {
+        "id": "UIFocus",
+        "name": "UI focus",
+        "mode": "ship",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "LShift"
+          }
+        }
+      },
+      {
+        "id": "FocusLeftPanel",
+        "name": "Focus left panel",
+        "mode": "ship",
+        "required": false
+      },
+      {
+        "id": "FocusCommsPanel",
+        "name": "Focus comms panel",
+        "mode": "ship",
+        "required": false
+      },
+      {
+        "id": "QuickCommsPanel",
+        "name": "Quick comms panel",
+        "mode": "ship",
+        "required": false
+      },
+      {
+        "id": "FocusRadarPanel",
+        "name": "Focus radar panel",
+        "mode": "ship",
+        "required": false
+      },
+      {
+        "id": "FocusRightPanel",
+        "name": "Focus right panel",
+        "mode": "ship",
+        "required": false
+      },
+      {
+        "id": "GalaxyMapOpen",
+        "name": "Galaxy map open",
+        "mode": "ship",
+        "required": false
+      },
+      {
+        "id": "SystemMapOpen",
+        "name": "System map open",
+        "mode": "ship",
+        "required": false
+      },
+      {
+        "id": "ShowPGScoreSummaryInput",
+        "name": "Show PG score summary input",
+        "mode": "general",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "F1"
+          }
+        }
+      },
+      {
+        "id": "HeadLookToggle",
+        "name": "Head look toggle",
+        "mode": "ship",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "mouse",
+            "button": "middle"
+          }
+        }
+      },
+      {
+        "id": "Pause",
+        "name": "Pause",
+        "mode": "general",
+        "required": false
+      },
+      {
+        "id": "FriendsMenu",
+        "name": "Friends menu",
+        "mode": "general",
+        "required": false
+      },
+      {
+        "id": "OpenCodexGoToDiscovery",
+        "name": "Open codex go to discovery",
+        "mode": "ship",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "O"
+          }
+        }
+      },
+      {
+        "id": "PlayerHUDModeToggle",
+        "name": "Player HUD mode toggle",
+        "mode": "ship",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "M"
+          }
+        }
+      },
+      {
+        "id": "ExplorationFSSEnter",
+        "name": "Exploration FSS enter",
+        "mode": "ship",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "'"
+          }
+        }
+      },
+      {
+        "id": "UI_Up",
+        "name": "UI up",
+        "mode": "ui",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "W"
+          },
+          "pad": "DPAD_UP"
+        }
+      },
+      {
+        "id": "UI_Down",
+        "name": "UI down",
+        "mode": "ui",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "S"
+          },
+          "pad": "DPAD_DOWN"
+        }
+      },
+      {
+        "id": "UI_Left",
+        "name": "UI left",
+        "mode": "ui",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "A"
+          },
+          "pad": "DPAD_LEFT"
+        }
+      },
+      {
+        "id": "UI_Right",
+        "name": "UI right",
+        "mode": "ui",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "D"
+          },
+          "pad": "DPAD_RIGHT"
+        }
+      },
+      {
+        "id": "UI_Select",
+        "name": "UI select",
+        "mode": "ui",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Space"
+          },
+          "pad": "A"
+        }
+      },
+      {
+        "id": "UI_Back",
+        "name": "UI back",
+        "mode": "ui",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Backspace"
+          },
+          "pad": "B"
+        }
+      },
+      {
+        "id": "UI_Toggle",
+        "name": "UI toggle",
+        "mode": "ui",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "="
+          },
+          "pad": "Y"
+        }
+      },
+      {
+        "id": "CycleNextPanel",
+        "name": "Cycle next panel",
+        "mode": "ui",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "E"
+          },
+          "pad": "RB"
+        }
+      },
+      {
+        "id": "CyclePreviousPanel",
+        "name": "Cycle previous panel",
+        "mode": "ui",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Q"
+          },
+          "pad": "LB"
+        }
+      },
+      {
+        "id": "CycleNextPage",
+        "name": "Cycle next page",
+        "mode": "ui",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "C"
+          },
+          "pad": "RT"
+        }
+      },
+      {
+        "id": "CyclePreviousPage",
+        "name": "Cycle previous page",
+        "mode": "ui",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Z"
+          },
+          "pad": "LT"
+        }
+      },
+      {
+        "id": "HeadLookReset",
+        "name": "Head look reset",
+        "mode": "headlook",
+        "required": false
+      },
+      {
+        "id": "HeadLookPitchUp",
+        "name": "Head look pitch up",
+        "mode": "headlook",
+        "required": false
+      },
+      {
+        "id": "HeadLookPitchDown",
+        "name": "Head look pitch down",
+        "mode": "headlook",
+        "required": false
+      },
+      {
+        "id": "HeadLookYawLeft",
+        "name": "Head look yaw left",
+        "mode": "headlook",
+        "required": false
+      },
+      {
+        "id": "HeadLookYawRight",
+        "name": "Head look yaw right",
+        "mode": "headlook",
+        "required": false
+      },
+      {
+        "id": "CamPitchUp",
+        "name": "Cam pitch up",
+        "mode": "map",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "T"
+          }
+        }
+      },
+      {
+        "id": "CamPitchDown",
+        "name": "Cam pitch down",
+        "mode": "map",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "G"
+          }
+        }
+      },
+      {
+        "id": "CamYawLeft",
+        "name": "Cam yaw left",
+        "mode": "map",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Q"
+          }
+        }
+      },
+      {
+        "id": "CamYawRight",
+        "name": "Cam yaw right",
+        "mode": "map",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "E"
+          }
+        }
+      },
+      {
+        "id": "CamTranslateForward",
+        "name": "Cam translate forward",
+        "mode": "map",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "W"
+          }
+        }
+      },
+      {
+        "id": "CamTranslateBackward",
+        "name": "Cam translate backward",
+        "mode": "map",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "S"
+          }
+        }
+      },
+      {
+        "id": "CamTranslateLeft",
+        "name": "Cam translate left",
+        "mode": "map",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "A"
+          }
+        }
+      },
+      {
+        "id": "CamTranslateRight",
+        "name": "Cam translate right",
+        "mode": "map",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "D"
+          }
+        }
+      },
+      {
+        "id": "CamTranslateUp",
+        "name": "Cam translate up",
+        "mode": "map",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "R"
+          }
+        }
+      },
+      {
+        "id": "CamTranslateDown",
+        "name": "Cam translate down",
+        "mode": "map",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "F"
+          }
+        }
+      },
+      {
+        "id": "CamZoomIn",
+        "name": "Cam zoom in",
+        "mode": "map",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Z"
+          },
+          "pad": "RT"
+        }
+      },
+      {
+        "id": "CamZoomOut",
+        "name": "Cam zoom out",
+        "mode": "map",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "X"
+          },
+          "pad": "LT"
+        }
+      },
+      {
+        "id": "CamTranslateZHold",
+        "name": "Cam translate zhold",
+        "mode": "map",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "pad": "X"
+        }
+      },
+      {
+        "id": "GalaxyMapHome",
+        "name": "Galaxy map home",
+        "mode": "map",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "pad": "Y"
+        }
+      },
+      {
+        "id": "ToggleDriveAssist",
+        "name": "Toggle drive assist",
+        "mode": "srv",
+        "required": false,
+        "native": {
+          "pad": "BACK"
+        }
+      },
+      {
+        "id": "SteerLeftButton",
+        "name": "Steer left",
+        "mode": "srv",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "SteerRightButton",
+        "name": "Steer right",
+        "mode": "srv",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "BuggyRollLeftButton",
+        "name": "Buggy roll left",
+        "mode": "srv",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "BuggyRollRightButton",
+        "name": "Buggy roll right",
+        "mode": "srv",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "BuggyPitchUpButton",
+        "name": "Buggy pitch up",
+        "mode": "srv",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "BuggyPitchDownButton",
+        "name": "Buggy pitch down",
+        "mode": "srv",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "VerticalThrustersButton",
+        "name": "Vertical thrusters",
+        "mode": "srv",
+        "role": "movement",
+        "required": false,
+        "native": {
+          "pad": "B"
+        }
+      },
+      {
+        "id": "BuggyPrimaryFireButton",
+        "name": "Buggy primary fire",
+        "mode": "srv",
+        "role": "combat",
+        "required": false,
+        "native": {
+          "pad": "RB"
+        }
+      },
+      {
+        "id": "BuggySecondaryFireButton",
+        "name": "Buggy secondary fire",
+        "mode": "srv",
+        "role": "combat",
+        "required": false,
+        "native": {
+          "pad": "LB"
+        }
+      },
+      {
+        "id": "AutoBreakBuggyButton",
+        "name": "Auto break buggy",
+        "mode": "srv",
+        "required": false,
+        "native": {
+          "pad": "A"
+        }
+      },
+      {
+        "id": "HeadlightsBuggyButton",
+        "name": "Headlights buggy",
+        "mode": "srv",
+        "required": false
+      },
+      {
+        "id": "ToggleBuggyTurretButton",
+        "name": "Toggle buggy turret",
+        "mode": "srv",
+        "required": false,
+        "native": {
+          "pad": "LS"
+        }
+      },
+      {
+        "id": "BuggyCycleFireGroupNext",
+        "name": "Buggy cycle fire group next",
+        "mode": "srv",
+        "role": "combat",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "N"
+          }
+        }
+      },
+      {
+        "id": "BuggyCycleFireGroupPrevious",
+        "name": "Buggy cycle fire group previous",
+        "mode": "srv",
+        "role": "combat",
+        "required": false
+      },
+      {
+        "id": "SelectTarget_Buggy",
+        "name": "Select target",
+        "mode": "srv",
+        "role": "combat",
+        "required": false,
+        "native": {
+          "pad": "X"
+        }
+      },
+      {
+        "id": "BuggyTurretYawLeftButton",
+        "name": "Buggy turret yaw left",
+        "mode": "srv",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "BuggyTurretYawRightButton",
+        "name": "Buggy turret yaw right",
+        "mode": "srv",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "BuggyTurretPitchUpButton",
+        "name": "Buggy turret pitch up",
+        "mode": "srv",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "BuggyTurretPitchDownButton",
+        "name": "Buggy turret pitch down",
+        "mode": "srv",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "BuggyToggleReverseThrottleInput",
+        "name": "Buggy toggle reverse throttle input",
+        "mode": "srv",
+        "required": false
+      },
+      {
+        "id": "IncreaseSpeedButtonMax",
+        "name": "Increase speed button max",
+        "mode": "srv",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "DecreaseSpeedButtonMax",
+        "name": "Decrease speed button max",
+        "mode": "srv",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "IncreaseEnginesPower_Buggy",
+        "name": "Increase engines power",
+        "mode": "srv",
+        "required": false,
+        "native": {
+          "pad": "DPAD_UP"
+        }
+      },
+      {
+        "id": "IncreaseWeaponsPower_Buggy",
+        "name": "Increase weapons power",
+        "mode": "srv",
+        "role": "combat",
+        "required": false,
+        "native": {
+          "pad": "DPAD_RIGHT"
+        }
+      },
+      {
+        "id": "IncreaseSystemsPower_Buggy",
+        "name": "Increase systems power",
+        "mode": "srv",
+        "required": false,
+        "native": {
+          "pad": "DPAD_LEFT"
+        }
+      },
+      {
+        "id": "ResetPowerDistribution_Buggy",
+        "name": "Reset power distribution",
+        "mode": "srv",
+        "required": false,
+        "native": {
+          "pad": "DPAD_DOWN"
+        }
+      },
+      {
+        "id": "ToggleCargoScoop_Buggy",
+        "name": "Toggle cargo scoop",
+        "mode": "srv",
+        "required": false
+      },
+      {
+        "id": "EjectAllCargo_Buggy",
+        "name": "Eject all cargo",
+        "mode": "srv",
+        "required": false
+      },
+      {
+        "id": "RecallDismissShip",
+        "name": "Recall dismiss ship",
+        "mode": "srv",
+        "required": false
+      },
+      {
+        "id": "UIFocus_Buggy",
+        "name": "UI focus",
+        "mode": "srv",
+        "required": false
+      },
+      {
+        "id": "FocusLeftPanel_Buggy",
+        "name": "Focus left panel",
+        "mode": "srv",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "1"
+          }
+        }
+      },
+      {
+        "id": "FocusCommsPanel_Buggy",
+        "name": "Focus comms panel",
+        "mode": "srv",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "2"
+          }
+        }
+      },
+      {
+        "id": "QuickCommsPanel_Buggy",
+        "name": "Quick comms panel",
+        "mode": "srv",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Enter"
+          }
+        }
+      },
+      {
+        "id": "FocusRadarPanel_Buggy",
+        "name": "Focus radar panel",
+        "mode": "srv",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "3"
+          }
+        }
+      },
+      {
+        "id": "FocusRightPanel_Buggy",
+        "name": "Focus right panel",
+        "mode": "srv",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "4"
+          }
+        }
+      },
+      {
+        "id": "GalaxyMapOpen_Buggy",
+        "name": "Galaxy map open",
+        "mode": "srv",
+        "required": false
+      },
+      {
+        "id": "SystemMapOpen_Buggy",
+        "name": "System map open",
+        "mode": "srv",
+        "required": false
+      },
+      {
+        "id": "OpenCodexGoToDiscovery_Buggy",
+        "name": "Open codex go to discovery",
+        "mode": "srv",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "O"
+          }
+        }
+      },
+      {
+        "id": "PlayerHUDModeToggle_Buggy",
+        "name": "Player HUD mode toggle",
+        "mode": "srv",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "M"
+          }
+        }
+      },
+      {
+        "id": "HeadLookToggle_Buggy",
+        "name": "Head look toggle",
+        "mode": "srv",
+        "required": false,
+        "native": {
+          "pad": "RS"
+        }
+      },
+      {
+        "id": "MultiCrewToggleMode",
+        "name": "Multi crew toggle mode",
+        "mode": "multicrew",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Tab"
+          }
+        }
+      },
+      {
+        "id": "MultiCrewPrimaryFire",
+        "name": "Multi crew primary fire",
+        "mode": "multicrew",
+        "required": false
+      },
+      {
+        "id": "MultiCrewSecondaryFire",
+        "name": "Multi crew secondary fire",
+        "mode": "multicrew",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "mouse",
+            "button": "right"
+          }
+        }
+      },
+      {
+        "id": "MultiCrewPrimaryUtilityFire",
+        "name": "Multi crew primary utility fire",
+        "mode": "multicrew",
+        "required": false
+      },
+      {
+        "id": "MultiCrewSecondaryUtilityFire",
+        "name": "Multi crew secondary utility fire",
+        "mode": "multicrew",
+        "required": false
+      },
+      {
+        "id": "MultiCrewThirdPersonYawLeftButton",
+        "name": "Multi crew third person yaw left",
+        "mode": "multicrew",
+        "required": false
+      },
+      {
+        "id": "MultiCrewThirdPersonYawRightButton",
+        "name": "Multi crew third person yaw right",
+        "mode": "multicrew",
+        "required": false
+      },
+      {
+        "id": "MultiCrewThirdPersonPitchUpButton",
+        "name": "Multi crew third person pitch up",
+        "mode": "multicrew",
+        "required": false
+      },
+      {
+        "id": "MultiCrewThirdPersonPitchDownButton",
+        "name": "Multi crew third person pitch down",
+        "mode": "multicrew",
+        "required": false
+      },
+      {
+        "id": "MultiCrewThirdPersonFovOutButton",
+        "name": "Multi crew third person fov out",
+        "mode": "multicrew",
+        "required": false
+      },
+      {
+        "id": "MultiCrewThirdPersonFovInButton",
+        "name": "Multi crew third person fov in",
+        "mode": "multicrew",
+        "required": false
+      },
+      {
+        "id": "MultiCrewCockpitUICycleForward",
+        "name": "Multi crew cockpit UI cycle forward",
+        "mode": "multicrew",
+        "required": false
+      },
+      {
+        "id": "MultiCrewCockpitUICycleBackward",
+        "name": "Multi crew cockpit UI cycle backward",
+        "mode": "multicrew",
+        "required": false
+      },
+      {
+        "id": "OrderRequestDock",
+        "name": "Order request dock",
+        "mode": "fighter",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "N"
+          }
+        }
+      },
+      {
+        "id": "OrderDefensiveBehaviour",
+        "name": "Order defensive behaviour",
+        "mode": "fighter",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "H"
+          }
+        }
+      },
+      {
+        "id": "OrderAggressiveBehaviour",
+        "name": "Order aggressive behaviour",
+        "mode": "fighter",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "J"
+          }
+        }
+      },
+      {
+        "id": "OrderFocusTarget",
+        "name": "Order focus target",
+        "mode": "fighter",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "M"
+          }
+        }
+      },
+      {
+        "id": "OrderHoldFire",
+        "name": "Order hold fire",
+        "mode": "fighter",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "K"
+          }
+        }
+      },
+      {
+        "id": "OrderHoldPosition",
+        "name": "Order hold position",
+        "mode": "fighter",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": ","
+          }
+        }
+      },
+      {
+        "id": "OrderFollow",
+        "name": "Order follow",
+        "mode": "fighter",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "L"
+          }
+        }
+      },
+      {
+        "id": "OpenOrders",
+        "name": "Open orders",
+        "mode": "fighter",
+        "required": false
+      },
+      {
+        "id": "PhotoCameraToggle",
+        "name": "Photo camera toggle",
+        "mode": "camera",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Space",
+            "mods": ["ctrl", "alt"]
+          }
+        }
+      },
+      {
+        "id": "PhotoCameraToggle_Buggy",
+        "name": "Photo camera toggle",
+        "mode": "srv",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Space",
+            "mods": ["ctrl", "alt"]
+          }
+        }
+      },
+      {
+        "id": "PhotoCameraToggle_Humanoid",
+        "name": "Photo camera toggle",
+        "mode": "foot",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Space",
+            "mods": ["ctrl", "alt"]
+          }
+        }
+      },
+      {
+        "id": "VanityCameraScrollLeft",
+        "name": "Vanity camera scroll left",
+        "mode": "camera",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Left"
+          },
+          "pad": "DPAD_LEFT"
+        }
+      },
+      {
+        "id": "VanityCameraScrollRight",
+        "name": "Vanity camera scroll right",
+        "mode": "camera",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Right"
+          },
+          "pad": "DPAD_RIGHT"
+        }
+      },
+      {
+        "id": "ToggleFreeCam",
+        "name": "Toggle free cam",
+        "mode": "camera",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Num0"
+          },
+          "pad": "RS"
+        }
+      },
+      {
+        "id": "VanityCameraOne",
+        "name": "Vanity camera one",
+        "mode": "camera",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Num1"
+          }
+        }
+      },
+      {
+        "id": "VanityCameraTwo",
+        "name": "Vanity camera two",
+        "mode": "camera",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Num2"
+          }
+        }
+      },
+      {
+        "id": "VanityCameraThree",
+        "name": "Vanity camera three",
+        "mode": "camera",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Num3"
+          }
+        }
+      },
+      {
+        "id": "VanityCameraFour",
+        "name": "Vanity camera four",
+        "mode": "camera",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Num4"
+          }
+        }
+      },
+      {
+        "id": "VanityCameraFive",
+        "name": "Vanity camera five",
+        "mode": "camera",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Num5"
+          }
+        }
+      },
+      {
+        "id": "VanityCameraSix",
+        "name": "Vanity camera six",
+        "mode": "camera",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Num6"
+          }
+        }
+      },
+      {
+        "id": "VanityCameraSeven",
+        "name": "Vanity camera seven",
+        "mode": "camera",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Num7"
+          }
+        }
+      },
+      {
+        "id": "VanityCameraEight",
+        "name": "Vanity camera eight",
+        "mode": "camera",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Num8"
+          }
+        }
+      },
+      {
+        "id": "VanityCameraNine",
+        "name": "Vanity camera nine",
+        "mode": "camera",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Num9"
+          }
+        }
+      },
+      {
+        "id": "VanityCameraTen",
+        "name": "Vanity camera ten",
+        "mode": "camera",
+        "required": false
+      },
+      {
+        "id": "FreeCamToggleHUD",
+        "name": "Free cam toggle HUD",
+        "mode": "camera",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "LCtrl"
+          },
+          "pad": "Y"
+        }
+      },
+      {
+        "id": "FreeCamSpeedInc",
+        "name": "Free cam speed inc",
+        "mode": "camera",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "="
+          }
+        }
+      },
+      {
+        "id": "FreeCamSpeedDec",
+        "name": "Free cam speed dec",
+        "mode": "camera",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "-"
+          }
+        }
+      },
+      {
+        "id": "ToggleReverseThrottleInputFreeCam",
+        "name": "Toggle reverse throttle input free cam",
+        "mode": "camera",
+        "required": false
+      },
+      {
+        "id": "MoveFreeCamForward",
+        "name": "Move free cam forward",
+        "mode": "camera",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "W"
+          }
+        }
+      },
+      {
+        "id": "MoveFreeCamBackwards",
+        "name": "Move free cam backwards",
+        "mode": "camera",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "S"
+          }
+        }
+      },
+      {
+        "id": "MoveFreeCamRight",
+        "name": "Move free cam right",
+        "mode": "camera",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "D"
+          }
+        }
+      },
+      {
+        "id": "MoveFreeCamLeft",
+        "name": "Move free cam left",
+        "mode": "camera",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "A"
+          }
+        }
+      },
+      {
+        "id": "MoveFreeCamUp",
+        "name": "Move free cam up",
+        "mode": "camera",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "R"
+          }
+        }
+      },
+      {
+        "id": "MoveFreeCamDown",
+        "name": "Move free cam down",
+        "mode": "camera",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "F"
+          }
+        }
+      },
+      {
+        "id": "PitchCameraUp",
+        "name": "Pitch camera up",
+        "mode": "camera",
+        "required": false
+      },
+      {
+        "id": "PitchCameraDown",
+        "name": "Pitch camera down",
+        "mode": "camera",
+        "required": false
+      },
+      {
+        "id": "YawCameraLeft",
+        "name": "Yaw camera left",
+        "mode": "camera",
+        "required": false
+      },
+      {
+        "id": "YawCameraRight",
+        "name": "Yaw camera right",
+        "mode": "camera",
+        "required": false
+      },
+      {
+        "id": "RollCameraLeft",
+        "name": "Roll camera left",
+        "mode": "camera",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Q"
+          },
+          "pad": "LB"
+        }
+      },
+      {
+        "id": "RollCameraRight",
+        "name": "Roll camera right",
+        "mode": "camera",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "E"
+          },
+          "pad": "RB"
+        }
+      },
+      {
+        "id": "ToggleRotationLock",
+        "name": "Toggle rotation lock",
+        "mode": "camera",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "End"
+          }
+        }
+      },
+      {
+        "id": "FixCameraRelativeToggle",
+        "name": "Fix camera relative toggle",
+        "mode": "camera",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Num0"
+          },
+          "pad": "RS"
+        }
+      },
+      {
+        "id": "FixCameraWorldToggle",
+        "name": "Fix camera world toggle",
+        "mode": "camera",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Space"
+          },
+          "pad": "LS"
+        }
+      },
+      {
+        "id": "QuitCamera",
+        "name": "Quit camera",
+        "mode": "camera",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Backspace"
+          },
+          "pad": "B"
+        }
+      },
+      {
+        "id": "ToggleAdvanceMode",
+        "name": "Toggle advance mode",
+        "mode": "camera",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Del"
+          },
+          "pad": "A"
+        }
+      },
+      {
+        "id": "FreeCamZoomIn",
+        "name": "Free cam zoom in",
+        "mode": "camera",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Up"
+          },
+          "pad": "DPAD_UP"
+        }
+      },
+      {
+        "id": "FreeCamZoomOut",
+        "name": "Free cam zoom out",
+        "mode": "camera",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Down"
+          },
+          "pad": "DPAD_DOWN"
+        }
+      },
+      {
+        "id": "FStopDec",
+        "name": "F stop dec",
+        "mode": "camera",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Left"
+          },
+          "pad": "DPAD_LEFT"
+        }
+      },
+      {
+        "id": "FStopInc",
+        "name": "F stop inc",
+        "mode": "camera",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Right"
+          },
+          "pad": "DPAD_RIGHT"
+        }
+      },
+      {
+        "id": "CommanderCreator_Undo",
+        "name": "Commander creator undo",
+        "mode": "store",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "pad": "X"
+        }
+      },
+      {
+        "id": "CommanderCreator_Redo",
+        "name": "Commander creator redo",
+        "mode": "store",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "pad": "Y"
+        }
+      },
+      {
+        "id": "CommanderCreator_Rotation_MouseToggle",
+        "name": "Commander creator rotation mouse toggle",
+        "mode": "store",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "mouse",
+            "button": "right"
+          }
+        }
+      },
+      {
+        "id": "GalnetAudio_Play_Pause",
+        "name": "Galnet audio play pause",
+        "mode": "general",
+        "required": false
+      },
+      {
+        "id": "GalnetAudio_SkipForward",
+        "name": "Galnet audio skip forward",
+        "mode": "general",
+        "required": false
+      },
+      {
+        "id": "GalnetAudio_SkipBackward",
+        "name": "Galnet audio skip backward",
+        "mode": "general",
+        "required": false
+      },
+      {
+        "id": "GalnetAudio_ClearQueue",
+        "name": "Galnet audio clear queue",
+        "mode": "general",
+        "required": false
+      },
+      {
+        "id": "ExplorationFSSCameraPitchIncreaseButton",
+        "name": "Exploration FSS camera pitch increase",
+        "mode": "fss",
+        "required": false
+      },
+      {
+        "id": "ExplorationFSSCameraPitchDecreaseButton",
+        "name": "Exploration FSS camera pitch decrease",
+        "mode": "fss",
+        "required": false
+      },
+      {
+        "id": "ExplorationFSSCameraYawIncreaseButton",
+        "name": "Exploration FSS camera yaw increase",
+        "mode": "fss",
+        "required": false
+      },
+      {
+        "id": "ExplorationFSSCameraYawDecreaseButton",
+        "name": "Exploration FSS camera yaw decrease",
+        "mode": "fss",
+        "required": false
+      },
+      {
+        "id": "ExplorationFSSZoomIn",
+        "name": "Exploration FSS zoom in",
+        "mode": "fss",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "mouse",
+            "button": "left"
+          }
+        }
+      },
+      {
+        "id": "ExplorationFSSZoomOut",
+        "name": "Exploration FSS zoom out",
+        "mode": "fss",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "mouse",
+            "button": "right"
+          }
+        }
+      },
+      {
+        "id": "ExplorationFSSMiniZoomIn",
+        "name": "Exploration FSS mini zoom in",
+        "mode": "fss",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Up"
+          }
+        }
+      },
+      {
+        "id": "ExplorationFSSMiniZoomOut",
+        "name": "Exploration FSS mini zoom out",
+        "mode": "fss",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Down"
+          }
+        }
+      },
+      {
+        "id": "ExplorationFSSRadioTuningX_Increase",
+        "name": "Exploration FSS radio tuning x increase",
+        "mode": "fss",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "D"
+          }
+        }
+      },
+      {
+        "id": "ExplorationFSSRadioTuningX_Decrease",
+        "name": "Exploration FSS radio tuning x decrease",
+        "mode": "fss",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "A"
+          }
+        }
+      },
+      {
+        "id": "ExplorationFSSDiscoveryScan",
+        "name": "Exploration FSS discovery scan",
+        "mode": "fss",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "mouse",
+            "button": "middle"
+          }
+        }
+      },
+      {
+        "id": "ExplorationFSSQuit",
+        "name": "Exploration FSS quit",
+        "mode": "fss",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Backspace"
+          }
+        }
+      },
+      {
+        "id": "ExplorationFSSTarget",
+        "name": "Exploration FSS target",
+        "mode": "fss",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "T"
+          }
+        }
+      },
+      {
+        "id": "ExplorationFSSShowHelp",
+        "name": "Exploration FSS show help",
+        "mode": "fss",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "H"
+          }
+        }
+      },
+      {
+        "id": "ExplorationSAAChangeScannedAreaViewToggle",
+        "name": "Exploration SAA change scanned area view toggle",
+        "mode": "dss",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "mouse",
+            "button": "middle"
+          }
+        }
+      },
+      {
+        "id": "ExplorationSAAExitThirdPerson",
+        "name": "Exploration SAA exit third person",
+        "mode": "dss",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Backspace"
+          }
+        }
+      },
+      {
+        "id": "ExplorationSAANextGenus",
+        "name": "Exploration SAA next genus",
+        "mode": "dss",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "E"
+          }
+        }
+      },
+      {
+        "id": "ExplorationSAAPreviousGenus",
+        "name": "Exploration SAA previous genus",
+        "mode": "dss",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Q"
+          }
+        }
+      },
+      {
+        "id": "SAAThirdPersonYawLeftButton",
+        "name": "SAA third person yaw left",
+        "mode": "dss",
+        "required": false
+      },
+      {
+        "id": "SAAThirdPersonYawRightButton",
+        "name": "SAA third person yaw right",
+        "mode": "dss",
+        "required": false
+      },
+      {
+        "id": "SAAThirdPersonPitchUpButton",
+        "name": "SAA third person pitch up",
+        "mode": "dss",
+        "required": false
+      },
+      {
+        "id": "SAAThirdPersonPitchDownButton",
+        "name": "SAA third person pitch down",
+        "mode": "dss",
+        "required": false
+      },
+      {
+        "id": "SAAThirdPersonFovOutButton",
+        "name": "SAA third person fov out",
+        "mode": "dss",
+        "required": false
+      },
+      {
+        "id": "SAAThirdPersonFovInButton",
+        "name": "SAA third person fov in",
+        "mode": "dss",
+        "required": false
+      },
+      {
+        "id": "HumanoidForwardButton",
+        "name": "Forward",
+        "mode": "foot",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "HumanoidBackwardButton",
+        "name": "Backward",
+        "mode": "foot",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "HumanoidStrafeLeftButton",
+        "name": "Strafe left",
+        "mode": "foot",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "HumanoidStrafeRightButton",
+        "name": "Strafe right",
+        "mode": "foot",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "HumanoidRotateLeftButton",
+        "name": "Rotate left",
+        "mode": "foot",
+        "required": false
+      },
+      {
+        "id": "HumanoidRotateRightButton",
+        "name": "Rotate right",
+        "mode": "foot",
+        "required": false
+      },
+      {
+        "id": "HumanoidPitchUpButton",
+        "name": "Pitch up",
+        "mode": "foot",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "HumanoidPitchDownButton",
+        "name": "Pitch down",
+        "mode": "foot",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "HumanoidSprintButton",
+        "name": "Sprint",
+        "mode": "foot",
+        "role": "movement",
+        "required": false,
+        "native": {
+          "pad": "LS"
+        }
+      },
+      {
+        "id": "HumanoidWalkButton",
+        "name": "Walk",
+        "mode": "foot",
+        "role": "movement",
+        "required": false
+      },
+      {
+        "id": "HumanoidCrouchButton",
+        "name": "Crouch",
+        "mode": "foot",
+        "role": "movement",
+        "required": false,
+        "native": {
+          "pad": "B"
+        }
+      },
+      {
+        "id": "HumanoidJumpButton",
+        "name": "Jump",
+        "mode": "foot",
+        "role": "movement",
+        "required": false,
+        "native": {
+          "pad": "A"
+        }
+      },
+      {
+        "id": "HumanoidPrimaryInteractButton",
+        "name": "Primary interact",
+        "mode": "foot",
+        "required": false,
+        "native": {
+          "pad": "X"
+        }
+      },
+      {
+        "id": "HumanoidSecondaryInteractButton",
+        "name": "Secondary interact",
+        "mode": "foot",
+        "required": false,
+        "native": {
+          "pad": "B"
+        }
+      },
+      {
+        "id": "HumanoidItemWheelButton",
+        "name": "Item wheel",
+        "mode": "foot",
+        "required": false,
+        "native": {
+          "pad": "LB"
+        }
+      },
+      {
+        "id": "HumanoidEmoteWheelButton",
+        "name": "Emote wheel",
+        "mode": "foot",
+        "required": false,
+        "native": {
+          "pad": "LB"
+        }
+      },
+      {
+        "id": "HumanoidUtilityWheelCycleMode",
+        "name": "Utility wheel cycle mode",
+        "mode": "foot",
+        "required": false,
+        "native": {
+          "pad": "RB"
+        }
+      },
+      {
+        "id": "HumanoidItemWheelButton_XLeft",
+        "name": "Item wheel button x left",
+        "mode": "foot",
+        "required": false
+      },
+      {
+        "id": "HumanoidItemWheelButton_XRight",
+        "name": "Item wheel button x right",
+        "mode": "foot",
+        "required": false
+      },
+      {
+        "id": "HumanoidItemWheelButton_YUp",
+        "name": "Item wheel button y up",
+        "mode": "foot",
+        "required": false
+      },
+      {
+        "id": "HumanoidItemWheelButton_YDown",
+        "name": "Item wheel button y down",
+        "mode": "foot",
+        "required": false
+      },
+      {
+        "id": "HumanoidPrimaryFireButton",
+        "name": "Primary fire",
+        "mode": "foot",
+        "role": "combat",
+        "required": false,
+        "native": {
+          "pad": "RT"
+        }
+      },
+      {
+        "id": "HumanoidZoomButton",
+        "name": "Zoom",
+        "mode": "foot",
+        "required": false,
+        "native": {
+          "pad": "LT"
+        }
+      },
+      {
+        "id": "HumanoidThrowGrenadeButton",
+        "name": "Throw grenade",
+        "mode": "foot",
+        "role": "combat",
+        "required": false,
+        "native": {
+          "pad": "RB"
+        }
+      },
+      {
+        "id": "HumanoidMeleeButton",
+        "name": "Melee",
+        "mode": "foot",
+        "role": "combat",
+        "required": false,
+        "native": {
+          "pad": "RS"
+        }
+      },
+      {
+        "id": "HumanoidReloadButton",
+        "name": "Reload",
+        "mode": "foot",
+        "role": "combat",
+        "required": false,
+        "native": {
+          "pad": "X"
+        }
+      },
+      {
+        "id": "HumanoidSwitchWeapon",
+        "name": "Switch weapon",
+        "mode": "foot",
+        "role": "combat",
+        "required": false,
+        "native": {
+          "pad": "Y"
+        }
+      },
+      {
+        "id": "HumanoidSelectPrimaryWeaponButton",
+        "name": "Select primary weapon",
+        "mode": "foot",
+        "role": "combat",
+        "required": false
+      },
+      {
+        "id": "HumanoidSelectSecondaryWeaponButton",
+        "name": "Select secondary weapon",
+        "mode": "foot",
+        "role": "combat",
+        "required": false
+      },
+      {
+        "id": "HumanoidSelectUtilityWeaponButton",
+        "name": "Select utility weapon",
+        "mode": "foot",
+        "role": "combat",
+        "required": false
+      },
+      {
+        "id": "HumanoidSelectNextWeaponButton",
+        "name": "Select next weapon",
+        "mode": "foot",
+        "role": "combat",
+        "required": false
+      },
+      {
+        "id": "HumanoidSelectPreviousWeaponButton",
+        "name": "Select previous weapon",
+        "mode": "foot",
+        "role": "combat",
+        "required": false
+      },
+      {
+        "id": "HumanoidHideWeaponButton",
+        "name": "Hide weapon",
+        "mode": "foot",
+        "role": "combat",
+        "required": false,
+        "native": {
+          "pad": "BACK"
+        }
+      },
+      {
+        "id": "HumanoidSelectNextGrenadeTypeButton",
+        "name": "Select next grenade type",
+        "mode": "foot",
+        "role": "combat",
+        "required": false
+      },
+      {
+        "id": "HumanoidSelectPreviousGrenadeTypeButton",
+        "name": "Select previous grenade type",
+        "mode": "foot",
+        "role": "combat",
+        "required": false
+      },
+      {
+        "id": "HumanoidToggleFlashlightButton",
+        "name": "Toggle flashlight",
+        "mode": "foot",
+        "required": false
+      },
+      {
+        "id": "HumanoidToggleNightVisionButton",
+        "name": "Toggle night vision",
+        "mode": "foot",
+        "required": false
+      },
+      {
+        "id": "HumanoidToggleShieldsButton",
+        "name": "Toggle shields",
+        "mode": "foot",
+        "required": false,
+        "native": {
+          "pad": "DPAD_DOWN"
+        }
+      },
+      {
+        "id": "HumanoidClearAuthorityLevel",
+        "name": "Clear authority level",
+        "mode": "foot",
+        "required": false
+      },
+      {
+        "id": "HumanoidHealthPack",
+        "name": "Health pack",
+        "mode": "foot",
+        "required": false
+      },
+      {
+        "id": "HumanoidBattery",
+        "name": "Battery",
+        "mode": "foot",
+        "required": false
+      },
+      {
+        "id": "HumanoidSelectFragGrenade",
+        "name": "Select frag grenade",
+        "mode": "foot",
+        "role": "combat",
+        "required": false
+      },
+      {
+        "id": "HumanoidSelectEMPGrenade",
+        "name": "Select EMP grenade",
+        "mode": "foot",
+        "role": "combat",
+        "required": false
+      },
+      {
+        "id": "HumanoidSelectShieldGrenade",
+        "name": "Select shield grenade",
+        "mode": "foot",
+        "role": "combat",
+        "required": false
+      },
+      {
+        "id": "HumanoidSwitchToRechargeTool",
+        "name": "Switch to recharge tool",
+        "mode": "foot",
+        "required": false,
+        "native": {
+          "pad": "DPAD_LEFT"
+        }
+      },
+      {
+        "id": "HumanoidSwitchToCompAnalyser",
+        "name": "Switch to comp analyser",
+        "mode": "foot",
+        "required": false,
+        "native": {
+          "pad": "DPAD_RIGHT"
+        }
+      },
+      {
+        "id": "HumanoidSwitchToSuitTool",
+        "name": "Switch to suit tool",
+        "mode": "foot",
+        "required": false,
+        "native": {
+          "pad": "DPAD_UP"
+        }
+      },
+      {
+        "id": "HumanoidToggleToolModeButton",
+        "name": "Toggle tool mode",
+        "mode": "foot",
+        "required": false,
+        "native": {
+          "pad": "X"
+        }
+      },
+      {
+        "id": "HumanoidToggleMissionHelpPanelButton",
+        "name": "Toggle mission help panel",
+        "mode": "foot",
+        "required": false,
+        "native": {
+          "pad": "X"
+        }
+      },
+      {
+        "id": "HumanoidPing",
+        "name": "Ping",
+        "mode": "foot",
+        "required": false
+      },
+      {
+        "id": "GalaxyMapOpen_Humanoid",
+        "name": "Galaxy map open",
+        "mode": "foot",
+        "required": false
+      },
+      {
+        "id": "SystemMapOpen_Humanoid",
+        "name": "System map open",
+        "mode": "foot",
+        "required": false
+      },
+      {
+        "id": "FocusCommsPanel_Humanoid",
+        "name": "Focus comms panel",
+        "mode": "foot",
+        "required": false
+      },
+      {
+        "id": "QuickCommsPanel_Humanoid",
+        "name": "Quick comms panel",
+        "mode": "foot",
+        "required": false
+      },
+      {
+        "id": "HumanoidOpenAccessPanelButton",
+        "name": "Open access panel",
+        "mode": "foot",
+        "required": false,
+        "native": {
+          "pad": "X"
+        }
+      },
+      {
+        "id": "HumanoidConflictContextualUIButton",
+        "name": "Conflict contextual UI",
+        "mode": "foot",
+        "required": false
+      },
+      {
+        "id": "StoreEnableRotation",
+        "name": "Store enable rotation",
+        "mode": "store",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "mouse",
+            "button": "middle"
+          }
+        }
+      },
+      {
+        "id": "StoreCamZoomIn",
+        "name": "Store cam zoom in",
+        "mode": "store",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "X"
+          },
+          "pad": "RT"
+        }
+      },
+      {
+        "id": "StoreCamZoomOut",
+        "name": "Store cam zoom out",
+        "mode": "store",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Z"
+          },
+          "pad": "LT"
+        }
+      },
+      {
+        "id": "StoreToggle",
+        "name": "Store toggle",
+        "mode": "store",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Tab"
+          },
+          "pad": "X"
+        }
+      },
+      {
+        "id": "HumanoidEmoteSlot1",
+        "name": "Emote slot 1",
+        "mode": "foot",
+        "required": false,
+        "native": {
+          "pad": "Y"
+        }
+      },
+      {
+        "id": "HumanoidEmoteSlot2",
+        "name": "Emote slot 2",
+        "mode": "foot",
+        "required": false
+      },
+      {
+        "id": "HumanoidEmoteSlot3",
+        "name": "Emote slot 3",
+        "mode": "foot",
+        "required": false
+      },
+      {
+        "id": "HumanoidEmoteSlot4",
+        "name": "Emote slot 4",
+        "mode": "foot",
+        "required": false
+      },
+      {
+        "id": "HumanoidEmoteSlot5",
+        "name": "Emote slot 5",
+        "mode": "foot",
+        "required": false
+      },
+      {
+        "id": "HumanoidEmoteSlot6",
+        "name": "Emote slot 6",
+        "mode": "foot",
+        "required": false
+      },
+      {
+        "id": "HumanoidEmoteSlot7",
+        "name": "Emote slot 7",
+        "mode": "foot",
+        "required": false
+      },
+      {
+        "id": "HumanoidEmoteSlot8",
+        "name": "Emote slot 8",
+        "mode": "foot",
+        "required": false
+      }
+    ],
+    "file": {
+      "format": "elite-binds"
+    }
+  },
+  "kept": [
+    {
+      "action": "DownThrustButton",
+      "set": "keyboard",
+      "text": "Key_LeftShift with Key_RightBracket held"
+    },
+    {
+      "action": "HeadlightsBuggyButton",
+      "set": "controller",
+      "text": "GamePad_DPadLeft with GamePad_FaceDown held"
+    },
+    {
+      "action": "BuggyCycleFireGroupNext",
+      "set": "controller",
+      "text": "GamePad_RBumper with GamePad_FaceLeft held"
+    },
+    {
+      "action": "BuggyCycleFireGroupPrevious",
+      "set": "controller",
+      "text": "GamePad_LBumper with GamePad_FaceLeft held"
+    },
+    {
+      "action": "ToggleCargoScoop_Buggy",
+      "set": "controller",
+      "text": "GamePad_DPadRight with GamePad_FaceDown held"
+    },
+    {
+      "action": "RecallDismissShip",
+      "set": "controller",
+      "text": "GamePad_DPadDown with GamePad_FaceDown held"
+    },
+    {
+      "action": "FocusLeftPanel_Buggy",
+      "set": "controller",
+      "text": "GamePad_FaceLeft with GamePad_DPadLeft held"
+    },
+    {
+      "action": "FocusCommsPanel_Buggy",
+      "set": "controller",
+      "text": "GamePad_FaceLeft with GamePad_DPadUp held"
+    },
+    {
+      "action": "FocusRadarPanel_Buggy",
+      "set": "controller",
+      "text": "GamePad_FaceLeft with GamePad_DPadDown held"
+    },
+    {
+      "action": "FocusRightPanel_Buggy",
+      "set": "controller",
+      "text": "GamePad_FaceLeft with GamePad_DPadRight held"
+    },
+    {
+      "action": "OpenCodexGoToDiscovery_Buggy",
+      "set": "controller",
+      "text": "GamePad_LBumper with GamePad_FaceUp held"
+    },
+    {
+      "action": "PlayerHUDModeToggle_Buggy",
+      "set": "controller",
+      "text": "GamePad_DPadUp with GamePad_FaceUp held"
+    },
+    {
+      "action": "PhotoCameraToggle",
+      "set": "controller",
+      "text": "GamePad_DPadRight with GamePad_FaceRight held"
+    },
+    {
+      "action": "PhotoCameraToggle_Buggy",
+      "set": "controller",
+      "text": "GamePad_DPadDown with GamePad_FaceUp held"
+    },
+    {
+      "action": "PhotoCameraToggle_Humanoid",
+      "set": "controller",
+      "text": "GamePad_DPadRight with GamePad_FaceRight held"
+    },
+    {
+      "action": "FreeCamSpeedInc",
+      "set": "controller",
+      "text": "GamePad_RBumper with GamePad_FaceLeft held"
+    },
+    {
+      "action": "FreeCamSpeedDec",
+      "set": "controller",
+      "text": "GamePad_LBumper with GamePad_FaceLeft held"
+    },
+    {
+      "action": "ToggleRotationLock",
+      "set": "controller",
+      "text": "GamePad_DPadUp with GamePad_FaceLeft held"
+    },
+    {
+      "action": "ExplorationFSSRadioTuningX_Increase",
+      "set": "keyboard",
+      "text": "Key_RightBracket"
+    },
+    {
+      "action": "ExplorationFSSRadioTuningX_Decrease",
+      "set": "keyboard",
+      "text": "Key_LeftBracket"
+    },
+    {
+      "action": "ExplorationFSSQuit",
+      "set": "keyboard",
+      "text": "Key_Apostrophe"
+    },
+    {
+      "action": "QuickCommsPanel_Humanoid",
+      "set": "controller",
+      "text": "GamePad_FaceRight with GamePad_DPadUp held"
+    },
+    {
+      "action": "HumanoidConflictContextualUIButton",
+      "set": "controller",
+      "text": "GamePad_FaceRight with GamePad_DPadLeft held"
+    }
+  ]
+}

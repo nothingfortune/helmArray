@@ -1,0 +1,1397 @@
+{
+  "game": {
+    "id": "everspace2",
+    "name": "Everspace 2",
+    "modes": [
+      {
+        "id": "flight",
+        "name": "Flight"
+      },
+      {
+        "id": "menus",
+        "name": "Menus"
+      },
+      {
+        "id": "photo",
+        "name": "Photo mode"
+      }
+    ],
+    "actions": [
+      {
+        "id": "ActionFreeze",
+        "name": "Photo mode",
+        "mode": "flight",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Z"
+          }
+        }
+      },
+      {
+        "id": "Boost",
+        "name": "Boost [HOLD]",
+        "mode": "flight",
+        "role": "movement",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "LShift"
+          },
+          "pad": "LS"
+        }
+      },
+      {
+        "id": "Cancel",
+        "name": "Cancel",
+        "mode": "menus",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Esc"
+          },
+          "pad": "B"
+        }
+      },
+      {
+        "id": "CameraMoveForward.neg",
+        "name": "Camera move backward",
+        "mode": "photo",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "S"
+          },
+          "pad": "LS_DOWN"
+        }
+      },
+      {
+        "id": "CameraMoveForward",
+        "name": "Camera move forward",
+        "mode": "photo",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "W"
+          },
+          "pad": "LS_UP"
+        }
+      },
+      {
+        "id": "CameraMoveRight.neg",
+        "name": "Camera move left",
+        "mode": "photo",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "A"
+          },
+          "pad": "LS_LEFT"
+        }
+      },
+      {
+        "id": "CameraMoveRight",
+        "name": "Camera move right",
+        "mode": "photo",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "D"
+          },
+          "pad": "LS_RIGHT"
+        }
+      },
+      {
+        "id": "CameraMoveUp.neg",
+        "name": "Camera move down",
+        "mode": "photo",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "LCtrl"
+          },
+          "pad": "LT"
+        }
+      },
+      {
+        "id": "CameraMoveUp",
+        "name": "Camera move up",
+        "mode": "photo",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Space"
+          },
+          "pad": "LB"
+        }
+      },
+      {
+        "id": "CameraPitch.neg",
+        "name": "Camera pitch down",
+        "mode": "photo",
+        "required": false,
+        "native": {
+          "pad": "RS_DOWN"
+        }
+      },
+      {
+        "id": "CameraPitch",
+        "name": "Camera pitch up",
+        "mode": "photo",
+        "required": false,
+        "native": {
+          "pad": "RS_UP"
+        }
+      },
+      {
+        "id": "CameraRoll.neg",
+        "name": "Camera roll left",
+        "mode": "photo",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Q"
+          }
+        }
+      },
+      {
+        "id": "CameraRoll",
+        "name": "Camera roll right",
+        "mode": "photo",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "E"
+          }
+        }
+      },
+      {
+        "id": "CameraYaw.neg",
+        "name": "Camera yaw left",
+        "mode": "photo",
+        "required": false,
+        "native": {
+          "pad": "RS_LEFT"
+        }
+      },
+      {
+        "id": "CameraYaw",
+        "name": "Camera yaw right",
+        "mode": "photo",
+        "required": false,
+        "native": {
+          "pad": "RS_RIGHT"
+        }
+      },
+      {
+        "id": "CameraZoom",
+        "name": "Camera zoom in",
+        "mode": "photo",
+        "required": false,
+        "native": {
+          "pad": "LS_UP"
+        }
+      },
+      {
+        "id": "CameraZoom.neg",
+        "name": "Camera zoom out",
+        "mode": "photo",
+        "required": false,
+        "native": {
+          "pad": "LS_DOWN"
+        }
+      },
+      {
+        "id": "ChargeCruiseMode",
+        "name": "Cruise drive [HOLD]",
+        "mode": "flight",
+        "role": "travel",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "F"
+          },
+          "pad": "A"
+        }
+      },
+      {
+        "id": "ChargeTravelMode",
+        "name": "Supralight drive [HOLD]",
+        "mode": "flight",
+        "role": "travel",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "C"
+          },
+          "pad": "Y"
+        }
+      },
+      {
+        "id": "Consumable1",
+        "name": "Use consumable 1",
+        "mode": "flight",
+        "role": "ability",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "5"
+          }
+        }
+      },
+      {
+        "id": "Consumable2",
+        "name": "Use consumable 2",
+        "mode": "flight",
+        "role": "ability",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "6"
+          }
+        }
+      },
+      {
+        "id": "Consumable3",
+        "name": "Use consumable 3",
+        "mode": "flight",
+        "role": "ability",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "7"
+          }
+        }
+      },
+      {
+        "id": "Consumable4",
+        "name": "Use consumable 4",
+        "mode": "flight",
+        "role": "ability",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "8"
+          }
+        }
+      },
+      {
+        "id": "Device1",
+        "name": "Use device 1",
+        "mode": "flight",
+        "role": "ability",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "1"
+          }
+        }
+      },
+      {
+        "id": "Device2",
+        "name": "Use device 2",
+        "mode": "flight",
+        "role": "ability",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "2"
+          }
+        }
+      },
+      {
+        "id": "Device3",
+        "name": "Use device 3",
+        "mode": "flight",
+        "role": "ability",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "3"
+          }
+        }
+      },
+      {
+        "id": "Device4",
+        "name": "Use device 4",
+        "mode": "flight",
+        "role": "ability",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "4"
+          }
+        }
+      },
+      {
+        "id": "FirePrimary",
+        "name": "Fire primary weapon",
+        "mode": "flight",
+        "role": "combat",
+        "required": true,
+        "native": {
+          "key": {
+            "kind": "mouse",
+            "button": "left"
+          },
+          "pad": "RT"
+        }
+      },
+      {
+        "id": "FireSecondary",
+        "name": "Fire secondary weapon",
+        "mode": "flight",
+        "role": "combat",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "mouse",
+            "button": "right"
+          },
+          "pad": "RB"
+        }
+      },
+      {
+        "id": "FlingObjects",
+        "name": "Fling objects",
+        "mode": "flight",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "F"
+          },
+          "pad": "RB"
+        }
+      },
+      {
+        "id": "FreeLook",
+        "name": "Toggle free-look mode",
+        "mode": "flight",
+        "required": false
+      },
+      {
+        "id": "Headlight",
+        "name": "Toggle headlights",
+        "mode": "flight",
+        "required": false
+      },
+      {
+        "id": "HighResScreenshot",
+        "name": "Take high-res screenshot",
+        "mode": "flight",
+        "required": false
+      },
+      {
+        "id": "InertiaDampeners",
+        "name": "Toggle inertia dampeners",
+        "mode": "flight",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "LAlt"
+          }
+        }
+      },
+      {
+        "id": "IngameMenu",
+        "name": "Open ingame menu",
+        "mode": "flight",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Tab"
+          },
+          "pad": "BACK"
+        }
+      },
+      {
+        "id": "Interact",
+        "name": "Interact",
+        "mode": "flight",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "F"
+          },
+          "pad": "A"
+        }
+      },
+      {
+        "id": "LoadMostRecentSave",
+        "name": "Load most recent save",
+        "mode": "flight",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "F8"
+          }
+        }
+      },
+      {
+        "id": "LockTarget",
+        "name": "Lock target",
+        "mode": "flight",
+        "role": "combat",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "mouse",
+            "button": "middle"
+          },
+          "pad": "RS"
+        }
+      },
+      {
+        "id": "LockNearestTarget",
+        "name": "Lock closest target",
+        "mode": "flight",
+        "role": "combat",
+        "required": false
+      },
+      {
+        "id": "MapPanRight.neg",
+        "name": "Map left",
+        "mode": "menus",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "pad": "LS_LEFT"
+        }
+      },
+      {
+        "id": "MapPanRight",
+        "name": "Map right",
+        "mode": "menus",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "pad": "LS_RIGHT"
+        }
+      },
+      {
+        "id": "MapPanUp.neg",
+        "name": "Map down",
+        "mode": "menus",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "pad": "LS_DOWN"
+        }
+      },
+      {
+        "id": "MapPanUp",
+        "name": "Map up",
+        "mode": "menus",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "pad": "LS_UP"
+        }
+      },
+      {
+        "id": "MapZoom",
+        "name": "Map zoom in",
+        "mode": "menus",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "pad": "RT"
+        }
+      },
+      {
+        "id": "MapZoom.neg",
+        "name": "Map zoom out",
+        "mode": "menus",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "pad": "LT"
+        }
+      },
+      {
+        "id": "MenuAction2",
+        "name": "Menu action 2",
+        "mode": "menus",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "R"
+          },
+          "pad": "X"
+        }
+      },
+      {
+        "id": "MenuAction3",
+        "name": "Menu action 3",
+        "mode": "menus",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "X"
+          },
+          "pad": "Y"
+        }
+      },
+      {
+        "id": "MenuCycleShip",
+        "name": "Cycle ship",
+        "mode": "menus",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "pad": "RS"
+        }
+      },
+      {
+        "id": "MenuChangeCompare",
+        "name": "Change compare item",
+        "mode": "menus",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "LAlt"
+          },
+          "pad": "LT"
+        }
+      },
+      {
+        "id": "MenuSideCompare",
+        "name": "Toggle side by side compare",
+        "mode": "menus",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "LShift"
+          },
+          "pad": "RT"
+        }
+      },
+      {
+        "id": "MenuChangeSorting",
+        "name": "Change sorting",
+        "mode": "menus",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "B"
+          },
+          "pad": "LS"
+        }
+      },
+      {
+        "id": "MenuChangeViewOption",
+        "name": "Change view",
+        "mode": "menus",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "LAlt"
+          },
+          "pad": "RS"
+        }
+      },
+      {
+        "id": "MenuToggleLevel",
+        "name": "Toggle level",
+        "mode": "menus",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "T"
+          },
+          "pad": "RS"
+        }
+      },
+      {
+        "id": "MoveForward.neg",
+        "name": "Thrust backward",
+        "mode": "flight",
+        "role": "movement",
+        "required": true,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "S"
+          },
+          "pad": "LS_DOWN"
+        }
+      },
+      {
+        "id": "MoveForward",
+        "name": "Thrust forward",
+        "mode": "flight",
+        "role": "movement",
+        "required": true,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "W"
+          },
+          "pad": "LS_UP"
+        }
+      },
+      {
+        "id": "MoveRight.neg",
+        "name": "Strafe left",
+        "mode": "flight",
+        "role": "movement",
+        "required": true,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "D"
+          },
+          "pad": "LS_LEFT"
+        }
+      },
+      {
+        "id": "MoveRight",
+        "name": "Strafe right",
+        "mode": "flight",
+        "role": "movement",
+        "required": true,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "A"
+          },
+          "pad": "LS_RIGHT"
+        }
+      },
+      {
+        "id": "MoveUp.neg",
+        "name": "Hover down",
+        "mode": "flight",
+        "role": "movement",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "F10"
+          },
+          "pad": "LT"
+        }
+      },
+      {
+        "id": "MoveUp",
+        "name": "Hover up",
+        "mode": "flight",
+        "role": "movement",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "F9"
+          },
+          "pad": "LB"
+        }
+      },
+      {
+        "id": "NavigateRight.neg",
+        "name": "Navigate left",
+        "mode": "menus",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "A"
+          },
+          "pad": "DPAD_LEFT"
+        }
+      },
+      {
+        "id": "NavigateRight",
+        "name": "Navigate right",
+        "mode": "menus",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "D"
+          },
+          "pad": "DPAD_RIGHT"
+        }
+      },
+      {
+        "id": "NavigateUp.neg",
+        "name": "Navigate down",
+        "mode": "menus",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "S"
+          },
+          "pad": "DPAD_DOWN"
+        }
+      },
+      {
+        "id": "NavigateUp",
+        "name": "Navigate up",
+        "mode": "menus",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "W"
+          },
+          "pad": "DPAD_UP"
+        }
+      },
+      {
+        "id": "NextPrimary",
+        "name": "Next primary weapon",
+        "mode": "flight",
+        "role": "combat",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "F1"
+          },
+          "pad": "DPAD_LEFT"
+        }
+      },
+      {
+        "id": "NextSecondary",
+        "name": "Next secondary weapon",
+        "mode": "flight",
+        "role": "combat",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "R"
+          },
+          "pad": "DPAD_RIGHT"
+        }
+      },
+      {
+        "id": "NextTarget",
+        "name": "Lock next on-screen enemy",
+        "mode": "flight",
+        "role": "combat",
+        "required": false
+      },
+      {
+        "id": "OK",
+        "name": "OK",
+        "mode": "menus",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "F"
+          },
+          "pad": "A"
+        }
+      },
+      {
+        "id": "OpenTabCrafting",
+        "name": "Open crafting",
+        "mode": "flight",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "U"
+          }
+        }
+      },
+      {
+        "id": "OpenTabData",
+        "name": "Open data",
+        "mode": "flight",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "L"
+          }
+        }
+      },
+      {
+        "id": "OpenTabInventory",
+        "name": "Open inventory",
+        "mode": "flight",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "I"
+          }
+        }
+      },
+      {
+        "id": "OpenTabMap",
+        "name": "Open map",
+        "mode": "flight",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "M"
+          }
+        }
+      },
+      {
+        "id": "OpenTabMissions",
+        "name": "Open missions",
+        "mode": "flight",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "K"
+          }
+        }
+      },
+      {
+        "id": "OpenTabPerks",
+        "name": "Open perks",
+        "mode": "flight",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "J"
+          }
+        }
+      },
+      {
+        "id": "OpenTabShip",
+        "name": "Open ship",
+        "mode": "flight",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "O"
+          }
+        }
+      },
+      {
+        "id": "Pause",
+        "name": "Open pause menu",
+        "mode": "flight",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "P"
+          },
+          "pad": "START"
+        }
+      },
+      {
+        "id": "PhotoModeAdjust.neg",
+        "name": "Setting decrease",
+        "mode": "photo",
+        "required": false,
+        "native": {
+          "pad": "DPAD_LEFT"
+        }
+      },
+      {
+        "id": "PhotoModeAdjust",
+        "name": "Setting increase",
+        "mode": "photo",
+        "required": false,
+        "native": {
+          "pad": "DPAD_RIGHT"
+        }
+      },
+      {
+        "id": "PhotoModeFocus",
+        "name": "Set focus",
+        "mode": "photo",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "mouse",
+            "button": "left"
+          },
+          "pad": "A"
+        }
+      },
+      {
+        "id": "PhotoModeMenu",
+        "name": "Photo mode menu",
+        "mode": "photo",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "H"
+          },
+          "pad": "RT"
+        }
+      },
+      {
+        "id": "PhotoModeNextSetting",
+        "name": "Next setting",
+        "mode": "photo",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "mouse",
+            "button": "right"
+          },
+          "pad": "Y"
+        }
+      },
+      {
+        "id": "Pin",
+        "name": "Place marker",
+        "mode": "flight",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "NumAdd"
+          }
+        }
+      },
+      {
+        "id": "Pitch.neg",
+        "name": "Pitch down",
+        "mode": "flight",
+        "role": "movement",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Down"
+          },
+          "pad": "RS_DOWN"
+        }
+      },
+      {
+        "id": "Pitch",
+        "name": "Pitch up",
+        "mode": "flight",
+        "role": "movement",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Up"
+          },
+          "pad": "RS_UP"
+        }
+      },
+      {
+        "id": "PreviousPrimary",
+        "name": "Previous primary weapon",
+        "mode": "flight",
+        "role": "combat",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "F2"
+          }
+        }
+      },
+      {
+        "id": "PreviousSecondary",
+        "name": "Previous secondary weapon",
+        "mode": "flight",
+        "role": "combat",
+        "required": false
+      },
+      {
+        "id": "PreviousTarget",
+        "name": "Lock previous on-screen enemy",
+        "mode": "flight",
+        "role": "combat",
+        "required": false
+      },
+      {
+        "id": "Primary1",
+        "name": "Equip primary 1",
+        "mode": "flight",
+        "role": "combat",
+        "required": false
+      },
+      {
+        "id": "Primary2",
+        "name": "Equip primary 2",
+        "mode": "flight",
+        "role": "combat",
+        "required": false
+      },
+      {
+        "id": "Primary3",
+        "name": "Equip primary 3",
+        "mode": "flight",
+        "role": "combat",
+        "required": false
+      },
+      {
+        "id": "QuickLoad",
+        "name": "Quick load",
+        "mode": "flight",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "F9"
+          }
+        }
+      },
+      {
+        "id": "QuickSave",
+        "name": "Quick save",
+        "mode": "flight",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "F5"
+          }
+        }
+      },
+      {
+        "id": "Roll.neg",
+        "name": "Roll left",
+        "mode": "flight",
+        "role": "movement",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Q"
+          }
+        }
+      },
+      {
+        "id": "Roll",
+        "name": "Roll right",
+        "mode": "flight",
+        "role": "movement",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "E"
+          }
+        }
+      },
+      {
+        "id": "Scroll",
+        "name": "Scroll down",
+        "mode": "menus",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "PageDown"
+          },
+          "pad": "RS_DOWN"
+        }
+      },
+      {
+        "id": "Scroll.neg",
+        "name": "Scroll up",
+        "mode": "menus",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "PageUp"
+          },
+          "pad": "RS_UP"
+        }
+      },
+      {
+        "id": "ScrollModifier",
+        "name": "Details window scroll modifier",
+        "mode": "menus",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Space"
+          }
+        }
+      },
+      {
+        "id": "Secondary1",
+        "name": "Equip secondary 1",
+        "mode": "flight",
+        "role": "combat",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "F4"
+          }
+        }
+      },
+      {
+        "id": "Secondary2",
+        "name": "Equip secondary 2",
+        "mode": "flight",
+        "role": "combat",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "F5"
+          }
+        }
+      },
+      {
+        "id": "Secondary3",
+        "name": "Equip secondary 3",
+        "mode": "flight",
+        "role": "combat",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "F6"
+          }
+        }
+      },
+      {
+        "id": "SubTabRight.neg",
+        "name": "Left sub tab",
+        "mode": "menus",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Z"
+          },
+          "pad": "LT"
+        }
+      },
+      {
+        "id": "SubTabRight",
+        "name": "Right sub tab",
+        "mode": "menus",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "C"
+          },
+          "pad": "RT"
+        }
+      },
+      {
+        "id": "SwitchCamera",
+        "name": "Switch camera mode",
+        "mode": "flight",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "V"
+          },
+          "pad": "DPAD_DOWN"
+        }
+      },
+      {
+        "id": "TabRight.neg",
+        "name": "Left tab",
+        "mode": "menus",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Q"
+          },
+          "pad": "LB"
+        }
+      },
+      {
+        "id": "TabRight",
+        "name": "Right tab",
+        "mode": "menus",
+        "role": "menu",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "E"
+          },
+          "pad": "RB"
+        }
+      },
+      {
+        "id": "ToggleHUD",
+        "name": "Toggle HUD visibility",
+        "mode": "flight",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "H"
+          }
+        }
+      },
+      {
+        "id": "TrackIRCenter",
+        "name": "Zero TrackIR input",
+        "mode": "flight",
+        "required": false
+      },
+      {
+        "id": "UseConsumable",
+        "name": "Use consumables [HOLD]",
+        "mode": "flight",
+        "role": "ability",
+        "required": false,
+        "native": {
+          "pad": "B"
+        }
+      },
+      {
+        "id": "UseDevice",
+        "name": "Use devices [HOLD]",
+        "mode": "flight",
+        "role": "ability",
+        "required": false,
+        "native": {
+          "pad": "X"
+        }
+      },
+      {
+        "id": "UseShipAbility",
+        "name": "Use ULT",
+        "mode": "flight",
+        "role": "ability",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "G"
+          },
+          "pad": "DPAD_UP"
+        }
+      },
+      {
+        "id": "Yaw.neg",
+        "name": "Yaw left",
+        "mode": "flight",
+        "role": "movement",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Left"
+          },
+          "pad": "RS_LEFT"
+        }
+      },
+      {
+        "id": "Yaw",
+        "name": "Yaw right",
+        "mode": "flight",
+        "role": "movement",
+        "required": false,
+        "native": {
+          "key": {
+            "kind": "key",
+            "code": "Right"
+          },
+          "pad": "RS_RIGHT"
+        }
+      }
+    ],
+    "file": {
+      "format": "unreal-ini"
+    }
+  },
+  "kept": [
+    {
+      "action": "NavigateRight.neg",
+      "set": "keyboard",
+      "text": "Left"
+    },
+    {
+      "action": "NavigateRight",
+      "set": "keyboard",
+      "text": "Right"
+    },
+    {
+      "action": "NavigateUp.neg",
+      "set": "keyboard",
+      "text": "Down"
+    },
+    {
+      "action": "NavigateUp",
+      "set": "keyboard",
+      "text": "Up"
+    },
+    {
+      "action": "OK",
+      "set": "keyboard",
+      "text": "Enter"
+    }
+  ]
+}
