@@ -50,9 +50,11 @@ import {
   Checks,
   DeviceArea,
   DevicesChooser,
+  ModeTabs,
   Panel,
   SchemePicker,
   Unplaced,
+  modeTabId,
 } from './EditorParts';
 import type { PickerActions } from './EditorParts';
 import { RecentGames } from './RecentGames';
@@ -98,6 +100,9 @@ type Load =
   | { kind: 'gone' }
   | { kind: 'no-game' }
   | { kind: 'failed' };
+
+/** The id of what the mode tabs show: the units, the checks and the side panel. */
+const MODE_PANEL = 'ed-mode-panel';
 
 const PRESS_WORD: Record<Press, string> = { tap: 'tap', long: 'long press', double: 'double tap' };
 
@@ -452,22 +457,6 @@ function EditorBody({
               </div>
             </div>
           )}
-          {view?.showModeTabs === true && (
-            <div className="ed-seg" role="tablist" aria-label="Mode">
-              {view.modes.map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={m.active}
-                  className="ed-seg-btn"
-                  onClick={() => move((p) => navigate.mode(p, m.id))}
-                >
-                  {m.name}
-                </button>
-              ))}
-            </div>
-          )}
           <div className="ed-spacer" />
           <button
             type="button"
@@ -554,95 +543,119 @@ function EditorBody({
             This scheme can&apos;t be drawn: {'error' in planned ? planned.error : ''}
           </p>
         ) : (
-          <div className="ed-body" ref={bodyRef}>
-            <section className="ed-main" aria-label="Devices and checks" ref={mainRef}>
-              <DeviceArea
-                view={view}
-                width={mainWidth}
-                selected={selected}
-                onSelect={select}
-                onDropAction={dropOn}
-              />
-              <Checks
-                view={view}
-                onFix={(row) => row.fix && applyFix(row.fix)}
-                onKeep={(row) => edit((s) => acceptFinding(s, row.finding))}
-                onFlag={(row) => edit((s) => unacceptFinding(s, row.finding))}
-                onFixAll={(group) => group.fix && applyFix(group.fix)}
-                onKeepAll={(group) =>
-                  edit((s) => group.rows.reduce((x, row) => acceptFinding(x, row.finding), s))
-                }
-                onShow={(row) => revealAt(findingLocation(row.finding), scheme)}
-              />
-            </section>
-            {inspector && (
-              <aside
-                className="ed-side"
-                aria-label="Button and actions"
-                style={{ width: `${sidePanelWidth(bodyWidth ?? window.innerWidth)}px` }}
-              >
-                {open !== null ? (
-                  <ActionPicker
-                    key={`${open.control}|${open.press}`}
-                    view={view}
-                    scheme={scheme}
-                    game={game}
-                    mode={mode}
-                    modeName={modeName}
-                    onPick={(id) => {
-                      place(open.control, id, open.press);
-                      move(navigate.pickDone);
-                    }}
-                    onClose={() => move(navigate.pickDone)}
-                  />
-                ) : view.panel === null ? (
-                  <div className="ed-pick">
-                    <h2 className="ed-pick-title">Pick a {view.controlWord}</h2>
-                    <p className="ed-hint">
-                      Click one, then click an action below, or drag an action onto a{' '}
-                      {view.controlWord}. Drag a {view.controlWord}&apos;s action onto another to
-                      move it.
-                    </p>
-                  </div>
-                ) : (
-                  <Panel
-                    panel={view.panel}
-                    onClose={() => move(navigate.close)}
-                    onMode={(m) => move((p) => navigate.mode(p, m))}
-                    onTarget={(which) => move((p) => navigate.target(p, which))}
-                    onChoose={(which) => move((p) => navigate.choose(p, which))}
-                    onClear={(which) =>
-                      edit((s) =>
-                        clear(s, { mode, control: view.panel?.control ?? '', press: which }),
-                      )
-                    }
-                    onTurbo={(on) => edit((s) => setTurbo(s, view.panel?.control ?? '', on))}
-                    onLatch={(on) => edit((s) => setLatch(s, view.panel?.control ?? '', on))}
-                    onPad={(pad) =>
-                      edit((s) => setPadControl(s, view.panel?.control ?? '', pad, game))
-                    }
-                    onKeyLabel={(text) =>
-                      edit((s) => setKeyLabel(s, mode, view.panel?.control ?? '', text))
-                    }
-                  />
-                )}
-                {open === null && (
-                  <Unplaced
-                    view={view}
-                    modeName={modeName}
-                    prompt={
-                      canPlace && view.panel
-                        ? `Click an action to put it on ${view.panel.where}, ${PRESS_WORD[target]}.`
-                        : null
-                    }
-                    onPlace={(id) => {
-                      if (selected !== undefined && canPlace) place(selected, id, target);
-                    }}
-                  />
-                )}
-              </aside>
-            )}
-          </div>
+          <>
+            {/* The game's modes above the units; what is under them is the mode's (a tabpanel). */}
+            <ModeTabs
+              view={view}
+              panelId={MODE_PANEL}
+              onMode={(m) => move((p) => navigate.mode(p, m))}
+            />
+            <div
+              className="ed-body"
+              ref={bodyRef}
+              {...(view.showModeTabs
+                ? {
+                    role: 'tabpanel',
+                    id: MODE_PANEL,
+                    'aria-labelledby': modeTabId(
+                      MODE_PANEL,
+                      Math.max(
+                        0,
+                        view.modes.findIndex((m) => m.active),
+                      ),
+                    ),
+                  }
+                : {})}
+            >
+              <section className="ed-main" aria-label="Devices and checks" ref={mainRef}>
+                <DeviceArea
+                  view={view}
+                  width={mainWidth}
+                  selected={selected}
+                  onSelect={select}
+                  onDropAction={dropOn}
+                />
+                <Checks
+                  view={view}
+                  onFix={(row) => row.fix && applyFix(row.fix)}
+                  onKeep={(row) => edit((s) => acceptFinding(s, row.finding))}
+                  onFlag={(row) => edit((s) => unacceptFinding(s, row.finding))}
+                  onFixAll={(group) => group.fix && applyFix(group.fix)}
+                  onKeepAll={(group) =>
+                    edit((s) => group.rows.reduce((x, row) => acceptFinding(x, row.finding), s))
+                  }
+                  onShow={(row) => revealAt(findingLocation(row.finding), scheme)}
+                />
+              </section>
+              {inspector && (
+                <aside
+                  className="ed-side"
+                  aria-label="Button and actions"
+                  style={{ width: `${sidePanelWidth(bodyWidth ?? window.innerWidth)}px` }}
+                >
+                  {open !== null ? (
+                    <ActionPicker
+                      key={`${open.control}|${open.press}`}
+                      view={view}
+                      scheme={scheme}
+                      game={game}
+                      mode={mode}
+                      modeName={modeName}
+                      onPick={(id) => {
+                        place(open.control, id, open.press);
+                        move(navigate.pickDone);
+                      }}
+                      onClose={() => move(navigate.pickDone)}
+                    />
+                  ) : view.panel === null ? (
+                    <div className="ed-pick">
+                      <h2 className="ed-pick-title">Pick a {view.controlWord}</h2>
+                      <p className="ed-hint">
+                        Click one, then click an action below, or drag an action onto a{' '}
+                        {view.controlWord}. Drag a {view.controlWord}&apos;s action onto another to
+                        move it.
+                      </p>
+                    </div>
+                  ) : (
+                    <Panel
+                      panel={view.panel}
+                      onClose={() => move(navigate.close)}
+                      onMode={(m) => move((p) => navigate.mode(p, m))}
+                      onTarget={(which) => move((p) => navigate.target(p, which))}
+                      onChoose={(which) => move((p) => navigate.choose(p, which))}
+                      onClear={(which) =>
+                        edit((s) =>
+                          clear(s, { mode, control: view.panel?.control ?? '', press: which }),
+                        )
+                      }
+                      onTurbo={(on) => edit((s) => setTurbo(s, view.panel?.control ?? '', on))}
+                      onLatch={(on) => edit((s) => setLatch(s, view.panel?.control ?? '', on))}
+                      onPad={(pad) =>
+                        edit((s) => setPadControl(s, view.panel?.control ?? '', pad, game))
+                      }
+                      onKeyLabel={(text) =>
+                        edit((s) => setKeyLabel(s, mode, view.panel?.control ?? '', text))
+                      }
+                    />
+                  )}
+                  {open === null && (
+                    <Unplaced
+                      view={view}
+                      modeName={modeName}
+                      prompt={
+                        canPlace && view.panel
+                          ? `Click an action to put it on ${view.panel.where}, ${PRESS_WORD[target]}.`
+                          : null
+                      }
+                      onPlace={(id) => {
+                        if (selected !== undefined && canPlace) place(selected, id, target);
+                      }}
+                    />
+                  )}
+                </aside>
+              )}
+            </div>
+          </>
         )}
       </div>
     </Tooltip.Provider>

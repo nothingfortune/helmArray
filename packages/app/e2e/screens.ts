@@ -1,10 +1,10 @@
 // What the specs share: the places on the M4 screens, and the steps that get to them.
 import AxeBuilder from '@axe-core/playwright';
-import { readdir } from 'node:fs/promises';
+import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Locator, Page } from '@playwright/test';
 import { expect } from './helm';
-import type { Helm } from './helm';
+import type { Helm, Seed } from './helm';
 
 export const AZERON_APP = 'Azeron Software.exe';
 export const CLOSE_AZERON_FIRST = 'Close the Azeron app first: it talks to the units too.';
@@ -328,3 +328,46 @@ export function fontProbe(page: Page, family: string, weight: number): Promise<F
     [family, weight] as const,
   );
 }
+
+const ELITE_BINDS = new URL(
+  '../../../reference/game-files/elite-Custom.4.1.binds',
+  import.meta.url,
+);
+export const ELITE_APP_ID = '359320';
+
+/** Where Elite keeps the player's own bindings, in a run folder (standing for %LOCALAPPDATA%). */
+export const eliteBinds = (dataDir: string): string =>
+  join(dataDir, 'local', 'Frontier Developments', 'Elite Dangerous', 'Options', 'Bindings');
+
+/**
+ * Steam lists Elite, and the player's own bindings (a copy of reference/game-files) are where the
+ * game keeps them, named by its StartPreset: its 14 modes come from that file.
+ */
+export const eliteSeed: Seed = {
+  files: async (dataDir) => {
+    const bindings = eliteBinds(dataDir);
+    await mkdir(bindings, { recursive: true });
+    await writeFile(join(bindings, 'Custom.4.1.binds'), await readFile(ELITE_BINDS));
+    await writeFile(join(bindings, 'StartPreset.4.start'), 'Custom\r\nCustom\r\nCustom\r\nCustom');
+    await writeFile(
+      join(dataDir, 'steam', 'steamapps', `appmanifest_${ELITE_APP_ID}.acf`),
+      `"AppState"\n{\n\t"appid"\t\t"${ELITE_APP_ID}"\n\t"name"\t\t"Elite Dangerous"\n\t"installdir"\t\t"Elite Dangerous"\n}\n`,
+    );
+  },
+};
+
+/**
+ * Opens Elite in the Editor on a scheme made from its tile by `preset`: the drawer that opens on
+ * it is cancelled, as `startFrom` does for Helldivers 2. The Ship tab is shown.
+ */
+export async function startElite(page: Page, preset: 'Xbox controller' | "Game's own keys") {
+  await page.getByRole('button', { name: /^Elite Dangerous\. / }).click();
+  await page.getByRole('button', { name: preset }).click();
+  await expect(drawer(page)).toBeVisible();
+  await drawer(page).getByRole('button', { name: 'Cancel' }).click();
+  await expect(drawer(page)).toHaveCount(0);
+  await expect(page.getByRole('tab', { name: 'Ship' })).toHaveAttribute('aria-selected', 'true');
+}
+
+/** The Editor's mode tabs. */
+export const modeTabs = (page: Page): Locator => page.getByRole('tablist', { name: 'Modes' });

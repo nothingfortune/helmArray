@@ -83,3 +83,9 @@ and has not drawn them on the canvas yet:
   what it sends), and the action list has an *On the stick* group for the actions a stick does.
 - **J1 from a preset** opens the Apply drawer straight away when the new scheme has nothing to
   fix (the owner, 2026-11-24): tile, preset, the drawer's Apply.
+- **The mode tabs** are a row of their own under the Editor's bar, above the units and the side
+  panel, drawn as the Main board's tabs (14 px, the one shown in the text colour with the amber
+  line under it). The Editor board puts three in the bar; Elite has 14, which wrap to a second row
+  at 1280 px rather than hide any. They take height, never the units' width. A game of one mode
+  shows none. The checks of the mode shown come first, then the other modes' (each sentence names
+  its mode).

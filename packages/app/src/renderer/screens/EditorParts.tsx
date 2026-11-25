@@ -2,9 +2,18 @@
 // Scheme picker and device chooser, the device area, the checks, the side panel and the actions not
 // on a button yet. Each draws what it is given and says what was asked of it; the Editor owns the
 // state. Pure enough to be drawn in a test without a window.
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Popover } from 'radix-ui';
-import type { AzeronUse, ControlId, Game, PadControl, Press, Role, Scheme } from '@helmarray/core';
+import type {
+  AzeronUse,
+  ControlId,
+  Game,
+  ModeId,
+  PadControl,
+  Press,
+  Role,
+  Scheme,
+} from '@helmarray/core';
 import type { Preset } from '../../shared/api';
 import { Controller, Keyboard, Mouse } from '../devices/Devices';
 import { dragAction } from '../devices/drag';
@@ -25,6 +34,59 @@ import { findingLocation } from './reveal';
 import { roleColour } from './role-words';
 import { MOUSE_WIDTH, keyboardRow, unitRow } from './editor-layout';
 import { KEYBOARD_WIDTH } from '../devices/layouts';
+import { tabKeyTarget } from './mode-tabs';
+
+/** The id of a mode tab, by its place among them, for the panel it shows to be named by it. */
+export const modeTabId = (panelId: string, index: number): string => `${panelId}-tab-${index}`;
+
+/**
+ * The game's modes as tabs above the units: a tablist, where the arrows, Home and End move along
+ * the tabs and the mode gone to is shown at once (mode-tabs.ts). Only the mode shown is a Tab
+ * stop. Nothing for a game of one mode. `panelId`: what they show (the units, the checks and the
+ * side panel).
+ */
+export function ModeTabs({
+  view,
+  panelId,
+  onMode,
+}: {
+  view: Pick<EditorView, 'showModeTabs' | 'modes'>;
+  panelId: string;
+  onMode(mode: ModeId): void;
+}) {
+  const tabs = useRef<(HTMLButtonElement | null)[]>([]);
+  if (!view.showModeTabs) return null;
+  return (
+    <div className="ed-modes" role="tablist" aria-label="Modes">
+      {view.modes.map((m, i) => (
+        <button
+          key={m.id}
+          ref={(el) => {
+            tabs.current[i] = el;
+          }}
+          role="tab"
+          id={modeTabId(panelId, i)}
+          type="button"
+          className="ed-mode"
+          aria-selected={m.active}
+          aria-controls={panelId}
+          tabIndex={m.active ? 0 : -1}
+          onClick={() => onMode(m.id)}
+          onKeyDown={(e) => {
+            const to = tabKeyTarget(e.key, i, view.modes.length);
+            const next = to === null ? undefined : view.modes[to];
+            if (to === null || next === undefined) return;
+            e.preventDefault();
+            onMode(next.id);
+            tabs.current[to]?.focus();
+          }}
+        >
+          {m.name}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 export function BackLink({ onBack }: { onBack(): void }) {
   return (

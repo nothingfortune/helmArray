@@ -95,6 +95,7 @@ export default {
     'packages/app/src/renderer/screens/recent-games.ts',
     'packages/app/src/renderer/screens/reveal.ts', // where the Editor goes after an action
     'packages/app/src/renderer/screens/action-picker.ts', // the action picker's search and groups
+    'packages/app/src/renderer/screens/mode-tabs.ts', // the mode tabs' keys
     'packages/app/src/renderer/screens/offer-work.ts', // the fix offers, worked out after the draw
     'packages/app/src/renderer/screens/offer-slices.ts',
     'packages/app/src/renderer/apply/applyFlow.ts',

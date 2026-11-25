@@ -14,7 +14,7 @@
   flex: none;
 }
 
-/* The bar under the header: game, scheme, mode tabs, Keys / Controller, Apply. */
+/* The bar under the header: game, scheme, devices, Keys / Controller, Apply. */
 .ed-bar {
   display: flex;
   flex-wrap: wrap;
@@ -22,6 +22,37 @@
   gap: var(--space-16);
   padding: var(--space-12) var(--space-24);
   border-bottom: 1px solid var(--color-raised);
+}
+
+/* The game's modes, as tabs above the units: the Main board's tabs (14 px, the one shown in the
+   text colour with the amber line under it). A row of their own, not in the bar: Elite has 14, so
+   they wrap to a second row rather than hide any. They take height, never the units' width. */
+.ed-modes {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: var(--space-24);
+  padding: 0 var(--space-24);
+  border-bottom: 1px solid var(--color-raised);
+}
+.ed-mode {
+  height: 40px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-muted);
+  font: 600 14px var(--font-read);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.ed-mode:hover {
+  color: var(--color-secondary);
+}
+.ed-mode[aria-selected='true'] {
+  color: var(--color-text);
+  box-shadow: inset 0 -2px 0 var(--color-accent);
+}
+.ed-mode:focus-visible {
+  outline-offset: -2px;
 }
 .ed-back {
   display: inline-flex;

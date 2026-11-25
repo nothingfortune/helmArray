@@ -49,6 +49,72 @@ describe('modes', () => {
     const one = editorView({ scheme, game: single, plan: plan(scheme, game), mode: 'ship' });
     expect(one.showModeTabs).toBe(false);
   });
+
+  // Frame shift drive is required in Ship, Jump (made required here) in SRV, and Walk in a third
+  // mode, On foot: all three off their buttons.
+  const both: Game = {
+    ...game,
+    modes: [...game.modes, { id: 'foot', name: 'On foot' }],
+    actions: [
+      ...game.actions.map((a) => ({ ...a, required: a.id === 'fsd' || a.id === 'jump' })),
+      { id: 'walk', name: 'Walk', mode: 'foot', role: 'movement', required: true },
+    ],
+  };
+  const bare = (): Scheme => ({
+    ...keysScheme(),
+    map: { ship: { 'L.index_1': { tap: 'boost' } }, srv: {} },
+  });
+  const checksIn = (mode: string) =>
+    editorView({ scheme: bare(), game: both, plan: plan(bare(), both), mode }).checks.map((c) =>
+      c.kind === 'row' ? c.row.finding.action : c.rule,
+    );
+
+  it("lists the checks of the mode shown first, then the other modes' as they come", () => {
+    expect({ ship: checksIn('ship'), srv: checksIn('srv'), foot: checksIn('foot') }).toEqual({
+      ship: ['fsd', 'jump', 'walk'],
+      srv: ['jump', 'fsd', 'walk'],
+      foot: ['walk', 'fsd', 'jump'],
+    });
+  });
+
+  it('keeps a check of the whole setup with those of the mode shown, ahead of other modes’', () => {
+    // A latched movement button: about a control, in no mode. Kept with the mode shown's.
+    const latched = setLatch(bare(), 'L.index_1', true);
+    const rules = (mode: string) =>
+      editorView({ scheme: latched, game: both, plan: plan(latched, both), mode }).checks.map(
+        (c) => (c.kind === 'row' ? `${c.row.finding.rule} ${c.row.finding.mode ?? '-'}` : c.rule),
+      );
+    expect(rules('srv')).toEqual([
+      'missing-required srv',
+      'hold-on-movement -',
+      'missing-required ship',
+      'missing-required foot',
+    ]);
+  });
+
+  it("shows each mode's own actions on the buttons and in the list of those on none", () => {
+    const names = (mode: string) => {
+      const v = editorView({ scheme: bare(), game: both, plan: plan(bare(), both), mode });
+      return {
+        keys: Object.values(v.left.keys).map((k) => k.label),
+        unplaced: v.lists.flatMap((l) => l.actions.map((a) => a.name)),
+      };
+    };
+    expect({ ship: names('ship'), srv: names('srv') }).toEqual({
+      ship: {
+        keys: ['Boost'],
+        unplaced: [
+          'Fire',
+          'Frame shift drive',
+          'Galaxy map',
+          'Hardpoints',
+          'Landing gear',
+          'Silent running',
+        ],
+      },
+      srv: { keys: [], unplaced: ['Jump', 'SRV lights', 'Fire (SRV)'] },
+    });
+  });
 });
 
 describe('unit keys', () => {
