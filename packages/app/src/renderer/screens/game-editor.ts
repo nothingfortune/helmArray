@@ -32,6 +32,7 @@ import {
 import type { Reserved } from './game-model';
 import { plainReason, runMake } from './libraryFlow';
 import { presetChoices } from './libraryView';
+import { Saves } from './saves';
 import type { PresetChoice } from './libraryView';
 
 /** What the screen waits for a press of: an action's default key, or its controller button. */
@@ -122,6 +123,11 @@ export class GameEditor {
   private readonly uses: readonly ActionUse[];
   /** Whether *Read from the game's file* is offered. */
   readonly readsFile: boolean;
+  /** What main has taken of the game: a refused save goes back to it. */
+  private readonly saves: Saves<Game>;
+  /** A read that moved ids is being saved: nothing else changes the game until main answers. */
+  private savingRead = false;
+  private readonly loaded: Loaded;
 
   constructor(
     loaded: Loaded,
@@ -147,6 +153,8 @@ export class GameEditor {
     this.taken = loaded.taken ?? [];
     this.reserved = loaded.reserved ?? { modes: [], actions: [] };
     this.uses = loaded.uses ?? [];
+    this.saves = new Saves(loaded.game);
+    this.loaded = loaded;
   }
 
   get state(): GameEditorState {
@@ -226,11 +234,34 @@ export class GameEditor {
       if (field === NAME_FIELD) return;
       game = this.settleId(game);
     }
+    const n = this.saves.send();
     this.api.saveGame(game).then(
-      () => this.set({ saved: true, edited: this.builtIn, saveError: null }),
-      (error: unknown) =>
-        this.set({ saveError: `Couldn't save the game. ${plainReason(error)}`.trim() }),
+      () => {
+        this.saves.took(n, game);
+        this.set({ saved: true, edited: this.builtIn, saveError: null });
+      },
+      (error: unknown) => {
+        // Main refused it: the screen goes back to the game main has, never keeps what it refused.
+        const back = this.saves.refused(n);
+        if (back === null) return;
+        this.goBack(
+          back,
+          `That change couldn't be saved, so it was undone. ${plainReason(error)}`.trim(),
+        );
+      },
     );
+  }
+
+  /** Back to `game`, the one main has, with a fresh history: what main refused is gone. */
+  private goBack(game: Game, sentence: string): void {
+    if (game === this.loaded.game) this.fresh = !this.loaded.saved && this.loaded.found !== true;
+    this.lastField = null;
+    this.dropStaleRead();
+    this.set({
+      history: startHistory(game),
+      modesShown: showsModes(game),
+      saveError: sentence,
+    });
   }
 
   /**
@@ -257,6 +288,7 @@ export class GameEditor {
 
   /** An edit: into the history, and saved. `field` names a text field, so typing is one step. */
   readonly edit = (fn: (game: Game) => Game, field: string | null = null): void => {
+    if (this.savingRead) return;
     const before = this.current.history;
     const next = fn(before.present);
     if (next === before.present) return;
@@ -271,6 +303,7 @@ export class GameEditor {
   };
 
   private travel(step: (h: History<Game>) => History<Game>): void {
+    if (this.savingRead) return;
     const history = step(this.current.history);
     if (history === this.current.history) return;
     this.dropStaleRead();
@@ -384,27 +417,48 @@ export class GameEditor {
   /**
    * The one button under the list: the merged game is the next edit (undo takes it back). One in
    * which actions of yours took the file's ids is saved with them, for main to follow everywhere
-   * (`saveFileRead`), and the history starts again from it: an undo would bring back ids the
-   * setups no longer name.
+   * (`saveFileRead`), and taken here only once main has saved it: the history then starts again
+   * from it (an undo would bring back ids the setups no longer name). Until main answers nothing
+   * else changes the game; if main refuses it, the game and its history stay as they were, and the
+   * list says why in one sentence.
    */
   readonly takeFile = (): void => {
     const read = this.current.fileRead;
-    if (read === null || read === 'reading' || read.kind !== 'changes') return;
+    if (read === null || read === 'reading' || read.kind !== 'changes' || this.savingRead) return;
     if (read.moves.length === 0) {
       this.set({ fileRead: null });
       this.edit(() => read.game);
       return;
     }
-    this.lastField = null;
-    this.set({
-      fileRead: null,
-      history: startHistory(read.game),
-      modesShown: showsModes(read.game),
-    });
+    this.savingRead = true;
+    this.set({ busy: true });
+    const n = this.saves.send();
     this.api.saveFileRead(read.game, read.moves).then(
-      () => this.set({ saved: true, edited: this.builtIn, saveError: null }),
-      (error: unknown) =>
-        this.set({ saveError: `Couldn't save the game. ${plainReason(error)}`.trim() }),
+      () => {
+        this.saves.took(n, read.game);
+        this.savingRead = false;
+        this.lastField = null;
+        this.set({
+          busy: false,
+          fileRead: null,
+          history: startHistory(read.game),
+          modesShown: showsModes(read.game),
+          saved: true,
+          edited: this.builtIn,
+          saveError: null,
+        });
+      },
+      (error: unknown) => {
+        this.savingRead = false;
+        this.set({
+          busy: false,
+          fileRead: {
+            kind: 'failed',
+            message:
+              `What was read from the game's file wasn't saved, so nothing changed. ${plainReason(error)}`.trim(),
+          },
+        });
+      },
     );
   };
 

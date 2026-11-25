@@ -737,6 +737,93 @@ describe('Everspace 2 typed in on the Game screen, used, then read from its file
   });
 });
 
+describe("a read that moves ids, when main can't save every file it names", () => {
+  let world: World;
+  let typed: Game;
+  let scheme: Scheme;
+
+  /** Everspace 2 typed in on the Game screen, Boost on G, and a scheme of its own keys made. */
+  beforeAll(async () => {
+    world = await World.create({ steam: STEAM });
+    await placeFiles(world);
+    await world.boot();
+    typed = newGame('Everspace 2', [], 1128920);
+    typed = addAction(typed, 'default', 'Boost [HOLD]').game;
+    typed = setDefaultKey(typed, 'boost_hold', { kind: 'key', code: 'G' });
+    await world.helm.saveGame(typed);
+    await world.idle();
+    scheme = await world.helm.createScheme(typed.id, 'keys');
+    await world.app.data.flush();
+  });
+
+  afterAll(async () => {
+    await world.dispose();
+  });
+
+  /** The read as the Game screen merges it. */
+  const read = async () => {
+    const got = await world.helm.readGameFile(typed.id);
+    if (!got.ok) throw new Error(got.message);
+    return mergeHarvest(typed, got.file, got.held, usesOf([scheme]));
+  };
+  const savedGame = async () =>
+    JSON.parse(await readFile(join(world.dataDir, 'games', `${typed.id}.json`), 'utf8')) as Game;
+
+  it("is refused while what the game holds was saved by a newer helmArray; the game's next save keeps its own ids, and the scheme still finds Boost", async () => {
+    const sheets = join(world.dataDir, 'sheets.json');
+    const before = await readFile(sheets, 'utf8').catch(() => null);
+    await writeFile(sheets, JSON.stringify({ schemaVersion: 999, games: [] }));
+    const { game, moves } = await read();
+    const refused = await world.helm.saveFileRead(game, moves).then(
+      () => null,
+      (error: unknown) => String(error),
+    );
+    // As the Game screen does then: the game it still has, renamed.
+    await world.helm.saveGame({ ...typed, name: 'Everspace 2 (mine)' });
+    await world.app.data.flush();
+    const plan = await world.planOf(await world.scheme(scheme.id));
+    if (before === null) await rm(sheets);
+    else await writeFile(sheets, before);
+    expect({
+      refused: refused?.includes('sheets.json was left as it was') ?? false,
+      ids: (await savedGame()).actions.map((a) => a.id),
+      gone: plan.findings.filter((f) => f.rule === 'action-deleted'),
+    }).toEqual({ refused: true, ids: ['boost_hold'], gone: [] });
+  });
+
+  it('is refused while one of its schemes was saved by a newer helmArray, and nothing is written', async () => {
+    const file = join(world.dataDir, 'schemes', `${scheme.id}.json`);
+    const text = await readFile(file, 'utf8');
+    await writeFile(file, JSON.stringify({ ...JSON.parse(text), schemaVersion: 999 }));
+    const gameBefore = await readFile(join(world.dataDir, 'games', `${typed.id}.json`), 'utf8');
+    const { game, moves } = await read();
+    const refused = await world.helm.saveFileRead(game, moves).then(
+      () => null,
+      (error: unknown) => String(error),
+    );
+    await world.app.data.flush();
+    const gameAfter = await readFile(join(world.dataDir, 'games', `${typed.id}.json`), 'utf8');
+    await writeFile(file, text);
+    expect([
+      refused?.includes(`schemes/${scheme.id}.json was left as it was`) ?? false,
+      gameAfter === gameBefore,
+    ]).toEqual([true, true]);
+  });
+
+  it("refuses to delete the game while one of its schemes can't be read, and deletes nothing", async () => {
+    const file = join(world.dataDir, 'schemes', `${scheme.id}.json`);
+    const text = await readFile(file, 'utf8');
+    await writeFile(file, JSON.stringify({ ...JSON.parse(text), schemaVersion: 999 }));
+    const refused = await world.helm.deleteGame(typed.id).then(
+      () => false,
+      () => true,
+    );
+    const still = (await world.helm.listGames()).some((e) => e.game.id === typed.id);
+    await writeFile(file, text);
+    expect([refused, still]).toEqual([true, true]);
+  });
+});
+
 describe('Everspace 2 installed, with no Input.ini saved yet', () => {
   let world: World;
   let library: LibraryEntry[];

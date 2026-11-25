@@ -476,6 +476,59 @@ test.describe('Everspace 2 typed in on the Game screen, then read from its file'
   });
 });
 
+test.describe("Everspace 2 typed in on the Game screen, read when main can't save the read", () => {
+  test.use({ helmSeed: steamOnly });
+
+  test('the screen keeps the game it has and says why; a later rename saves its own ids', async ({
+    helm,
+  }) => {
+    const { page } = helm;
+    const saved = async () => {
+      const [file] = await readdir(join(helm.dataDir, 'games')).catch(() => [] as string[]);
+      return JSON.parse(
+        file === undefined ? '{}' : await readFile(join(helm.dataDir, 'games', file), 'utf8'),
+      ) as { name?: string; actions?: { id: string; mode: string }[] };
+    };
+    await page.getByRole('button', { name: 'Set up EVERSPACE™ 2' }).click();
+    const field = page.getByRole('textbox', { name: 'New action' });
+    await field.fill('Boost [HOLD]');
+    await field.press('Enter');
+    await page.keyboard.press('g');
+    await expect(page.getByRole('button', { name: 'Boost [HOLD], key: G' })).toBeVisible();
+    await expect
+      .poll(async () => (await saved()).actions?.map((a) => a.id))
+      .toEqual(['boost_hold']);
+    // The game's file appears; what the game holds was saved by a newer helmArray.
+    const ini = iniOf(helm.dataDir);
+    await mkdir(join(ini, '..'), { recursive: true });
+    await writeFile(ini, await readFile(REFERENCE));
+    await writeFile(
+      join(helm.dataDir, 'sheets.json'),
+      JSON.stringify({ schemaVersion: 999, games: [] }),
+    );
+    await page.getByRole('button', { name: 'Library' }).click();
+    await page.getByRole('button', { name: 'Edit actions: EVERSPACE™ 2' }).click();
+    await page.getByRole('button', { name: "Read from the game's file" }).click();
+    const found = page.getByRole('region', { name: "From the game's file" });
+    await found.getByRole('button', { name: 'Save these changes' }).click();
+    await expect(page.getByRole('alert', { name: "From the game's file" })).toContainText(
+      "What was read from the game's file wasn't saved, so nothing changed.",
+    );
+    // Still the game it had: Boost in Default, nothing from the file.
+    await expect(page.getByRole('button', { name: 'Boost [HOLD], key: G' })).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Flight' })).toHaveCount(0);
+    // A rename saves the game as it is here: its own ids.
+    await page.getByRole('textbox', { name: 'Game name' }).fill('Everspace 2 (mine)');
+    await page.getByRole('textbox', { name: 'Game name' }).press('Enter');
+    await expect
+      .poll(async () => {
+        const game = await saved();
+        return [game.name, game.actions?.map((a) => [a.id, a.mode])];
+      })
+      .toEqual(['Everspace 2 (mine)', [['boost_hold', 'default']]]);
+  });
+});
+
 /** Steam lists Everspace 2, which hasn't saved an Input.ini yet: no control changed in its menu. */
 const noIniYet: Seed = {
   files: async (dataDir) => {

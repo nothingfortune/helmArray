@@ -91,6 +91,7 @@ export default {
     'packages/app/src/renderer/screens/editor-view.ts',
     'packages/app/src/renderer/screens/libraryView.ts',
     'packages/app/src/renderer/screens/libraryFlow.ts',
+    'packages/app/src/renderer/screens/saves.ts', // a screen never keeps what main refused
     'packages/app/src/renderer/screens/fixes.ts', // the checks' fix buttons
     'packages/app/src/renderer/screens/check-groups.ts',
     'packages/app/src/renderer/screens/recent-games.ts',

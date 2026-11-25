@@ -113,7 +113,7 @@ describe('an edit', () => {
     expect(editor.state.edited).toBe(false);
   });
 
-  it('says so in one sentence when main refuses the save', async () => {
+  it('says so in one sentence when main refuses the save, and undoes what it refused', async () => {
     const { editor } = open(
       rover,
       {},
@@ -128,7 +128,10 @@ describe('an edit', () => {
     );
     editor.edit((g) => renameGame(g, 'Mine'));
     await settle();
-    expect(editor.state.saveError).toBe("Couldn't save the game. The disk is full.");
+    expect([editor.state.saveError, editor.game.name]).toEqual([
+      "That change couldn't be saved, so it was undone. The disk is full.",
+      'Rover',
+    ]);
   });
 
   it('clears that sentence once a save goes through', async () => {
@@ -645,6 +648,51 @@ describe('the wait and the question belong to the mode shown: every move ends th
   });
 });
 
+describe('an edit main refuses', () => {
+  const refusing = (after: number) => {
+    let n = 0;
+    return api({
+      saveGame: () =>
+        ++n > after
+          ? Promise.reject(new Error('saveGame: the game needs a name.'))
+          : Promise.resolve(),
+    });
+  };
+
+  it('is undone, back to the game main took last, and says so in one sentence', async () => {
+    const { editor } = open(rover, {}, refusing(1));
+    editor.edit((g) => renameGame(g, 'Rover 2'));
+    editor.edit((g) => renameGame(g, 'Rover 3'));
+    await settle();
+    expect([editor.game.name, editor.state.saveError]).toEqual([
+      'Rover 2',
+      "That change couldn't be saved, so it was undone. saveGame: the game needs a name.",
+    ]);
+  });
+
+  it('goes back to the game as it opened when main took nothing', async () => {
+    const { editor } = open(rover, {}, refusing(0));
+    editor.edit((g) => renameGame(g, 'Rover 2'));
+    await settle();
+    expect(editor.game).toEqual(rover);
+  });
+
+  it('waits while a later edit may still be saved', async () => {
+    let n = 0;
+    const { editor } = open(
+      rover,
+      {},
+      api({
+        saveGame: () => (++n === 1 ? Promise.reject(new Error('busy')) : Promise.resolve()),
+      }),
+    );
+    editor.edit((g) => renameGame(g, 'Rover 2'));
+    editor.edit((g) => renameGame(g, 'Rover 3'));
+    await settle();
+    expect([editor.game.name, editor.state.saveError]).toEqual(['Rover 3', null]);
+  });
+});
+
 describe("reading the game's own file", () => {
   /** Rover as its file has it now: Jump moved to J, and a new action. */
   const fileRover: Game = {
@@ -819,6 +867,7 @@ describe("reading the game's own file into a game typed in on the Game screen", 
     const before = editor.state.modesShown;
     await editor.readFile();
     editor.takeFile();
+    await settle();
     expect([before, editor.state.modesShown]).toEqual([false, true]);
   });
 
@@ -845,24 +894,70 @@ describe("reading the game's own file into a game typed in on the Game screen", 
     ]);
   });
 
-  it("can't be undone: the setups already follow the file's ids", async () => {
+  it("can't be undone once main has saved it: the setups already follow the file's ids", async () => {
     const { editor } = open(rover, { readsFile: true }, reads());
     editor.edit((g) => renameGame(g, 'Rover 2'));
     await editor.readFile();
     editor.takeFile();
+    await settle();
     expect([editor.canUndo, editor.canRedo]).toEqual([false, false]);
   });
 
-  it('says when that save fails', async () => {
-    const { editor } = open(
+  it("isn't taken until main has saved it: nothing changes here, and edits wait, meanwhile", async () => {
+    let finish = (): void => undefined;
+    const { editor, calls } = open(
       rover,
       { readsFile: true },
-      reads({ saveFileRead: () => Promise.reject(new Error('sheets.json was left as it was')) }),
+      reads({ saveFileRead: () => new Promise<void>((done) => (finish = done)) }),
     );
     await editor.readFile();
     editor.takeFile();
+    editor.edit((g) => renameGame(g, 'Rover 2'));
+    const during = [editor.game, editor.state.busy, calls.saveGame.mock.calls.length];
+    finish();
     await settle();
-    expect(editor.state.saveError).toBe("Couldn't save the game. sheets.json was left as it was");
+    expect([during, editor.game.actions.map((a) => a.id), editor.state.busy]).toEqual([
+      [rover, true, 0],
+      ['Jump'],
+      false,
+    ]);
+  });
+
+  it("keeps the game and its history when main refuses it, says so, and a later edit saves the game's own ids (Codex's case)", async () => {
+    const { editor, calls } = open(
+      rover,
+      { readsFile: true },
+      reads({
+        saveFileRead: () =>
+          Promise.reject(
+            new Error(
+              "Error invoking remote method 'helm:save-file-read': StoreError: sheets.json was left as it was: This list of bindings to set in the game was saved by a newer helmArray. Update helmArray to open it.",
+            ),
+          ),
+      }),
+    );
+    editor.edit((g) => renameGame(g, 'Rover 2'));
+    await editor.readFile();
+    editor.takeFile();
+    await settle();
+    const after = {
+      game: editor.game,
+      canUndo: editor.canUndo,
+      read: editor.state.fileRead,
+    };
+    editor.edit((g) => renameGame(g, 'Rover 3'));
+    expect([after, calls.saveGame.mock.calls.at(-1)?.[0]?.actions.map((a) => a.id)]).toEqual([
+      {
+        game: { ...rover, name: 'Rover 2' },
+        canUndo: true,
+        read: {
+          kind: 'failed',
+          message:
+            "What was read from the game's file wasn't saved, so nothing changed. sheets.json was left as it was: This list of bindings to set in the game was saved by a newer helmArray. Update helmArray to open it.",
+        },
+      },
+      ['jump'],
+    ]);
   });
 
   it('keeps a mode a setup still places something else in', async () => {
@@ -873,6 +968,7 @@ describe("reading the game's own file into a game typed in on the Game screen", 
     );
     await editor.readFile();
     editor.takeFile();
+    await settle();
     expect(editor.game.modes.map((m) => m.id)).toEqual(['default', 'ground']);
   });
 });

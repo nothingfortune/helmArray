@@ -206,7 +206,14 @@ name), with what the file has now, what it had at the last read, and what the da
   holding another action keeps it), its key labels and kept findings, the plans applied (bindings,
   game bindings, bind sheet rows, findings) and what the game holds (its baseline). A setup's
   ledger is per control and press and names no action; nor do the settings or what the units hold.
-  A file the store can't write over refuses the whole read, and nothing is written. A mode of yours
+  The move sees every file of every kind it may change, not only the ones it can read: a file
+  the disk won't give up, or one a newer helmArray saved (a scheme only when it may be this game's),
+  refuses the whole read, and nothing is written. (A damaged file is passed over: no helmArray can
+  read it again, and it is set aside when written.) The screen takes the read only once main has
+  saved it; refused, the game and its history stay as they were, and the list says why in one
+  sentence. Deleting a game added by hand checks the same way first: a scheme of it, or the
+  settings, what it holds or the units' record, that can't be read refuses the delete before
+  anything goes. A mode of yours
   the moves leave empty goes, unless a setup still places something else in it. The list says it
   plainly: "Boost moves to Flight, where the game's file has it; your key stays." (In the same
   mode: "Boost is in the file too: yours stays, and the file's isn't added beside it.") A read that
@@ -323,7 +330,10 @@ open Play view, quit.
   version 2 added `gameBindings`: an older plan claims none.)
 - **Snapshots:** every Apply saves the scheme and the plan it produced. History is a list in
   the UI, restore is one click.
-- **Undo** in the editor is in memory, per scheme. Edits autosave; Apply is separate.
+- **Undo** in the editor is in memory, per scheme. Edits autosave; Apply is separate. A screen
+  never keeps what main refused to save: a refused edit (a scheme in the Editor, a game on the
+  Game screen) goes back to what main has, and the screen says so in one sentence
+  (`renderer/screens/saves.ts`); a read of a game's file that moves ids is taken only once saved.
 - **Export / import:** one `.helm` file (JSON) per scheme, its game included.
 - Built-in presets and game action lists ship read-only inside the app; using one copies it.
 - **A game's data is yours to add and edit.** `games/<id>.json` holds a game you added, or your

@@ -637,7 +637,8 @@ export class DataStore {
     const waiting = new Map([...this.unsaved].filter(([, s]) => s.gameId === game.id));
     const waitingGame = this.unsavedGames.get(game.id);
     const docs: { kind: StoredKind; file: string; doc: StoredKinds[StoredKind] }[] = [];
-    const schemes = await this.listSchemes(game.id);
+    // Every scheme file, the ones it can't read included: one that may name an old id refuses it.
+    const schemes = await this.gameSchemes(game.id);
     for (const scheme of schemes) {
       const moved = moveInScheme(scheme, moves);
       // A waiting edit is written now, moved or not: its timer is called off below.
@@ -716,13 +717,18 @@ export class DataStore {
    */
   deleteGame(gameId: string): Promise<void> {
     if (!isSafeId(gameId)) return Promise.reject(new StoreError('There is no such game.'));
+    // A waiting write would make the game again after this: called off now. Its edit is dropped
+    // only once the game is gone.
     this.gameTimers.get(gameId)?.();
     this.gameTimers.delete(gameId);
-    const waiting = this.unsavedGames.delete(gameId);
     const builtIn = this.builtIn.some((game) => game.id === gameId);
     const file = `games/${gameId}.json`;
     // In the write queue: a write of this game already under way finishes first, then this.
     const run = this.enqueue(async () => {
+      // A game added by hand takes everything kept for it along: every file that may be changed
+      // is checked first, and one it can't read or change refuses the delete before anything goes.
+      if (!builtIn) await this.deletable(gameId);
+      const waiting = this.unsavedGames.delete(gameId);
       let removed = true;
       try {
         await rm(join(this.root, file));
@@ -746,6 +752,89 @@ export class DataStore {
     // later under its id must not take any of it over. A built-in game stays, with all of it.
     const done = builtIn ? run : run.then(() => this.dropGameData(gameId));
     return this.track(done);
+  }
+
+  /** A file this store won't write over, or can't read, refused: thrown, and reported. */
+  private refuse(file: string, message: string): never {
+    this.report(file, message);
+    throw new StoreError(`${file} was left as it was: ${message}`);
+  }
+
+  /** The game a scheme file a newer helmArray saved names, as far as can be told; null: unknown. */
+  private async gameOfNewer(file: string): Promise<string | null> {
+    try {
+      const raw = JSON.parse(await readFile(join(this.root, file), 'utf8')) as unknown;
+      const gameId = isRecord(raw) ? raw['gameId'] : undefined;
+      return typeof gameId === 'string' ? gameId : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Every scheme of a game, from every file in `schemes/` and the edits not yet written, for a
+   * change that must see them all (`saveFileRead`, `deleteGame`). Unlike `listSchemes`, a file
+   * that may be the game's and can't be used refuses (throws): one the disk won't give up, one a
+   * newer helmArray saved (unless it names another game), one of the game's filed under another
+   * name. A damaged file is passed over: no helmArray can read it, and it is set aside when written.
+   */
+  private async gameSchemes(gameId: string): Promise<Scheme[]> {
+    let names: string[];
+    try {
+      names = await readdir(join(this.root, 'schemes'));
+    } catch (error) {
+      if (codeOf(error) !== 'ENOENT')
+        this.refuse('schemes', `The folder couldn't be read (${messageOf(error)}).`);
+      names = [];
+    }
+    const found = new Map<string, Scheme>();
+    for (const name of names.filter((n) => n.endsWith('.json')).sort()) {
+      const id = name.slice(0, -'.json'.length);
+      if (!isSafeId(id)) continue;
+      const file = `schemes/${name}`;
+      const there = await readStored('scheme', join(this.root, file));
+      if (there.status === 'missing' || there.status === 'corrupt') continue;
+      if (there.status === 'ok') {
+        if (there.value.gameId !== gameId) continue;
+        if (there.value.id !== id)
+          this.refuse(file, 'This scheme is filed under a different name than its own.');
+        found.set(id, there.value);
+        continue;
+      }
+      if (there.status === 'newer') {
+        const owner = await this.gameOfNewer(file);
+        if (owner !== null && owner !== gameId) continue;
+      }
+      this.refuse(file, there.message);
+    }
+    for (const [id, scheme] of this.unsaved)
+      if (scheme.gameId === gameId) found.set(id, structuredClone(scheme));
+    return [...found.values()].sort(
+      (a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id),
+    );
+  }
+
+  /**
+   * Whether deleting a game added by hand can take everything kept for it: each of its schemes
+   * (`gameSchemes`), each plan applied for one of them and what it held (removed, so only one the
+   * disk won't give up refuses), and the settings, what it holds and the units' record, each of
+   * which may be written. Throws, naming the file, when not.
+   */
+  private async deletable(gameId: string): Promise<void> {
+    const schemes = await this.gameSchemes(gameId);
+    for (const id of [...schemes.map((s) => s.id), heldId(gameId)]) {
+      const file = `applied/${id}.json`;
+      const there = await readStored('applied', join(this.root, file));
+      if (there.status === 'unreadable') this.refuse(file, there.message);
+    }
+    for (const [kind, file] of [
+      ['settings', 'settings.json'],
+      ['sheets', 'sheets.json'],
+      ['units', 'units.json'],
+    ] as const) {
+      const refused = await this.refusal(kind, file);
+      if (refused !== null) throw refused;
+    }
   }
 
   /** What deleting a game added by hand does to each kind kept for it: see `ON_GAME_DELETED`. */
