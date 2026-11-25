@@ -9,7 +9,14 @@ import { join } from 'node:path';
 import type { Page } from '@playwright/test';
 import { expect, test } from './helm';
 import type { Seed } from './helm';
-import { applyInDrawer, countInput, drawer, editorApply, seriousViolations } from './screens';
+import {
+  applyInDrawer,
+  countInput,
+  drawer,
+  editorApply,
+  eliteSeed,
+  seriousViolations,
+} from './screens';
 
 const REFERENCE = new URL(
   '../../../reference/game-files/everspace2-Input.before.ini',
@@ -165,35 +172,8 @@ test.describe("Everspace 2's file as the head start", () => {
   });
 });
 
-const ELITE_BINDS = new URL(
-  '../../../reference/game-files/elite-Custom.4.1.binds',
-  import.meta.url,
-);
-const ELITE_APP_ID = '359320';
-
-/** Steam lists Elite, and the player's own bindings are where the game keeps them. */
-const elite: Seed = {
-  files: async (dataDir) => {
-    const bindings = join(
-      dataDir,
-      'local',
-      'Frontier Developments',
-      'Elite Dangerous',
-      'Options',
-      'Bindings',
-    );
-    await mkdir(bindings, { recursive: true });
-    await writeFile(join(bindings, 'Custom.4.1.binds'), await readFile(ELITE_BINDS));
-    await writeFile(join(bindings, 'StartPreset.4.start'), 'Custom\r\nCustom\r\nCustom\r\nCustom');
-    await writeFile(
-      join(dataDir, 'steam', 'steamapps', `appmanifest_${ELITE_APP_ID}.acf`),
-      `"AppState"\n{\n\t"appid"\t\t"${ELITE_APP_ID}"\n\t"name"\t\t"Elite Dangerous"\n\t"installdir"\t\t"Elite Dangerous"\n}\n`,
-    );
-  },
-};
-
 test.describe("Elite's file as the head start", () => {
-  test.use({ helmSeed: elite });
+  test.use({ helmSeed: eliteSeed });
 
   for (const preset of ['Xbox controller', "Game's own keys"]) {
     test(`J1 by ${preset} from its tile is 3 clicks`, async ({ helm }) => {

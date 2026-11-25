@@ -12,6 +12,7 @@ import {
   Checks,
   DeviceArea,
   DevicesChooser,
+  ModeTabs,
   Panel,
   SchemePicker,
   Unplaced,
@@ -394,5 +395,44 @@ describe('the side panel’s Add and Change', () => {
   it('offers neither on a press the control can’t send: a controller button has a tap only', () => {
     const html = panel(padScheme(), 'L.index_1');
     expect([count(html, 'data-choose='), html.includes('Change tap')]).toEqual([1, true]);
+  });
+});
+
+describe('the mode tabs', () => {
+  const tabs = (scheme: Scheme, g = game, mode = 'srv') =>
+    renderToStaticMarkup(
+      <ModeTabs
+        view={editorView({ scheme, game: g, plan: plan(scheme, g), mode })}
+        panelId="ed-panel"
+        onMode={none}
+      />,
+    );
+  const all = (html: string, re: RegExp) => [...html.matchAll(re)].map((m) => m[1]);
+
+  it('are a tablist named Modes: one tab per mode, the mode shown selected and the one Tab stop', () => {
+    const html = tabs(keysScheme());
+    expect({
+      list: all(html, /role="tablist" aria-label="([^"]*)"/g),
+      tabs: all(html, /role="tab"[^>]*>([^<]*)</g),
+      selected: all(html, /aria-selected="(true|false)"/g),
+      stops: all(html, /tabindex="(-?\d+)"/g),
+      controls: all(html, /aria-controls="([^"]*)"/g),
+    }).toEqual({
+      list: ['Modes'],
+      tabs: ['Ship', 'SRV'],
+      selected: ['false', 'true'],
+      stops: ['-1', '0'],
+      controls: ['ed-panel', 'ed-panel'],
+    });
+  });
+
+  it('each have an id of their own, for the panel to be named by the one selected', () => {
+    const ids = all(tabs(keysScheme()), /role="tab" id="([^"]*)"/g);
+    expect([ids.length, new Set(ids).size, ids.every((id) => id !== '')]).toEqual([2, 2, true]);
+  });
+
+  it('are not drawn for a game of one mode', () => {
+    const single = { ...game, modes: [{ id: 'ship', name: 'Ship' }] };
+    expect(tabs(keysScheme(), single, 'ship')).toBe('');
   });
 });

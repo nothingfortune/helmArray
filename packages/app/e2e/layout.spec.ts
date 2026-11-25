@@ -1,7 +1,8 @@
 // The Editor's layout and legibility, in the real window at the Editor board's size (1440 x 900) and
 // at the window's minimum width (1280 x 900): the window never scrolls, the two units stay side by
 // side and in view, the Inspector button shuts the side panel, the keyboard keeps its size, and no
-// label is drawn under the 10 px floor or out of its key. Measured in the page, as the UI audit did.
+// label is drawn under the 10 px floor or out of its key; and the same with Elite's 14 mode tabs
+// above the units. Measured in the page, as the UI audit did.
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Page } from '@playwright/test';
@@ -11,8 +12,11 @@ import {
   chooseDevice,
   contentSize,
   deviceTab,
+  eliteSeed,
   leftUnit,
+  modeTabs,
   schemeFiles,
+  startElite,
   startFrom,
   startWithChecks,
 } from './screens';
@@ -234,6 +238,85 @@ for (const [width, height] of SIZES) {
       await deviceTab(page, 'Keyboard').click();
       await expect(page.locator('.kb-a').first()).toBeVisible();
       expect(await labelFaults(page, MIN_SCALE, FLOOR)).toEqual([]);
+    });
+  });
+}
+
+/**
+ * The units' scale with the side panel open and the mode tabs showing: the tabs take height, never
+ * the units' width, so it is the scale they have without them (0.701 at 1280, the canvas's 0.78).
+ */
+const ELITE_SCALE_AT: Record<number, number> = { 1440: 0.78, 1280: 0.7 };
+
+for (const [width, height] of SIZES) {
+  test.describe(`the Editor on Elite, its 14 mode tabs showing, at ${width} x ${height}`, () => {
+    test.use({ helmSeed: eliteSeed });
+
+    test('the window never scrolls, every tab is in view, the units side by side at their scale', async ({
+      helm,
+    }) => {
+      const { page } = helm;
+      await contentSize(helm, width, height);
+      await startElite(page, "Game's own keys");
+      await page.getByRole('tab', { name: 'On foot' }).click();
+      await leftUnit(page).getByRole('button', { name: 'Empty, index 5' }).click();
+      await expect(page.locator('.ed-panel')).toBeVisible();
+      const side = page.getByRole('complementary', { name: 'Button and actions' });
+      await side.evaluate((el) => el.scrollTo(0, el.scrollHeight));
+      const scroll = await windowScrolls(page);
+      expect(scroll.scrolls, JSON.stringify(scroll)).toBe(false);
+
+      const strip = await modeTabs(page).evaluate((el) => ({
+        across: el.scrollWidth - el.clientWidth,
+        out: [...el.querySelectorAll('[role="tab"]')]
+          .filter((t) => {
+            const r = t.getBoundingClientRect();
+            return (
+              r.left < 0 ||
+              r.right > window.innerWidth ||
+              r.top < 0 ||
+              r.bottom > window.innerHeight
+            );
+          })
+          .map((t) => t.textContent),
+      }));
+      const [left, right] = (await units(page)) as [Box, Box];
+      const scales = await unitScales(page);
+      expect(
+        {
+          strip,
+          sameRow: left.y === right.y,
+          leftOfRight: left.x + left.w <= right.x,
+          inView: right.x + right.w <= width && right.y + right.h <= height,
+          readable: scales.every((s) => s >= (ELITE_SCALE_AT[width] ?? MIN_SCALE.unit)),
+        },
+        `scales ${scales.join(', ')}`,
+      ).toEqual({
+        strip: { across: 0, out: [] },
+        sameRow: true,
+        leftOfRight: true,
+        inView: true,
+        readable: true,
+      });
+      await expect(page.locator('header.header')).toBeInViewport({ ratio: 1 });
+    });
+
+    test('no unit label is under the floor, or out of its key, in the ship and on foot', async ({
+      helm,
+    }) => {
+      const { page } = helm;
+      await contentSize(helm, width, height);
+      await startElite(page, "Game's own keys");
+      const ship = await labelFaults(page, MIN_SCALE, FLOOR);
+      await page.getByRole('tab', { name: 'On foot' }).click();
+      await page
+        .locator('.ed-actions')
+        .getByRole('button', { name: 'Utility wheel cycle mode', exact: true })
+        .dragTo(leftUnit(page).getByRole('button', { name: 'Empty, ring 1' }));
+      expect({ ship, foot: await labelFaults(page, MIN_SCALE, FLOOR) }).toEqual({
+        ship: [],
+        foot: [],
+      });
     });
   });
 }
