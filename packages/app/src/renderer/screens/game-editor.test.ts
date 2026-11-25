@@ -25,6 +25,7 @@ const rover: Game = {
 function api(over: Partial<EditorApi> = {}) {
   return {
     saveGame: vi.fn<HelmApi['saveGame']>(over.saveGame ?? (() => Promise.resolve())),
+    saveFileRead: vi.fn<HelmApi['saveFileRead']>(over.saveFileRead ?? (() => Promise.resolve())),
     deleteGame: vi.fn<HelmApi['deleteGame']>(over.deleteGame ?? (() => Promise.resolve())),
     createScheme: vi.fn<HelmApi['createScheme']>(
       over.createScheme ??
@@ -49,6 +50,7 @@ const open = (
     saved: boolean;
     taken: string[];
     reserved: { modes: string[]; actions: string[] };
+    uses: { mode: string; action: string }[];
     found: boolean;
     readsFile: boolean;
   }> = {},
@@ -437,7 +439,29 @@ describe('deleting the game', () => {
 
 describe('what the screen offers', () => {
   it('offers the defaults a game with actions can start from', () => {
-    expect(open().editor.starts).toEqual(['xbox', 'keys']);
+    expect(open().editor.starts.map((c) => [c.preset, c.unavailable])).toEqual([
+      ['xbox', undefined],
+      ['keys', undefined],
+    ]);
+  });
+
+  it('shows Xbox controller off, with why, for a game whose sticks must send keys', () => {
+    expect(open({ ...rover, needsKeyStick: true }).editor.starts).toEqual([
+      {
+        preset: 'xbox',
+        label: 'Xbox controller',
+        unavailable: 'Rover plays on keys: it stutters when a controller and keys are mixed.',
+      },
+      { preset: 'keys', label: "Game's own keys" },
+    ]);
+  });
+
+  it('offers only Xbox controller for a game with no keys of its own', () => {
+    const padOnly = {
+      ...rover,
+      actions: rover.actions.map((a) => ({ ...a, native: { pad: 'A' as const } })),
+    };
+    expect(open(padOnly).editor.starts.map((c) => c.preset)).toEqual(['xbox']);
   });
 
   it('offers none while the game is not whole', () => {
@@ -664,6 +688,7 @@ describe("reading the game's own file", () => {
           '1 new action in Default: Duck.',
           'Jump keeps your default key, Space (the file has J).',
         ],
+        moves: [],
       },
       asked: [['rover']],
       saved: 0,
@@ -744,6 +769,88 @@ describe("reading the game's own file", () => {
     await editor.readFile();
     await first;
     expect(calls.readGameFile).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("reading the game's own file into a game typed in on the Game screen", () => {
+  /** Rover as its file has it: Jump in Ground, a mode the game typed in doesn't have. */
+  const fileRover: Game = {
+    ...rover,
+    file: { format: 'unreal-ini' },
+    modes: [{ id: 'ground', name: 'Ground' }],
+    actions: [{ id: 'Jump', name: 'Jump', mode: 'ground', required: false }],
+  };
+  const reads = (over: Partial<EditorApi> = {}) =>
+    api({
+      readGameFile: () => Promise.resolve({ ok: true, file: fileRover, held: null }),
+      ...over,
+    });
+  const MOVE = { action: 'jump', mode: 'default', to: 'Jump', toMode: 'ground' };
+
+  it('saves it with the moves, for main to follow everywhere at once, and not as a plain save', async () => {
+    const { editor, calls } = open(rover, { readsFile: true }, reads());
+    await editor.readFile();
+    editor.takeFile();
+    await settle();
+    expect({
+      file: calls.saveFileRead.mock.calls,
+      plain: calls.saveGame.mock.calls.length,
+      ids: editor.game.actions.map((a) => `${a.mode}/${a.id}`),
+      saved: editor.state.saved,
+    }).toEqual({
+      file: [[editor.game, [MOVE]]],
+      plain: 0,
+      ids: ['ground/Jump'],
+      saved: true,
+    });
+  });
+
+  it('shows the mode tabs when the read leaves more than one mode', async () => {
+    const twoModes: Game = {
+      ...fileRover,
+      modes: [...fileRover.modes, { id: 'air', name: 'Air' }],
+      actions: [...fileRover.actions, { id: 'Fly', name: 'Fly', mode: 'air', required: false }],
+    };
+    const { editor } = open(
+      rover,
+      { readsFile: true },
+      reads({ readGameFile: () => Promise.resolve({ ok: true, file: twoModes, held: null }) }),
+    );
+    const before = editor.state.modesShown;
+    await editor.readFile();
+    editor.takeFile();
+    expect([before, editor.state.modesShown]).toEqual([false, true]);
+  });
+
+  it("can't be undone: the setups already follow the file's ids", async () => {
+    const { editor } = open(rover, { readsFile: true }, reads());
+    editor.edit((g) => renameGame(g, 'Rover 2'));
+    await editor.readFile();
+    editor.takeFile();
+    expect([editor.canUndo, editor.canRedo]).toEqual([false, false]);
+  });
+
+  it('says when that save fails', async () => {
+    const { editor } = open(
+      rover,
+      { readsFile: true },
+      reads({ saveFileRead: () => Promise.reject(new Error('sheets.json was left as it was')) }),
+    );
+    await editor.readFile();
+    editor.takeFile();
+    await settle();
+    expect(editor.state.saveError).toBe("Couldn't save the game. sheets.json was left as it was");
+  });
+
+  it('keeps a mode a setup still places something else in', async () => {
+    const { editor } = open(
+      rover,
+      { readsFile: true, uses: [{ mode: 'default', action: 'gone' }] },
+      reads(),
+    );
+    await editor.readFile();
+    editor.takeFile();
+    expect(editor.game.modes.map((m) => m.id)).toEqual(['default', 'ground']);
   });
 });
 

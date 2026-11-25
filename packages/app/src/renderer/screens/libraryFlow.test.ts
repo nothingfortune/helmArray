@@ -28,6 +28,27 @@ function play(events: FlowEvent[], from: FlowState = START) {
   return { state, commands };
 }
 
+describe('a game whose sticks must send keys', () => {
+  const ES2 = { ...NEW, name: 'Everspace 2', gameId: 'everspace2', needsKeyStick: true as const };
+
+  it('makes nothing from Xbox controller: the choice is off', () => {
+    const picking = play([{ type: 'tile', entry: ES2 }]).state;
+    expect(play([{ type: 'choose', entry: ES2, preset: 'xbox' }], picking)).toEqual({
+      state: picking,
+      commands: [],
+    });
+  });
+
+  it('makes its own keys in the one click, as for any game', () => {
+    expect(
+      play([
+        { type: 'tile', entry: ES2 },
+        { type: 'choose', entry: ES2, preset: 'keys' },
+      ]).commands,
+    ).toEqual([{ type: 'make-and-open', gameId: 'everspace2', preset: 'keys' }]);
+  });
+});
+
 describe('J1: pick a game, pick a default, play', () => {
   it('takes two clicks for a game with no scheme: the game, then the default', () => {
     const first = play([{ type: 'tile', entry: NEW }]);

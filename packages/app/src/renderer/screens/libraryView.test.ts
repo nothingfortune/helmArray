@@ -9,6 +9,8 @@ import {
   defaultChoices,
   heldSchemes,
   filterEntries,
+  keysOnlyNote,
+  presetChoices,
   setupWords,
   statusLine,
   summary,
@@ -188,6 +190,31 @@ describe('the defaults offered', () => {
       ['xbox', 'Xbox controller'],
       ['keys', "Game's own keys"],
     ]);
+  });
+});
+
+describe('the defaults offered for a game whose sticks must send keys', () => {
+  const ES2 = entry({ name: 'Everspace 2', gameId: 'everspace2', needsKeyStick: true });
+  const WHY = 'Everspace 2 plays on keys: it stutters when a controller and keys are mixed.';
+
+  it("shows Xbox controller off, saying why in one sentence, beside the game's own keys", () => {
+    expect(defaultChoices(ES2)).toEqual([
+      { preset: 'xbox', label: 'Xbox controller', unavailable: WHY },
+      { preset: 'keys', label: "Game's own keys" },
+    ]);
+  });
+
+  it('says it in the same words wherever a scheme starts', () => {
+    expect([
+      presetChoices({ name: 'Everspace 2', nativeKeys: true, needsKeyStick: true }),
+      presetChoices({ name: 'Rover', nativeKeys: false, needsKeyStick: false }),
+    ]).toEqual([defaultChoices(ES2), [{ preset: 'xbox', label: 'Xbox controller' }]]);
+  });
+
+  it('is the sentence built from the game’s name', () => {
+    expect(keysOnlyNote('Rover')).toBe(
+      'Rover plays on keys: it stutters when a controller and keys are mixed.',
+    );
   });
 });
 

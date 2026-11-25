@@ -2,7 +2,7 @@
 // `ipcMain` it registers on is handed in (a fake in tests), and everything a window sends is
 // checked here, because a window's page is not trusted.
 
-import type { Game, Scheme } from '@helmarray/core';
+import type { ActionMove, Game, Scheme } from '@helmarray/core';
 import { gameProblem } from '@helmarray/core';
 import type {
   AppState,
@@ -40,6 +40,7 @@ export interface HelmHandlers {
   previewApply(schemeId: string): Promise<ApplyPreview>;
   apply(schemeId: string, fingerprint: string): Promise<ApplyResult>;
   saveGame(game: Game): Promise<void>;
+  saveFileRead(game: Game, moves: ActionMove[]): Promise<void>;
   deleteGame(gameId: string): Promise<void>;
   dismissSheet(gameId: string): Promise<void>;
   readGameFile(gameId: string): Promise<GameFileRead>;
@@ -55,6 +56,46 @@ const lowerFirst = (text: string) =>
 function idArg(name: string, value: unknown): string {
   if (!isSafeId(value)) throw new TypeError(`${name}: that isn't an id.`);
   return value;
+}
+
+/**
+ * A game a window sends to be saved. The whole game is checked here, not only its shape: what a
+ * window sends isn't trusted, and a mode id becomes a key of every scheme's map.
+ */
+function gameArg(name: string, game: unknown): Game {
+  const problem = gameProblem(game);
+  if (problem !== null) throw new TypeError(`${name}: ${lowerFirst(problem)}`);
+  if (!isSafeId((game as Game).id))
+    throw new TypeError(`${name}: this game's id can't be used as a file name.`);
+  return game as Game;
+}
+
+const isText = (value: unknown): value is string => typeof value === 'string' && value !== '';
+
+/**
+ * The actions of yours that took the ids of the game's file, as a window sends them: each from an
+ * id the game no longer has to an action it has, in the mode it is in.
+ */
+function movesArg(game: Game, moves: unknown): ActionMove[] {
+  if (!Array.isArray(moves)) throw new TypeError("saveFileRead: the moves aren't a list.");
+  return moves.map((move: unknown) => {
+    const m = move as Partial<Record<keyof ActionMove, unknown>> | null;
+    if (
+      typeof m !== 'object' ||
+      m === null ||
+      !isText(m.action) ||
+      !isText(m.mode) ||
+      !isText(m.to) ||
+      !isText(m.toMode)
+    )
+      throw new TypeError("saveFileRead: a move isn't one helmArray can follow.");
+    const { action, mode, to, toMode } = m;
+    if (!game.actions.some((a) => a.id === to && a.mode === toMode))
+      throw new TypeError("saveFileRead: a move names an action the game doesn't have.");
+    if (game.actions.some((a) => a.id === action))
+      throw new TypeError('saveFileRead: a move names an action the game still has.');
+    return { action, mode, to, toMode };
+  });
 }
 
 /** The most log lines one request may ask for. */
@@ -109,14 +150,10 @@ export function registerHelmIpc(ipc: IpcRegistry, handlers: HelmHandlers): () =>
       throw new TypeError('apply: the fingerprint must be text.');
     return handlers.apply(idArg('apply', schemeId), fingerprint);
   });
-  ipc.handle(CHANNELS.saveGame, (_event, game) => {
-    // The whole game is checked here, not only its shape: what a window sends isn't trusted, and
-    // a mode id becomes a key of every scheme's map.
-    const problem = gameProblem(game);
-    if (problem !== null) throw new TypeError(`saveGame: ${lowerFirst(problem)}`);
-    if (!isSafeId((game as Game).id))
-      throw new TypeError("saveGame: this game's id can't be used as a file name.");
-    return handlers.saveGame(game as Game);
+  ipc.handle(CHANNELS.saveGame, (_event, game) => handlers.saveGame(gameArg('saveGame', game)));
+  ipc.handle(CHANNELS.saveFileRead, (_event, game, moves) => {
+    const checked = gameArg('saveFileRead', game);
+    return handlers.saveFileRead(checked, movesArg(checked, moves));
   });
   ipc.handle(CHANNELS.deleteGame, (_event, gameId) =>
     handlers.deleteGame(idArg('deleteGame', gameId)),
@@ -148,6 +185,7 @@ export function registerHelmIpc(ipc: IpcRegistry, handlers: HelmHandlers): () =>
       CHANNELS.previewApply,
       CHANNELS.apply,
       CHANNELS.saveGame,
+      CHANNELS.saveFileRead,
       CHANNELS.deleteGame,
       CHANNELS.dismissSheet,
       CHANNELS.readGameFile,

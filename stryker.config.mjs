@@ -59,6 +59,7 @@ export default {
     'packages/core/src/games/**/*.ts',
     'packages/core/src/game-data.ts', // a game's data checked before it is saved
     'packages/core/src/harvest.ts', // a game's file merged into its data, never losing an edit
+    'packages/core/src/moves.ts', // an action that took the file's id, followed into all that names it
     '!packages/core/src/**/*.test.ts',
     // Games: Steam folders, the VDF readers and writers, and the game file adapters (Everspace 2's
     // Input.ini, Elite's .binds and StartPreset: find, harvest, write, and the key names).

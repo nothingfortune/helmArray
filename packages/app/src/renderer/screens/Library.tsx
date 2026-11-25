@@ -15,6 +15,7 @@ import {
   summary,
 } from './libraryView';
 import { useLibrary } from './useLibrary';
+import { PresetButtons } from './PresetButtons';
 import { gameTarget, needsSetUp } from './gameTile';
 import type { GameTarget } from './game-model';
 import { sheetLine } from '../apply/bindSheet';
@@ -71,16 +72,11 @@ function Choices({ entry, send }: { entry: LibraryEntry; send: Send }) {
   return (
     <div className="choices">
       <span className="hint">{entry.schemes.length > 0 ? 'New from' : 'Start from'}</span>
-      {defaultChoices(entry).map(({ preset, label }) => (
-        <button
-          key={preset}
-          type="button"
-          className="btn"
-          onClick={() => send({ type: 'choose', entry, preset })}
-        >
-          {label}
-        </button>
-      ))}
+      <PresetButtons
+        choices={defaultChoices(entry)}
+        idPrefix={`start-${entry.gameId ?? entry.appId ?? 'game'}`}
+        onChoose={(preset) => send({ type: 'choose', entry, preset })}
+      />
     </div>
   );
 }

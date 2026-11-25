@@ -362,6 +362,7 @@ describe('loadedOf', () => {
         edited: true,
         saved: true,
         reserved: { modes: [], actions: [] },
+        uses: [],
       },
       {
         game: two,
@@ -369,6 +370,7 @@ describe('loadedOf', () => {
         edited: false,
         saved: true,
         reserved: { modes: [], actions: [] },
+        uses: [],
       },
     ]);
   });
@@ -384,6 +386,17 @@ describe('loadedOf', () => {
     });
   });
 
+  it('gives where the game’s saved schemes place its actions', () => {
+    const scheme = {
+      ...blankKeysScheme(two),
+      map: { foot: { 'L.index_1': { tap: 'grapple', long: 'jump' } }, drive: {} },
+    };
+    expect(loadedOf({ kind: 'edit', gameId: 'rover' }, entries, [scheme])?.uses).toEqual([
+      { mode: 'foot', action: 'grapple' },
+      { mode: 'foot', action: 'jump' },
+    ]);
+  });
+
   it('opens a game read from its file just now as not saved, under its own id, its file readable', () => {
     expect(
       loadedOf({ kind: 'edit', gameId: 'rover' }, [
@@ -397,6 +410,7 @@ describe('loadedOf', () => {
       found: true,
       readsFile: true,
       reserved: { modes: [], actions: [] },
+      uses: [],
     });
   });
 
@@ -428,6 +442,7 @@ describe('loadedOf', () => {
       found: true,
       readsFile: true,
       reserved: { modes: [], actions: [] },
+      uses: [],
     });
   });
 

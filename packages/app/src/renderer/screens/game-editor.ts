@@ -2,7 +2,15 @@
 // press is waited for, and saving. Every edit goes through here; the screen draws `state` and calls
 // the methods. Pure of the DOM: main is reached through the API handed in, so tests use fakes.
 
-import type { Action, ActionId, Game, ModeId, PadControl, Signal } from '@helmarray/core';
+import type {
+  Action,
+  ActionId,
+  ActionUse,
+  Game,
+  ModeId,
+  PadControl,
+  Signal,
+} from '@helmarray/core';
 import { gameProblem } from '@helmarray/core';
 import type { GameFileRead, HelmApi, Preset } from '../../shared/api';
 import { fileReadView } from './file-read';
@@ -23,6 +31,8 @@ import {
 } from './game-model';
 import type { Reserved } from './game-model';
 import { plainReason, runMake } from './libraryFlow';
+import { presetChoices } from './libraryView';
+import type { PresetChoice } from './libraryView';
 
 /** What the screen waits for a press of: an action's default key, or its controller button. */
 export interface Waiting {
@@ -39,7 +49,7 @@ const isModeNameField = (field: string | null) => field?.startsWith('mode-name:'
 
 export type EditorApi = Pick<
   HelmApi,
-  'saveGame' | 'deleteGame' | 'createScheme' | 'setActive' | 'readGameFile'
+  'saveGame' | 'saveFileRead' | 'deleteGame' | 'createScheme' | 'setActive' | 'readGameFile'
 >;
 
 export interface Loaded {
@@ -63,6 +73,8 @@ export interface Loaded {
   taken?: readonly string[];
   /** The ids the game's saved schemes name: never given to a new mode or action. */
   reserved?: Reserved;
+  /** Where the game's saved schemes place its actions: a read keeps a mode one still uses. */
+  uses?: readonly ActionUse[];
 }
 
 export interface GameEditorState {
@@ -107,6 +119,7 @@ export class GameEditor {
   private fresh: boolean;
   private readonly taken: readonly string[];
   private readonly reserved: Reserved;
+  private readonly uses: readonly ActionUse[];
   /** Whether *Read from the game's file* is offered. */
   readonly readsFile: boolean;
 
@@ -133,6 +146,7 @@ export class GameEditor {
     this.readsFile = loaded.readsFile === true;
     this.taken = loaded.taken ?? [];
     this.reserved = loaded.reserved ?? { modes: [], actions: [] };
+    this.uses = loaded.uses ?? [];
   }
 
   get state(): GameEditorState {
@@ -161,9 +175,18 @@ export class GameEditor {
     return actionsIn(this.game, this.mode);
   }
 
-  /** What a scheme of the game can start from now; nothing while it isn't whole. */
-  get starts(): Preset[] {
-    return this.problem === null ? canStartFrom(this.game) : [];
+  /**
+   * What a scheme of the game can start from now, as the Library offers it (*Xbox controller* off,
+   * with why, for a game whose sticks must send keys); nothing while it isn't whole.
+   */
+  get starts(): PresetChoice[] {
+    const can = this.problem === null ? canStartFrom(this.game) : [];
+    if (can.length === 0) return [];
+    return presetChoices({
+      name: this.game.name,
+      nativeKeys: can.includes('keys'),
+      needsKeyStick: this.game.needsKeyStick === true,
+    });
   }
 
   get canUndo(): boolean {
@@ -355,15 +378,34 @@ export class GameEditor {
     } catch (error) {
       read = { ok: false, message: `Couldn't read the game's file. ${plainReason(error)}`.trim() };
     }
-    this.set({ fileRead: fileReadView(this.game, read) });
+    this.set({ fileRead: fileReadView(this.game, read, this.uses) });
   };
 
-  /** The one button under the list: the merged game is the next edit (undo takes it back). */
+  /**
+   * The one button under the list: the merged game is the next edit (undo takes it back). One in
+   * which actions of yours took the file's ids is saved with them, for main to follow everywhere
+   * (`saveFileRead`), and the history starts again from it: an undo would bring back ids the
+   * setups no longer name.
+   */
   readonly takeFile = (): void => {
     const read = this.current.fileRead;
     if (read === null || read === 'reading' || read.kind !== 'changes') return;
-    this.set({ fileRead: null });
-    this.edit(() => read.game);
+    if (read.moves.length === 0) {
+      this.set({ fileRead: null });
+      this.edit(() => read.game);
+      return;
+    }
+    this.lastField = null;
+    this.set({
+      fileRead: null,
+      history: startHistory(read.game),
+      modesShown: showsModes(read.game),
+    });
+    this.api.saveFileRead(read.game, read.moves).then(
+      () => this.set({ saved: true, edited: this.builtIn, saveError: null }),
+      (error: unknown) =>
+        this.set({ saveError: `Couldn't save the game. ${plainReason(error)}`.trim() }),
+    );
   };
 
   /** A read's list, made from the game as it was, once the game is no longer that. */

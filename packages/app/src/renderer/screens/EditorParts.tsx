@@ -35,6 +35,8 @@ import { roleColour } from './role-words';
 import { MOUSE_WIDTH, keyboardRow, unitRow } from './editor-layout';
 import { KEYBOARD_WIDTH } from '../devices/layouts';
 import { tabKeyTarget } from './mode-tabs';
+import { presetChoices } from './libraryView';
+import { PresetButtons } from './PresetButtons';
 
 /** The id of a mode tab, by its place among them, for the panel it shows to be named by it. */
 export const modeTabId = (panelId: string, index: number): string => `${panelId}-tab-${index}`;
@@ -663,22 +665,15 @@ export function SchemePicker({
             <span className="hint" id="ed-picker-new">
               New from
             </span>
-            <button
-              type="button"
-              className="btn"
-              onClick={() => choose(() => actions.make('xbox'))}
-            >
-              Xbox controller
-            </button>
-            {nativeKeys && (
-              <button
-                type="button"
-                className="btn"
-                onClick={() => choose(() => actions.make('keys'))}
-              >
-                Game&apos;s own keys
-              </button>
-            )}
+            <PresetButtons
+              choices={presetChoices({
+                name: game.name,
+                nativeKeys,
+                needsKeyStick: game.needsKeyStick === true,
+              })}
+              idPrefix="ed-new"
+              onChoose={(preset) => choose(() => actions.make(preset))}
+            />
             <button type="button" className="btn" onClick={() => choose(actions.copy)}>
               Copy this one
             </button>

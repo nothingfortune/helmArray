@@ -79,6 +79,7 @@ export function mergeLibrary(input: LibraryInput): LibraryEntry[] {
       activeSchemeId: active !== null && schemes.some((s) => s.id === active) ? active : null,
       applied: appliedIn(game, schemes),
       nativeKeys: game ? hasNativeKeys(game) : false,
+      ...(game?.needsKeyStick === true ? { needsKeyStick: true as const } : {}),
       shipsDefaults: game ? shipsDefaults(game) : false,
       hasCover: steam?.cover !== undefined,
       hasHeader: steam?.header !== undefined,

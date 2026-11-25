@@ -2,7 +2,16 @@
 // each action's defaults. Every one returns a new game and leaves the one it was given alone. The
 // screen checks the result with core's `gameProblem` before it saves it.
 
-import type { Action, ActionId, Game, ModeId, PadControl, Scheme, Signal } from '@helmarray/core';
+import type {
+  Action,
+  ActionId,
+  ActionUse,
+  Game,
+  ModeId,
+  PadControl,
+  Scheme,
+  Signal,
+} from '@helmarray/core';
 import { idFromName, isDataId } from '@helmarray/core';
 import type { GameEntry, Preset } from '../../shared/api';
 import { isSafeId } from '../../shared/ids';
@@ -92,6 +101,17 @@ export function referencedIds(schemes: readonly Scheme[]): Reserved {
     }
   }
   return { modes: [...modes], actions: [...actions] };
+}
+
+/** Where the schemes place each action, in each mode: a read of the game's file keeps those modes. */
+export function usesOf(schemes: readonly Scheme[]): ActionUse[] {
+  const uses: ActionUse[] = [];
+  for (const scheme of schemes)
+    for (const [mode, controls] of Object.entries(scheme.map))
+      for (const presses of Object.values(controls))
+        for (const action of Object.values(presses))
+          if (action !== undefined) uses.push({ mode, action });
+  return uses;
 }
 
 /**
@@ -277,6 +297,7 @@ export function loadedOf(
   readsFile?: boolean;
   taken?: string[];
   reserved?: Reserved;
+  uses?: ActionUse[];
   note?: string;
 } | null {
   const entry = target.kind === 'new' ? undefined : games.find((g) => g.game.id === target.gameId);
@@ -302,5 +323,6 @@ export function loadedOf(
     ...(entry.found === true ? { found: true } : {}),
     ...(entry.readsFile === true ? { readsFile: true } : {}),
     reserved: referencedIds(schemes),
+    uses: usesOf(schemes),
   };
 }

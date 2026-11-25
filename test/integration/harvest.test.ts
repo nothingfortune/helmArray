@@ -15,7 +15,12 @@ import { gameProblem, mergeHarvest } from '@helmarray/core';
 import { harvestEliteBinds, harvestUnrealIni, writeUnrealIni } from '@helmarray/games';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { assign } from '../../packages/app/src/renderer/screens/editor-model';
-import { addAction, newGame } from '../../packages/app/src/renderer/screens/game-model';
+import {
+  addAction,
+  newGame,
+  setDefaultKey,
+  usesOf,
+} from '../../packages/app/src/renderer/screens/game-model';
 import type {
   ApplyPreview,
   ApplyResult,
@@ -582,34 +587,147 @@ describe('Everspace 2 typed in by hand before its file was read', () => {
     ]);
   });
 
-  it("keeps an action typed in under a name the file has in the same mode, and says so: the file's isn't added beside it", async () => {
+  it("gives an action typed in under a name the file has in the same mode the file's id, and says so: the file's isn't added beside it", async () => {
     const read = await world.helm.readGameFile(typed.id);
     // As the Game screen merges it.
-    const { game, changes } = mergeHarvest(flightTyped, (read as { file: Game }).file);
+    const { game, changes, moves } = mergeHarvest(flightTyped, (read as { file: Game }).file);
     const boosts = game.actions.filter((a) => a.name === 'Boost [HOLD]').map((a) => a.id);
     expect({
       boosts,
       wave: game.actions.some((a) => a.id === 'wave'),
       all: game.actions.length,
-      same: changes.filter((c) => c.kind === 'same-name'),
+      same: changes.filter((c) => c.kind === 'same-name').map((c) => [c.kind, c.action]),
+      moves,
     }).toEqual({
-      boosts: ['boost_hold'],
+      boosts: ['Boost'],
       wave: true,
       all: ES2_HARVEST.actions.length + 1,
-      same: [{ kind: 'same-name', action: 'boost_hold', name: 'Boost [HOLD]', file: 'Boost' }],
+      same: [['same-name', 'boost_hold']],
+      moves: [{ action: 'boost_hold', mode: 'flight', to: 'Boost', toMode: 'flight' }],
     });
   });
 
-  it('saves that read, and a second read adds nothing more', async () => {
+  it('saves that read, and a second read changes nothing', async () => {
     const first = await world.helm.readGameFile(typed.id);
-    await world.helm.saveGame(mergeHarvest(flightTyped, (first as { file: Game }).file).game);
+    const { game, moves } = mergeHarvest(flightTyped, (first as { file: Game }).file);
+    await world.helm.saveFileRead(game, moves);
     await world.idle();
     const saved = entryOf(await world.helm.listGames(), typed.id)?.game as Game;
     const again = await world.helm.readGameFile(typed.id);
-    const { game, changes } = mergeHarvest(saved, (again as { file: Game }).file);
-    expect([game.actions.length, changes.map((c) => c.kind)]).toEqual([
-      saved.actions.length,
-      ['same-name'],
+    const next = mergeHarvest(saved, (again as { file: Game }).file);
+    expect([next.game, next.moves, next.changes]).toEqual([saved, [], []]);
+  });
+});
+
+describe('Everspace 2 typed in on the Game screen, used, then read from its file', () => {
+  let world: World;
+  let ini: string;
+  let typed: Game;
+  let before: Scheme;
+  let merged: ReturnType<typeof mergeHarvest>;
+  let saved: Game;
+  let after: Scheme;
+  let preview: ApplyPreview;
+  let result: ApplyResult;
+
+  beforeAll(async () => {
+    world = await World.create({ steam: STEAM });
+    ({ ini } = await placeFiles(world));
+    await world.boot();
+    // *Set up* on its Steam tile, then Boost typed in with the key the owner plays it on, and Wave.
+    typed = newGame('Everspace 2', [], 1128920);
+    typed = addAction(typed, 'default', 'Boost [HOLD]').game;
+    typed = setDefaultKey(typed, 'boost_hold', { kind: 'key', code: 'G' });
+    typed = addAction(typed, 'default', 'Wave').game;
+    typed = setDefaultKey(typed, 'wave', { kind: 'key', code: 'H' });
+    await world.helm.saveGame(typed);
+    await world.idle();
+    // A scheme of its own keys, applied before the file was read: what the game holds moves on.
+    before = await world.helm.createScheme(typed.id, 'keys');
+    await world.helm.setActive(typed.id, before.id);
+    await world.keepFindings(before.id);
+    await world.previewAndApply(before.id);
+    await world.helm.dismissSheet(typed.id);
+    await world.idle();
+    // *Read from the game's file*, merged as the Game screen does, with where the schemes place
+    // things, and saved with the one button.
+    const read = await world.helm.readGameFile(typed.id);
+    if (!read.ok) throw new Error(read.message);
+    const schemes = await world.helm.listSchemes(typed.id);
+    merged = mergeHarvest(typed, read.file, read.held, usesOf(schemes));
+    await world.helm.saveFileRead(merged.game, merged.moves);
+    await world.app.data.flush();
+    saved = entryOf(await world.helm.listGames(), typed.id)?.game as Game;
+    // A scheme made from it now writes the game's file.
+    after = await world.helm.createScheme(typed.id, 'keys');
+    await world.keepFindings(after.id);
+    ({ preview, result } = await world.previewAndApply(after.id));
+  });
+
+  afterAll(async () => {
+    await world.dispose();
+  });
+
+  it("moves Boost to Flight under the file's id, keeping your key: no second Boost", () => {
+    expect({
+      boosts: saved.actions.filter((a) => a.name === 'Boost [HOLD]').map((a) => [a.id, a.mode]),
+      key: saved.actions.find((a) => a.id === 'Boost')?.native?.key,
+      all: saved.actions.length,
+    }).toEqual({
+      boosts: [['Boost', 'flight']],
+      key: { kind: 'key', code: 'G' },
+      all: ES2_HARVEST.actions.length + 1,
+    });
+  });
+
+  it('keeps Default for Wave, which the file has no action of', () => {
+    expect(saved.modes.map((m) => m.id)).toEqual(['default', 'flight', 'menus', 'photo']);
+  });
+
+  it('sets its sticks to send keys, from the head start, and lists it', () => {
+    expect([saved.needsKeyStick, merged.changes.some((c) => c.kind === 'key-stick')]).toEqual([
+      true,
+      true,
+    ]);
+  });
+
+  it('leaves nothing in the data folder naming the old id', async () => {
+    const named: string[] = [];
+    const walk = async (dir: string, prefix: string): Promise<void> => {
+      for (const entry of await readdir(dir, { withFileTypes: true })) {
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) await walk(path, `${prefix}${entry.name}/`);
+        else if ((await readFile(path, 'utf8')).includes('"boost_hold"'))
+          named.push(`${prefix}${entry.name}`);
+      }
+    };
+    await walk(world.dataDir, '');
+    expect(named).toEqual([]);
+  });
+
+  it('keeps the scheme made before the read whole: Boost on its button in Flight, nothing named gone', async () => {
+    const scheme = await world.scheme(before.id);
+    const plan = await world.planOf(scheme);
+    const placed = Object.values(scheme.map['flight'] ?? {}).some((p) => p.tap === 'Boost');
+    expect([placed, plan.findings.filter((f) => f.rule === 'action-deleted')]).toEqual([true, []]);
+  });
+
+  it("follows what the game holds to the file's id", async () => {
+    const held = (await world.app.data.heldBindings(typed.id)) ?? [];
+    expect([...new Set(held.filter((r) => r.action === 'Boost').map((r) => r.mode))]).toEqual([
+      'flight',
+    ]);
+  });
+
+  it("writes Boost, with your key, into the game's file on Apply", async () => {
+    const text = await readFile(ini, 'utf8');
+    const line = text
+      .split('\n')
+      .find((l) => l.includes('Action=Boost,') && l.includes('GroupName="Keyboard"'));
+    expect([result.gameFile?.ok, preview.game.file?.same, line?.includes('Key1=G,')]).toEqual([
+      true,
+      false,
+      true,
     ]);
   });
 });
